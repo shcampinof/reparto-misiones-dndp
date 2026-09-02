@@ -92,29 +92,8 @@ export function createConfig(env = process.env) {
       ephemeralJwtSecret,
       demoEnabled,
       roleFlags,
-      demo: {
-        adminUser: env.DEMO_ADMIN_USER || "admin",
-        adminPassword: env.DEMO_ADMIN_PASSWORD || "",
-        adminName: env.DEMO_ADMIN_NAME || "Administrador",
-        genericUsername: env.DEMO_USER_USERNAME || "user",
-        genericPassword: env.DEMO_USER_PASSWORD || "",
-        genericName: env.DEMO_USER_NAME || "Usuario Demo",
-        genericEmail: env.DEMO_USER_EMAIL || "usuario.demo@defensoria.gov.co",
-        genericRole: env.DEMO_USER_ROLE || "defensor",
-      },
     },
   };
-
-  if (
-    demoEnabled &&
-    !config.auth.demo.adminPassword &&
-    !config.auth.demo.genericPassword
-  ) {
-    issues.push("el modo demo requiere al menos una contrasena configurada");
-  }
-  if (!Object.hasOwn(roleFlags, config.auth.demo.genericRole)) {
-    issues.push("DEMO_USER_ROLE no corresponde a un rol conocido");
-  }
 
   if (issues.length) throw new ConfigurationError(issues);
   return Object.freeze(config);

@@ -1,6 +1,6 @@
 export const victimsModule = Object.freeze({
   name: "victimas",
-  status: "boundary-only",
+  status: "demo-functional",
   description:
-    "Flujo de Victimas reservado para su estrategia y estados propios.",
+    "Flujo demostrativo separado con aprobación previa y cierre F-171 directo.",
 });

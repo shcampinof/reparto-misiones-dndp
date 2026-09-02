@@ -1,19 +1,17 @@
 import cors from "cors";
 import express from "express";
+import { InMemoryDemoRepository } from "../infrastructure/demo/demo-repository.js";
 import { buildDemoUsers } from "../infrastructure/demo/demo-users.js";
-import {
-  createAssignmentRouter,
-  assignmentModule,
-} from "../modules/assignment/router.js";
+import { assignmentModule } from "../modules/assignment/index.js";
 import { createAuthMiddleware } from "../modules/core/auth/middleware.js";
 import { createAuthRouter } from "../modules/core/auth/router.js";
 import { createAuthService } from "../modules/core/auth/service.js";
 import { createHealthRouter } from "../modules/core/health/router.js";
 import { coreModule } from "../modules/core/index.js";
-import { createPortalRouter } from "../modules/core/portal/router.js";
+import { createDemoRouter } from "../modules/demo/router.js";
+import { createDemoService } from "../modules/demo/service.js";
 import { integrationsModule } from "../modules/integrations/index.js";
 import { investigationModule } from "../modules/investigacion/index.js";
-import { createInvestigationRouter } from "../modules/investigacion/router.js";
 import { reportingModule } from "../modules/reporting/index.js";
 import { victimsModule } from "../modules/victimas/index.js";
 import { AppError } from "../shared/errors.js";
@@ -29,9 +27,12 @@ export function createApp({ config, logger }) {
   const users = buildDemoUsers(config);
   const authService = createAuthService({ config, users });
   const authMiddleware = createAuthMiddleware(config);
+  const demoRepository = new InMemoryDemoRepository();
+  const demoService = createDemoService({ repository: demoRepository });
 
   app.disable("x-powered-by");
   app.locals.config = config;
+  app.locals.demoRepository = demoRepository;
   app.locals.modules = [
     coreModule,
     investigationModule,
@@ -64,9 +65,9 @@ export function createApp({ config, logger }) {
 
   app.use("/api/health", createHealthRouter({ config }));
   app.use("/api/auth", createAuthRouter({ authService, authMiddleware }));
-  app.use("/api", createPortalRouter({ authMiddleware, config }));
-  app.use("/api", createInvestigationRouter({ authMiddleware }));
-  app.use("/api", createAssignmentRouter({ authMiddleware }));
+  if (config.auth.demoEnabled) {
+    app.use("/api/demo", createDemoRouter({ authMiddleware, demoService }));
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

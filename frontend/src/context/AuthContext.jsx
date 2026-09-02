@@ -6,48 +6,27 @@ import {
   useMemo,
   useState,
 } from "react";
-import { apiLogin, apiMe, apiSelectAccount } from "../api";
+import { apiDemoLogin, apiMe } from "../api";
 
 const AuthContext = createContext(null);
-
-const PERSIST_KEY = "mesa-atencion-token";
-const SESSION_KEY = "mesa-atencion-token-session";
-
-function getStoredToken() {
-  return (
-    localStorage.getItem(PERSIST_KEY) || sessionStorage.getItem(SESSION_KEY)
-  );
-}
+const TOKEN_KEY = "sigip-demo-token";
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => getStoredToken());
-  const [profile, setProfile] = useState(null);
-  const [accounts, setAccounts] = useState([]);
-  const [preAuthToken, setPreAuthToken] = useState("");
-  const [remember, setRemember] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(
-    Boolean(getStoredToken()),
+  const [token, setToken] = useState(
+    () => sessionStorage.getItem(TOKEN_KEY) || "",
   );
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(Boolean(token));
 
   const logout = useCallback(() => {
+    sessionStorage.removeItem(TOKEN_KEY);
     setToken("");
     setProfile(null);
-    setAccounts([]);
-    setPreAuthToken("");
-    localStorage.removeItem(PERSIST_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
   }, []);
 
   useEffect(() => {
-    if (!token) {
-      setProfile(null);
-      setLoadingProfile(false);
-      return;
-    }
-
+    if (!token) return;
     let cancelled = false;
-    setLoadingProfile(true);
-
     apiMe(token)
       .then((data) => {
         if (!cancelled) setProfile(data.profile);
@@ -58,81 +37,29 @@ export function AuthProvider({ children }) {
       .finally(() => {
         if (!cancelled) setLoadingProfile(false);
       });
-
     return () => {
       cancelled = true;
     };
   }, [token, logout]);
 
-  const login = useCallback(
-    async ({ document, password, remember: shouldRemember }) => {
-      const data = await apiLogin({
-        document,
-        password,
-        remember: shouldRemember,
-      });
-      setRemember(Boolean(shouldRemember));
-      setAccounts(data.accounts || []);
-      setPreAuthToken(data.preAuthToken || "");
-      return data;
-    },
-    [],
-  );
-
-  const selectAccount = useCallback(
-    async (accountId) => {
-      const data = await apiSelectAccount({ preAuthToken, accountId });
-      const accessToken = data.accessToken;
-      setToken(accessToken);
-      setProfile(data.profile);
-
-      if (remember) {
-        localStorage.setItem(PERSIST_KEY, accessToken);
-        sessionStorage.removeItem(SESSION_KEY);
-      } else {
-        sessionStorage.setItem(SESSION_KEY, accessToken);
-        localStorage.removeItem(PERSIST_KEY);
-      }
-
-      setAccounts([]);
-      setPreAuthToken("");
-      return data;
-    },
-    [preAuthToken, remember],
-  );
+  const loginDemo = useCallback(async (userId) => {
+    const data = await apiDemoLogin(userId);
+    sessionStorage.setItem(TOKEN_KEY, data.accessToken);
+    setToken(data.accessToken);
+    setProfile(data.profile);
+    setLoadingProfile(false);
+    return data;
+  }, []);
 
   const value = useMemo(
-    () => ({
-      token,
-      profile,
-      accounts,
-      preAuthToken,
-      loadingProfile,
-      login,
-      selectAccount,
-      logout,
-      setAccounts,
-      setPreAuthToken,
-    }),
-    [
-      token,
-      profile,
-      accounts,
-      preAuthToken,
-      loadingProfile,
-      login,
-      selectAccount,
-      logout,
-    ],
+    () => ({ token, profile, loadingProfile, loginDemo, logout }),
+    [token, profile, loadingProfile, loginDemo, logout],
   );
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth debe usarse dentro de AuthProvider");
-  }
-  return context;
+  const value = useContext(AuthContext);
+  if (!value) throw new Error("useAuth debe usarse dentro de AuthProvider");
+  return value;
 }

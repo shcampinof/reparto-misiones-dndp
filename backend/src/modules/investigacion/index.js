@@ -1,5 +1,10 @@
 export const investigationModule = Object.freeze({
   name: "investigacion",
-  status: "prototype-compatible",
-  responsibilities: ["intake", "execution", "delivery"],
+  status: "demo-functional",
+  responsibilities: [
+    "radicación demo",
+    "ejecución",
+    "entrega",
+    "aprobación PAG",
+  ],
 });

@@ -21,7 +21,7 @@ export function createHealthRouter({ config }) {
       status: "ready",
       checks: {
         configuration: "ok",
-        persistence: "demo-memory",
+        persistence: "demo-memory-resettable",
       },
       requestId: req.requestId,
     });

@@ -1,1626 +1,707 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  apiActualizarAvance,
-  apiAprobarReparto,
-  apiAsignarRadicado,
-  apiBootstrap,
-  apiCreateSolicitud,
-  apiDevolverRadicado,
-  apiEntregarInforme,
-  apiIniciarMision,
-  apiSolicitarAmpliacion,
+  apiAssignInvestigation,
+  apiCreateInvestigation,
+  apiCreateVictims,
+  apiDemoBootstrap,
+  apiInvestigationAction,
+  apiResetDemo,
+  apiVictimsAction,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 
-const sectionTitles = {
-  dashboard: "Dashboard",
-  solicitudes: "Bandeja de Solicitudes",
-  misiones: "Misiones Activas",
-  reportes: "Reportes",
-  catalogo: "Catalogo de Servicios",
-  "nueva-solicitud": "Nueva Solicitud de Mision",
-  "mis-solicitudes": "Mis Solicitudes",
-  "mis-misiones": "Mis Misiones",
+const STATUS_LABELS = {
+  RADICADA: "Radicada",
+  PENDIENTE_APROBACION_PAG: "Pendiente aprobación PAG",
+  APROBADA_REPARTO: "Aprobada para reparto",
+  PENDIENTE_REASIGNACION: "Sin candidato / pendiente",
+  ASIGNADA: "Asignada",
+  EN_EJECUCION: "En ejecución",
+  INFORME_ENTREGADO: "Informe entregado",
+  CERRADA: "Cerrada",
 };
 
-const EMPTY_MENU = [];
-
-const navByRole = {
-  coordinador: ["dashboard", "solicitudes", "misiones", "reportes", "catalogo"],
-  defensor: ["nueva-solicitud", "mis-solicitudes", "catalogo"],
-  investigador: ["mis-misiones", "catalogo"],
-  administrador: [
-    "dashboard",
-    "solicitudes",
-    "misiones",
-    "reportes",
-    "catalogo",
-  ],
-  pag: ["solicitudes", "misiones", "reportes", "catalogo"],
-  administrativo_delegado: ["solicitudes", "catalogo"],
-  defensor_regional: ["solicitudes", "reportes", "catalogo"],
-  pag_unidad_operativa: ["solicitudes", "misiones", "catalogo"],
+const AREA_META = {
+  INVESTIGACION: {
+    label: "Investigación",
+    subtitle: "Misiones de trabajo para la defensa",
+    accent: "#174b8a",
+  },
+  VICTIMAS: {
+    label: "Víctimas",
+    subtitle: "Asignación de actividades periciales",
+    accent: "#7b2f6f",
+  },
 };
 
-function formatDate(value) {
-  if (!value) return "-";
-  return new Date(`${value}T12:00:00`).toLocaleDateString("es-CO", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function Badge({ type, text }) {
-  return <span className={`badge badge-${type}`}>{text}</span>;
-}
-
-function SemaphoreBadge({ semaphore }) {
-  if (!semaphore)
-    return <span className="semaphore semaphore-gris">Sin fecha limite</span>;
-  return (
-    <span className={`semaphore semaphore-${semaphore.color}`}>
-      {semaphore.label}
-    </span>
+export default function PortalPage() {
+  const { token, profile, logout } = useAuth();
+  const [data, setData] = useState(null);
+  const [area, setArea] = useState(
+    profile?.area === "VICTIMAS" ? "VICTIMAS" : "INVESTIGACION",
   );
-}
-
-function countBy(items, getKey) {
-  return items.reduce((acc, item) => {
-    const key = getKey(item) || "Sin dato";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function buildChartRows(source, labelMap = {}, limit = 6) {
-  return Object.entries(source)
-    .map(([key, value]) => ({ key, label: labelMap[key] || key, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, limit);
-}
-
-function BarChartPanel({ title, rows, emptyText = "Sin datos para graficar" }) {
-  const max = Math.max(...rows.map((row) => row.value), 0);
-
-  return (
-    <div className="panel chart-panel">
-      <div className="panel-header">{title}</div>
-      <div className="bar-chart">
-        {rows.length === 0 && <div className="chart-empty">{emptyText}</div>}
-        {rows.map((row) => (
-          <div className="bar-row" key={row.key}>
-            <div className="bar-label">
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-            </div>
-            <div className="bar-track">
-              <div
-                className="bar-fill"
-                style={{
-                  width: `${max ? Math.max((row.value / max) * 100, 8) : 0}%`,
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DonutPanel({ title, items, total }) {
-  const palette = {
-    verde: "#196b2f",
-    amarillo: "#f5b301",
-    naranja: "#d8612f",
-    rojo: "#b42318",
-    gris: "#8a94a6",
-  };
-  let current = 0;
-  const gradient = items.length
-    ? items
-        .map((item) => {
-          const start = current;
-          const end = current + (item.value / Math.max(total, 1)) * 100;
-          current = end;
-          return `${palette[item.key] || "#2f64ad"} ${start}% ${end}%`;
-        })
-        .join(", ")
-    : "#edf2f7 0% 100%";
-
-  return (
-    <div className="panel chart-panel">
-      <div className="panel-header">{title}</div>
-      <div className="donut-wrap">
-        <div
-          className="donut-chart"
-          style={{ background: `conic-gradient(${gradient})` }}
-        >
-          <span>{total}</span>
-        </div>
-        <div className="donut-legend">
-          {items.map((item) => (
-            <span key={item.key}>
-              <i style={{ background: palette[item.key] || "#2f64ad" }} />
-              {item.label}: {item.value}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusSummaryPanel({ missions }) {
-  const cards = [
-    {
-      key: "radicadas",
-      label: "Radicadas",
-      value: missions.filter((mission) =>
-        ["recibida", "radicada", "en_revision"].includes(mission.status),
-      ).length,
-      tone: "blue",
-    },
-    {
-      key: "asignadas",
-      label: "Asignadas",
-      value: missions.filter((mission) => mission.status === "asignada").length,
-      tone: "navy",
-    },
-    {
-      key: "en-proceso",
-      label: "En Proceso",
-      value: missions.filter((mission) =>
-        [
-          "en_ejecucion",
-          "solicitud_ampliacion",
-          "ampliacion_aprobada",
-        ].includes(mission.status),
-      ).length,
-      tone: "purple",
-    },
-    {
-      key: "pendientes",
-      label: "Pend. Aprob.",
-      value: missions.filter(
-        (mission) => mission.status === "aprobada_para_reparto",
-      ).length,
-      tone: "gold",
-    },
-    {
-      key: "completadas",
-      label: "Completadas",
-      value: missions.filter((mission) =>
-        ["informe_entregado", "finalizada"].includes(mission.status),
-      ).length,
-      tone: "green",
-    },
-    {
-      key: "devueltas",
-      label: "Devueltas",
-      value: missions.filter((mission) => mission.status === "devuelta").length,
-      tone: "red",
-    },
-  ];
-
-  return (
-    <div className="panel chart-panel status-panel">
-      <div className="panel-header">Radicados por estado</div>
-      <div className="status-card-grid">
-        {cards.map((card) => (
-          <article
-            className={`status-card status-card-${card.tone}`}
-            key={card.key}
-          >
-            <strong>{card.value}</strong>
-            <span>{card.label}</span>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DashboardCharts({ missions }) {
-  const bySemaphore = buildChartRows(
-    countBy(missions, (mission) => mission.semaphore?.color || "gris"),
-    {
-      verde: "Mas de 7 dias",
-      amarillo: "4 a 7 dias",
-      naranja: "1 a 3 dias",
-      rojo: "Vencido",
-      gris: "Sin fecha",
-    },
-    5,
-  );
-
-  return (
-    <div className="management-grid dashboard-grid">
-      <StatusSummaryPanel missions={missions} />
-      <DonutPanel
-        title="Semaforo de terminos"
-        items={bySemaphore}
-        total={missions.length}
-      />
-    </div>
-  );
-}
-
-function ReportCharts({ missions }) {
-  const bySpecialty = buildChartRows(
-    countBy(missions, (mission) => mission.specialty),
-    {},
-    6,
-  );
-  const byRegion = buildChartRows(
-    countBy(missions, (mission) => mission.defenderRegion),
-    {},
-    6,
-  );
-  const byInvestigator = buildChartRows(
-    countBy(
-      missions.filter((mission) => mission.investigator !== "Sin asignar"),
-      (mission) => mission.investigator,
-    ),
-    {},
-    6,
-  );
-
-  return (
-    <div className="management-grid report-grid">
-      <BarChartPanel title="Carga por especialidad" rows={bySpecialty} />
-      <BarChartPanel title="Radicados por regional" rows={byRegion} />
-      <BarChartPanel
-        title="Carga por investigador"
-        rows={byInvestigator}
-        emptyText="No hay radicados asignados a investigadores"
-      />
-    </div>
-  );
-}
-
-function BrandMark({ className = "" }) {
-  return (
-    <img
-      className={`brand-mark ${className}`.trim()}
-      src="https://raw.githubusercontent.com/shcampinof/AuroraV1/main/frontend/public/logo-defensoria.png"
-      alt="Logo Defensoria del Pueblo"
-      loading="eager"
-    />
-  );
-}
-
-function SummaryCards({ dashboard }) {
-  const kpi = dashboard?.kpis;
-  if (!kpi) return null;
-
-  return (
-    <div className="kpi-grid">
-      <article className="kpi-card info">
-        <span>Total recibidas</span>
-        <strong>{kpi.totalReceived}</strong>
-      </article>
-      <article className="kpi-card warning">
-        <span>Pendientes reparto</span>
-        <strong>{kpi.pendingAssignment}</strong>
-      </article>
-      <article className="kpi-card success">
-        <span>Activas</span>
-        <strong>{kpi.activeMissions}</strong>
-      </article>
-      <article className="kpi-card danger">
-        <span>Proximas/vencidas</span>
-        <strong>{kpi.nearDue}</strong>
-      </article>
-    </div>
-  );
-}
-
-function DashboardSection({ missions, dashboard, statusLabels }) {
-  const pending = missions.filter((m) =>
-    ["recibida", "en_revision", "aprobada_para_reparto"].includes(m.status),
-  );
-
-  return (
-    <section className="section-stack">
-      <SummaryCards dashboard={dashboard} />
-      <DashboardCharts missions={missions} />
-      <div className="panel">
-        <div className="panel-header">Pendientes de reparto</div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Radicado</th>
-                <th>Mision madre</th>
-                <th>Defensor</th>
-                <th>Especialidad</th>
-                <th>Estado</th>
-                <th>Semaforo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pending.map((mission) => (
-                <tr key={mission.id}>
-                  <td>{mission.id}</td>
-                  <td>{mission.parentMission}</td>
-                  <td>{mission.defender}</td>
-                  <td>{mission.specialty}</td>
-                  <td>
-                    <Badge
-                      type={mission.status}
-                      text={statusLabels[mission.status]}
-                    />
-                  </td>
-                  <td>
-                    <SemaphoreBadge semaphore={mission.semaphore} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SolicitudesSection({
-  missions,
-  statusLabels,
-  statusFlow,
-  token,
-  profile,
-  investigators,
-  onMissionUpdated,
-}) {
-  const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
-  const [busyId, setBusyId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canOperate = ["coordinador", "administrador", "pag"].includes(
-    profile?.role,
-  );
+  const reload = useCallback(async () => {
+    const response = await apiDemoBootstrap(token);
+    setData(response);
+    if (!response.allowedAreas.includes(area))
+      setArea(response.allowedAreas[0] || "INVESTIGACION");
+    return response;
+  }, [token, area]);
 
-  async function runAction(mission, action) {
-    setBusyId(mission.id);
+  useEffect(() => {
+    setLoading(true);
+    reload()
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, [reload]);
+
+  async function run(key, action, successMessage) {
+    setBusy(key);
     setMessage("");
     setError("");
-
     try {
-      let response;
-      if (action === "aprobar") {
-        response = await apiAprobarReparto(token, mission.id);
-      }
-
-      if (action === "devolver") {
-        const motivo = window.prompt("Motivo de devolucion");
-        if (!motivo) return;
-        const observacion = window.prompt("Observacion para el defensor");
-        if (!observacion) return;
-        response = await apiDevolverRadicado(token, mission.id, {
-          motivo,
-          observacion,
-        });
-      }
-
-      if (action === "asignar-auto") {
-        const candidate = investigators.find((item) =>
-          item.especialidades.includes(mission.specialtyId),
-        );
-        if (!candidate)
-          throw new Error("No hay investigador activo para esta especialidad");
-        response = await apiAsignarRadicado(token, mission.id, {
-          investigador_id: candidate.id,
-          tipo_asignacion: "automatica",
-        });
-      }
-
-      if (action === "asignar-manual") {
-        const investigatorId = window.prompt(
-          `ID investigador (${investigators.map((item) => `${item.id}: ${item.nombre}`).join(" | ")})`,
-        );
-        if (!investigatorId) return;
-        const justificacion = window.prompt(
-          "Justificacion de asignacion manual",
-        );
-        if (!justificacion) return;
-        response = await apiAsignarRadicado(token, mission.id, {
-          investigador_id: investigatorId,
-          tipo_asignacion: "manual",
-          justificacion_manual: justificacion,
-          asignacion_excepcional: mission.status !== "aprobada_para_reparto",
-        });
-      }
-
-      if (response?.mission) onMissionUpdated(response.mission);
-      if (response?.message) setMessage(response.message);
-    } catch (err) {
-      setError(err.message);
+      await action();
+      await reload();
+      setMessage(successMessage);
+    } catch (requestError) {
+      setError(requestError.message);
     } finally {
-      setBusyId("");
+      setBusy("");
     }
   }
 
-  const filtered = useMemo(() => {
-    const text = search.toLowerCase();
-    return missions.filter((m) => {
-      const byStatus = status ? m.status === status : true;
-      const bySearch =
-        !text ||
-        m.id.toLowerCase().includes(text) ||
-        m.parentMission.toLowerCase().includes(text) ||
-        m.defender.toLowerCase().includes(text) ||
-        m.spoa.includes(text);
-      return byStatus && bySearch;
-    });
-  }, [missions, search, status]);
+  if (loading)
+    return (
+      <div className="screen-loader">Cargando ambiente de demostración...</div>
+    );
+  if (!data)
+    return (
+      <div className="screen-loader">
+        {error || "No fue posible iniciar la demostración"}
+      </div>
+    );
+
+  const requests = data.requests.filter((request) => request.area === area);
+  const dashboard = data.dashboards[area] || {
+    requests: 0,
+    pending: 0,
+    active: 0,
+    closed: 0,
+  };
+  const canUseArea = (target) => data.allowedAreas.includes(target);
 
   return (
-    <section className="section-stack">
-      <div className="panel">
-        <div className="panel-header">Bandeja de solicitudes/radicados</div>
-        <div className="filters">
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Todos los estados</option>
-            {statusFlow.map((item) => (
-              <option key={item} value={item}>
-                {statusLabels[item] || item}
+    <div
+      className="demo-portal"
+      style={{ "--area-accent": AREA_META[area].accent }}
+    >
+      <div className="demo-banner">{data.banner}</div>
+      <header className="demo-header">
+        <div className="demo-brand">
+          <span className="institutional-seal small">DP</span>
+          <div>
+            <strong>SIGIP-DP</strong>
+            <small>
+              Sistema de Información para la Gestión Investigativa y Pericial
+            </small>
+          </div>
+        </div>
+        <div className="demo-profile">
+          <span>{profile?.initials || "DE"}</span>
+          <div>
+            <strong>{profile?.fullName || "Usuario demo"}</strong>
+            <small>{profile?.roleLabel || profile?.role}</small>
+          </div>
+          <button onClick={logout}>Cambiar rol</button>
+        </div>
+      </header>
+
+      <nav className="portal-area-switch" aria-label="Selector de área">
+        {Object.entries(AREA_META).map(([id, meta]) => (
+          <button
+            key={id}
+            className={area === id ? "active" : ""}
+            disabled={!canUseArea(id)}
+            onClick={() => setArea(id)}
+          >
+            <span>{id === "INVESTIGACION" ? "01" : "02"}</span>
+            <div>
+              <strong>{meta.label}</strong>
+              <small>
+                {canUseArea(id) ? meta.subtitle : "No habilitada para este rol"}
+              </small>
+            </div>
+          </button>
+        ))}
+      </nav>
+
+      <main className="demo-content">
+        <section className="area-heading">
+          <div>
+            <small>Área activa</small>
+            <h1>{AREA_META[area].label}</h1>
+            <p>{AREA_META[area].subtitle}</p>
+          </div>
+          {profile?.role === "administrador" && (
+            <button
+              className="reset-demo"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                run(
+                  "reset",
+                  () => apiResetDemo(token),
+                  "Datos sintéticos restablecidos",
+                )
+              }
+            >
+              Restablecer datos de demostración
+            </button>
+          )}
+        </section>
+
+        {(message || error) && (
+          <div className={error ? "notice error" : "notice success"}>
+            {error || message}
+          </div>
+        )}
+
+        <section className="demo-kpis">
+          <Kpi label="Solicitudes" value={dashboard.requests} tone="blue" />
+          <Kpi label="Pendientes" value={dashboard.pending} tone="amber" />
+          <Kpi label="En gestión" value={dashboard.active} tone="purple" />
+          <Kpi label="Cerradas" value={dashboard.closed} tone="green" />
+        </section>
+
+        {area === "INVESTIGACION" && profile?.role === "defensor" && (
+          <InvestigationForm catalogs={data.catalogs} token={token} run={run} />
+        )}
+        {area === "VICTIMAS" && profile?.role === "rjv" && (
+          <VictimsForm catalogs={data.catalogs} token={token} run={run} />
+        )}
+
+        <section className="request-section">
+          <div className="section-title">
+            <div>
+              <small>Bandeja del rol</small>
+              <h2>Solicitudes y encargos</h2>
+            </div>
+            <span>{requests.length} registro(s) visibles</span>
+          </div>
+          {requests.length === 0 ? (
+            <div className="presentable-empty">
+              <strong>Sin registros para este rol</strong>
+              <p>
+                Cambie a un rol del guion o cree una solicitud sintética para
+                continuar.
+              </p>
+            </div>
+          ) : (
+            <div className="request-grid">
+              {requests.map((request) => (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  profile={profile}
+                  token={token}
+                  busy={busy}
+                  run={run}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <footer className="demo-disclaimer">
+          <strong>{data.parameters.label}</strong>
+          <span>
+            Política {data.parameters.version} · Plazos de calendario demo:
+            Investigación {data.parameters.investigationTermDays} días /
+            Víctimas {data.parameters.victimsTermDays} días.
+          </span>
+          <span>
+            Persistencia temporal reiniciable. Sin Oracle, identidad
+            institucional, documentos o integraciones reales.
+          </span>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone }) {
+  return (
+    <article className={`demo-kpi ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <i />
+    </article>
+  );
+}
+
+function InvestigationForm({ catalogs, token, run }) {
+  const [form, setForm] = useState({
+    spoa: "110016000049202600099",
+    delito: "Delito sintético para demostración",
+    service: "INVESTIGACION_CAMPO",
+    region: "BOGOTA",
+  });
+  const update = (key) => (event) =>
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  return (
+    <section className="creation-panel">
+      <div className="panel-copy">
+        <small>Paso 1</small>
+        <h2>Radicar solicitud investigativa sintética</h2>
+        <p>
+          El reparto se ejecutará después en el backend; el formulario no envía
+          investigador.
+        </p>
+      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          run(
+            "create-inv",
+            () => apiCreateInvestigation(token, form),
+            "Solicitud de Investigación radicada",
+          );
+        }}
+      >
+        <label>
+          SPOA sintético
+          <input value={form.spoa} onChange={update("spoa")} maxLength="21" />
+        </label>
+        <label>
+          Delito
+          <input value={form.delito} onChange={update("delito")} />
+        </label>
+        <label>
+          Especialidad
+          <select value={form.service} onChange={update("service")}>
+            {catalogs.investigationServices.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
               </option>
             ))}
           </select>
+        </label>
+        <label>
+          Cobertura
+          <select value={form.region} onChange={update("region")}>
+            {catalogs.regions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="primary-demo">Radicar solicitud</button>
+      </form>
+    </section>
+  );
+}
+
+function VictimsForm({ catalogs, token, run }) {
+  const [form, setForm] = useState({
+    externalId: "RAD-DEMO-2026-002",
+    law: "LEY_1448",
+    service: "PSICOLOGICO",
+    region: "BOGOTA",
+    victimCount: 2,
+  });
+  const update = (key) => (event) =>
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  return (
+    <section className="creation-panel victims">
+      <div className="panel-copy">
+        <small>Paso 1</small>
+        <h2>Crear solicitud pericial sintética</h2>
+        <p>
+          Las víctimas se generan como alias; no se capturan nombres ni
+          documentos personales.
+        </p>
+      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          run(
+            "create-vic",
+            () =>
+              apiCreateVictims(token, {
+                ...form,
+                victimCount: Number(form.victimCount),
+              }),
+            "Solicitud de Víctimas enviada a aprobación PAG",
+          );
+        }}
+      >
+        <label>
+          Radicado sintético
+          <input value={form.externalId} onChange={update("externalId")} />
+        </label>
+        <label>
+          Ley/programa
+          <select value={form.law} onChange={update("law")}>
+            {catalogs.laws.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Peritaje
+          <select value={form.service} onChange={update("service")}>
+            {catalogs.victimServices.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Cobertura
+          <select value={form.region} onChange={update("region")}>
+            {catalogs.regions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Víctimas sintéticas
           <input
-            placeholder="Buscar por radicado, mision, defensor o SPOA"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            type="number"
+            min="1"
+            max="5"
+            value={form.victimCount}
+            onChange={update("victimCount")}
           />
-        </div>
-        {message && <p className="inline-message ok-text">{message}</p>}
-        {error && <p className="inline-message error-text">{error}</p>}
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Radicado</th>
-                <th>Mision</th>
-                <th>Fecha</th>
-                <th>Defensor</th>
-                <th>SPOA</th>
-                <th>Especialidad</th>
-                <th>Estado</th>
-                <th>Prioridad</th>
-                <th>Semaforo</th>
-                {canOperate && <th>Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((mission) => (
-                <tr key={mission.id}>
-                  <td>{mission.id}</td>
-                  <td>{mission.parentMission}</td>
-                  <td>{formatDate(mission.date)}</td>
-                  <td>{mission.defender}</td>
-                  <td>{mission.spoa}</td>
-                  <td>{mission.specialty}</td>
-                  <td>
-                    <Badge
-                      type={mission.status}
-                      text={statusLabels[mission.status]}
-                    />
-                  </td>
-                  <td>
-                    <Badge type={mission.priority} text={mission.priority} />
-                  </td>
-                  <td>
-                    <SemaphoreBadge semaphore={mission.semaphore} />
-                  </td>
-                  {canOperate && (
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          onClick={() => runAction(mission, "aprobar")}
-                          disabled={
-                            busyId === mission.id ||
-                            mission.status === "aprobada_para_reparto"
-                          }
-                        >
-                          Aprobar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => runAction(mission, "asignar-auto")}
-                          disabled={busyId === mission.id}
-                        >
-                          Auto
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => runAction(mission, "asignar-manual")}
-                          disabled={busyId === mission.id}
-                        >
-                          Manual
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => runAction(mission, "devolver")}
-                          disabled={busyId === mission.id}
-                        >
-                          Devolver
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </label>
+        <button className="primary-demo">Enviar a aprobación previa</button>
+      </form>
     </section>
   );
 }
 
-function MisionesSection({ missions, statusLabels }) {
-  const active = missions.filter((m) =>
-    [
-      "asignada",
-      "en_ejecucion",
-      "solicitud_ampliacion",
-      "ampliacion_aprobada",
-    ].includes(m.status),
-  );
-
+function RequestCard({ request, profile, token, busy, run }) {
   return (
-    <section className="section-stack">
-      <div className="panel">
-        <div className="panel-header">Misiones activas por radicado</div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Radicado</th>
-                <th>Especialidad</th>
-                <th>Investigador</th>
-                <th>Fecha limite</th>
-                <th>Estado</th>
-                <th>Semaforo</th>
-                <th>Progreso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {active.map((mission) => (
-                <tr key={mission.id}>
-                  <td>{mission.id}</td>
-                  <td>{mission.specialty}</td>
-                  <td>{mission.investigator}</td>
-                  <td>
-                    {mission.dueDate
-                      ? formatDate(mission.dueDate)
-                      : "Pendiente"}
-                  </td>
-                  <td>
-                    <Badge
-                      type={mission.status}
-                      text={statusLabels[mission.status]}
-                    />
-                  </td>
-                  <td>
-                    <SemaphoreBadge semaphore={mission.semaphore} />
-                  </td>
-                  <td>
-                    <div className="progress-row">
-                      <div className="progress-track">
-                        <div
-                          className="progress-fill"
-                          style={{ width: `${mission.progress}%` }}
-                        />
-                      </div>
-                      <span>{mission.progress}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <article className="request-card">
+      <header>
+        <div>
+          <small>
+            {request.area === "INVESTIGACION"
+              ? "Misión de trabajo"
+              : "Solicitud pericial"}
+          </small>
+          <h3>{request.id}</h3>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function ReportesSection({ missions }) {
-  const totals = {
-    total: missions.length,
-    urgentes: missions.filter((m) => m.priority === "urgente").length,
-    vencidas: missions.filter((m) => m.semaphore?.color === "rojo").length,
-    enEjecucion: missions.filter((m) => m.status === "en_ejecucion").length,
-  };
-
-  return (
-    <section className="section-stack">
-      <div className="kpi-grid">
-        <article className="kpi-card info">
-          <span>Total radicados</span>
-          <strong>{totals.total}</strong>
-        </article>
-        <article className="kpi-card warning">
-          <span>Urgentes</span>
-          <strong>{totals.urgentes}</strong>
-        </article>
-        <article className="kpi-card danger">
-          <span>Vencidas</span>
-          <strong>{totals.vencidas}</strong>
-        </article>
-        <article className="kpi-card success">
-          <span>En ejecucion</span>
-          <strong>{totals.enEjecucion}</strong>
-        </article>
-      </div>
-      <ReportCharts missions={missions} />
-    </section>
-  );
-}
-
-function CatalogSection({ specialties }) {
-  const [search, setSearch] = useState("");
-
-  const filtered = specialties.filter((item) =>
-    item.nombre.toLowerCase().includes(search.trim().toLowerCase()),
-  );
-
-  return (
-    <section className="section-stack">
-      <div className="panel">
-        <div className="panel-header">Catalogo de servicios configurable</div>
-        <div className="filters">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar especialidad"
-          />
-        </div>
-        <div className="catalog-grid">
-          {filtered.map((item) => (
-            <details key={item.id} className="catalog-item">
-              <summary>
-                <div>
-                  <strong>
-                    {item.id}. {item.nombre}
-                  </strong>
-                  <p>{item.descripcion}</p>
-                </div>
-                <Badge type="asignada" text={`${item.dias_respuesta} dias`} />
-              </summary>
-              <div className="catalog-body">
-                <h4>Servicios disponibles</h4>
-                <ul>
-                  {item.servicios_disponibles.map((s) => (
-                    <li key={s}>{s}</li>
-                  ))}
-                </ul>
-                <h4>Informacion requerida</h4>
-                <ul>
-                  {item.informacion_requerida.map((s) => (
-                    <li key={s}>{s}</li>
-                  ))}
-                </ul>
-                <h4>No disponible</h4>
-                <ul>
-                  {item.servicios_no_disponibles.map((s) => (
-                    <li key={s}>{s}</li>
-                  ))}
-                </ul>
-              </div>
-            </details>
+        <span className="external-id">{request.externalId}</span>
+      </header>
+      <p className="request-summary">{request.summary || "Caso sintético"}</p>
+      {request.persons?.length > 0 && (
+        <div className="synthetic-persons">
+          <strong>{request.persons.length} víctima(s) sintética(s)</strong>
+          {request.persons.map((person) => (
+            <span key={person.alias}>
+              {person.alias} ·{" "}
+              {person.type === "DIRECTA" ? "Directa" : "Indirecta"}
+            </span>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MisSolicitudesSection({ missions, statusLabels }) {
-  return (
-    <section className="cards-grid">
-      {missions.map((mission) => (
-        <article key={mission.id} className="mission-card">
-          <div className="mission-card-top">
-            <strong>{mission.id}</strong>
-            <Badge type={mission.status} text={statusLabels[mission.status]} />
-          </div>
-          <p>{mission.specialty}</p>
-          <small>Mision madre: {mission.parentMission}</small>
-          <small>SPOA: {mission.spoa}</small>
-          <small>Semaforo: {mission.semaphore?.label || "Sin fecha"}</small>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function MisMisionesSection({
-  missions,
-  statusLabels,
-  token,
-  profile,
-  onMissionUpdated,
-}) {
-  const [busyId, setBusyId] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const visibleStatuses = [
-    "asignada",
-    "en_ejecucion",
-    "solicitud_ampliacion",
-    "ampliacion_aprobada",
-    "informe_entregado",
-  ];
-  const mine = missions.filter(
-    (mission) =>
-      visibleStatuses.includes(mission.status) &&
-      (!profile?.investigatorId ||
-        mission.investigatorId === profile.investigatorId),
-  );
-  const totals = {
-    active: mine.filter((mission) =>
-      ["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(
-        mission.status,
-      ),
-    ).length,
-    nearDue: mine.filter((mission) =>
-      ["amarillo", "naranja", "rojo"].includes(mission.semaphore?.color),
-    ).length,
-    delivered: mine.filter((mission) => mission.status === "informe_entregado")
-      .length,
-  };
-
-  async function runMissionAction(mission, action) {
-    setBusyId(mission.id);
-    setMessage("");
-    setError("");
-
-    try {
-      let response;
-
-      if (action === "iniciar") {
-        response = await apiIniciarMision(token, mission.id);
-      }
-
-      if (action === "avance") {
-        const porcentaje = Number(
-          window.prompt(
-            "Porcentaje de avance (0 a 100)",
-            String(mission.progress || 0),
-          ),
-        );
-        if (!Number.isFinite(porcentaje)) return;
-        const observacion = window.prompt("Observacion de avance");
-        if (!observacion) return;
-        response = await apiActualizarAvance(token, mission.id, {
-          porcentaje,
-          observacion,
-        });
-      }
-
-      if (action === "informe") {
-        const titulo = window.prompt("Titulo del informe");
-        if (!titulo) return;
-        const referencia = window.prompt("Referencia SGDEA/IRIS del informe");
-        if (!referencia) return;
-        const conclusiones = window.prompt("Conclusiones o resumen de entrega");
-        if (!conclusiones) return;
-        response = await apiEntregarInforme(token, mission.id, {
-          titulo,
-          referencia,
-          conclusiones,
-        });
-      }
-
-      if (response?.mission) onMissionUpdated(response.mission);
-      if (response?.message) setMessage(response.message);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function requestExtension(mission) {
-    setBusyId(mission.id);
-    setMessage("");
-    setError("");
-
-    try {
-      const argumentacion = window.prompt("Argumentacion de la ampliacion");
-      if (!argumentacion) return;
-      const days = Number(window.prompt("Dias adicionales solicitados"));
-      if (!Number.isFinite(days) || days <= 0)
-        throw new Error("Ingrese dias adicionales validos");
-
-      const response = await apiSolicitarAmpliacion(token, mission.id, {
-        argumentacion,
-        dias_adicionales: days,
-      });
-      if (response?.mission) onMissionUpdated(response.mission);
-      if (response?.message) setMessage(response.message);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  return (
-    <section className="section-stack">
-      <div className="kpi-grid investigator-kpis">
-        <article className="kpi-card info">
-          <span>Misiones activas</span>
-          <strong>{totals.active}</strong>
-        </article>
-        <article className="kpi-card warning">
-          <span>Proximas/vencidas</span>
-          <strong>{totals.nearDue}</strong>
-        </article>
-        <article className="kpi-card success">
-          <span>Informes entregados</span>
-          <strong>{totals.delivered}</strong>
-        </article>
-      </div>
-      {message && <p className="inline-message ok-text">{message}</p>}
-      {error && <p className="inline-message error-text">{error}</p>}
-
-      <div className="investigator-grid">
-        {mine.map((mission) => (
-          <article key={mission.id} className="mission-card investigator-card">
-            <div className="mission-card-top">
-              <div>
-                <strong>{mission.id}</strong>
-                <p>{mission.specialty}</p>
-              </div>
-              <div className="badge-stack">
-                <Badge
-                  type={mission.status}
-                  text={statusLabels[mission.status]}
-                />
-                <SemaphoreBadge semaphore={mission.semaphore} />
-              </div>
-            </div>
-
-            <div className="mission-meta-grid">
-              <span>
-                <strong>Defensor</strong>
-                {mission.defender}
-              </span>
-              <span>
-                <strong>Regional</strong>
-                {mission.defenderRegion}
-              </span>
-              <span>
-                <strong>SPOA</strong>
-                {mission.spoa}
-              </span>
-              <span>
-                <strong>Limite</strong>
-                {mission.dueDate ? formatDate(mission.dueDate) : "Pendiente"}
-              </span>
-              <span>
-                <strong>Termino</strong>
-                {mission.daysResponse || "-"} dias
-              </span>
-              <span>
-                <strong>Asignacion</strong>
-                {mission.assignmentType || "-"}
-              </span>
-            </div>
-
-            <div className="progress-row">
-              <div className="progress-track">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${mission.progress}%` }}
-                />
-              </div>
-              <span>{mission.progress}%</span>
-            </div>
-
-            <details className="mission-detail">
-              <summary>Documentacion y caso</summary>
-              <div className="detail-block">
-                <strong>Hechos</strong>
-                <p>{mission.caseInfo?.hechos || "Sin resumen registrado"}</p>
-                <strong>Hipotesis</strong>
-                <p>
-                  {mission.caseInfo?.hipotesis || "Sin hipotesis registrada"}
-                </p>
-                <strong>Documentos asociados</strong>
-                <ul>
-                  {(mission.documents || []).map((doc) => (
-                    <li key={`${mission.id}-${doc.referencia}-${doc.nombre}`}>
-                      {doc.nombre} - {doc.tipo} - {doc.referencia}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </details>
-
-            <details className="mission-detail">
-              <summary>Historial</summary>
-              <ol className="history-list">
-                {(mission.history || [])
-                  .slice()
-                  .reverse()
-                  .map((item) => (
-                    <li key={`${mission.id}-${item.fecha}-${item.evento}`}>
-                      <strong>
-                        {statusLabels[item.evento] || item.evento}
-                      </strong>
-                      <span>
-                        {new Date(item.fecha).toLocaleString("es-CO")}
-                      </span>
-                      <p>{item.detalle}</p>
-                    </li>
-                  ))}
-              </ol>
-            </details>
-
-            {mission.report && (
-              <div className="report-box">
-                <strong>Informe entregado</strong>
-                <span>
-                  {mission.report.titulo} - {mission.report.referencia}
-                </span>
-              </div>
-            )}
-
-            <div className="mission-actions">
-              <button
-                type="button"
-                className="secondary-outline compact-btn"
-                onClick={() => runMissionAction(mission, "iniciar")}
-                disabled={
-                  busyId === mission.id || mission.status !== "asignada"
-                }
-              >
-                Iniciar
-              </button>
-              <button
-                type="button"
-                className="secondary-outline compact-btn"
-                onClick={() => runMissionAction(mission, "avance")}
-                disabled={
-                  busyId === mission.id ||
-                  ["informe_entregado", "finalizada"].includes(mission.status)
-                }
-              >
-                Actualizar avance
-              </button>
-              <button
-                type="button"
-                className="secondary-outline compact-btn"
-                onClick={() => requestExtension(mission)}
-                disabled={
-                  busyId === mission.id ||
-                  [
-                    "solicitud_ampliacion",
-                    "informe_entregado",
-                    "finalizada",
-                  ].includes(mission.status)
-                }
-              >
-                Solicitar ampliacion
-              </button>
-              <button
-                type="button"
-                className="primary-btn compact-btn"
-                onClick={() => runMissionAction(mission, "informe")}
-                disabled={
-                  busyId === mission.id ||
-                  !["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(
-                    mission.status,
-                  )
-                }
-              >
-                Entregar informe
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {mine.length === 0 && (
-        <div className="panel empty-state">
-          No hay misiones asignadas a este investigador.
         </div>
       )}
+      {request.items.map((item) => (
+        <ItemCard
+          key={item.id}
+          item={item}
+          area={request.area}
+          profile={profile}
+          token={token}
+          busy={busy}
+          run={run}
+        />
+      ))}
+    </article>
+  );
+}
+
+function ItemCard({ item, area, profile, token, busy, run }) {
+  const role = profile?.role;
+  const isBusy = busy === item.id;
+  const selectedCandidate = item.assignment?.evaluated?.find(
+    (candidate) => candidate.candidateId === item.assigneeId,
+  );
+  return (
+    <section className="item-card">
+      <div className="item-top">
+        <div>
+          <strong>{item.serviceLabel || item.service}</strong>
+          <small>
+            {item.regionLabel || item.region}
+            {item.lawLabel ? ` · ${item.lawLabel}` : ""}
+          </small>
+        </div>
+        <span className={`status-pill status-${item.status.toLowerCase()}`}>
+          {STATUS_LABELS[item.status] || item.status}
+        </span>
+      </div>
+      <div className="item-facts">
+        <span>
+          <small>Responsable</small>
+          <strong>{item.assigneeName || "Pendiente de reparto"}</strong>
+        </span>
+        <span>
+          <small>Progreso</small>
+          <strong>{item.progress ?? 0}%</strong>
+        </span>
+        <span>
+          <small>Carga al repartir</small>
+          <strong>
+            {selectedCandidate ? selectedCandidate.metrics.load : "No aplica"}
+          </strong>
+        </span>
+        <span>
+          <small>Plazo demo</small>
+          <strong>{item.dueDate || "Por calcular"}</strong>
+        </span>
+        <span>
+          <small>Producto</small>
+          <strong>{item.reportReference || "Sin entrega"}</strong>
+        </span>
+      </div>
+      <div className="progress-track demo">
+        <i style={{ width: `${item.progress || 0}%` }} />
+      </div>
+
+      <div className="demo-actions">
+        {area === "INVESTIGACION" &&
+          role === "defensor" &&
+          ["RADICADA", "PENDIENTE_REASIGNACION"].includes(item.status) && (
+            <button
+              disabled={isBusy}
+              onClick={() =>
+                run(
+                  item.id,
+                  () => apiAssignInvestigation(token, item.id),
+                  "Reparto backend de Investigación completado",
+                )
+              }
+            >
+              Ejecutar reparto automático
+            </button>
+          )}
+        {area === "INVESTIGACION" &&
+          role === "pag_investigacion" &&
+          item.status === "INFORME_ENTREGADO" && (
+            <button
+              disabled={isBusy}
+              onClick={() =>
+                run(
+                  item.id,
+                  () =>
+                    apiInvestigationAction(token, item.id, "aprobar-entrega"),
+                  "Entrega aprobada y misión cerrada",
+                )
+              }
+            >
+              Aprobar entrega y cerrar
+            </button>
+          )}
+        {area === "VICTIMAS" &&
+          role === "pag_victimas" &&
+          item.status === "PENDIENTE_APROBACION_PAG" && (
+            <button
+              disabled={isBusy}
+              onClick={() =>
+                run(
+                  item.id,
+                  () => apiVictimsAction(token, item.id, "aprobar-y-repartir"),
+                  "Aprobación previa y reparto backend completados",
+                )
+              }
+            >
+              Aprobar y repartir
+            </button>
+          )}
+        {area === "INVESTIGACION" && role === "investigador" && (
+          <ExecutorActions
+            item={item}
+            token={token}
+            busy={isBusy}
+            run={run}
+            area="INVESTIGACION"
+          />
+        )}
+        {area === "VICTIMAS" && role === "perito" && (
+          <ExecutorActions
+            item={item}
+            token={token}
+            busy={isBusy}
+            run={run}
+            area="VICTIMAS"
+          />
+        )}
+      </div>
+
+      {item.assignment && (
+        <AssignmentExplanation assignment={item.assignment} />
+      )}
+      <details className="timeline">
+        <summary>Línea de tiempo · {item.timeline.length} evento(s)</summary>
+        <ol>
+          {item.timeline
+            .slice()
+            .reverse()
+            .map((event, index) => (
+              <li key={`${event.at}-${index}`}>
+                <i />
+                <div>
+                  <strong>{STATUS_LABELS[event.to] || event.to}</strong>
+                  <small>{new Date(event.at).toLocaleString("es-CO")}</small>
+                  <p>{event.message}</p>
+                </div>
+              </li>
+            ))}
+        </ol>
+      </details>
     </section>
   );
 }
 
-function NuevaSolicitudSection({
-  specialties,
-  processStages,
-  token,
-  onCreated,
-}) {
-  const [step, setStep] = useState(1);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [okMessage, setOkMessage] = useState("");
-  const [selected, setSelected] = useState([]);
-  const stepLabels = [
-    "Informacion defensor",
-    "Usuario procesado",
-    "Informacion proceso",
-    "Servicios solicitados",
-    "Tramite y documentos",
-    "Confirmacion",
-  ];
-
-  const [form, setForm] = useState({
-    defensorNombre: "",
-    defensorTelefono: "",
-    defensorCorreoInstitucional: "",
-    defensorRegionalOrigen: "",
-    defensorPagSupervisor: "",
-    procesadoNombresApellidos: "",
-    procesadoDocumento: "",
-    procesadoDireccion: "",
-    procesadoTelefono: "",
-    casoSpoa: "",
-    casoDelito: "",
-    casoEtapa: "",
-    casoFechaProximaAudiencia: "",
-    solicitudRegionalServicio: "",
-    solicitudBreveRelacionHechos: "",
-    solicitudHipotesis: "",
-    solicitudObservaciones: "",
-    solicitudPrioridad: "normal",
-    solicitudEsUrgente: false,
-    solicitudCausalUrgencia: "",
-    solicitudTipoTramite: "asignacion_normal",
-    firmaOsndp: false,
-  });
-
-  function update(name, value) {
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
-
-  function toggleSpec(id) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    );
-  }
-
-  function next() {
-    setError("");
-    if (step === 4 && selected.length === 0) {
-      setError("Debe seleccionar al menos una especialidad");
-      return;
-    }
-    if (step < 6) setStep((prev) => prev + 1);
-  }
-
-  function prev() {
-    setError("");
-    if (step > 1) setStep((prev) => prev - 1);
-  }
-
-  async function submit() {
-    setSaving(true);
-    setError("");
-    setOkMessage("");
-
-    try {
-      const payload = {
-        defensor: {
-          nombre: form.defensorNombre,
-          telefono: form.defensorTelefono,
-          correo_institucional: form.defensorCorreoInstitucional,
-          regional_origen: form.defensorRegionalOrigen,
-          pag_supervisor: form.defensorPagSupervisor,
-        },
-        procesado: {
-          nombres_apellidos: form.procesadoNombresApellidos,
-          documento: form.procesadoDocumento,
-          direccion_residencia: form.procesadoDireccion,
-          telefono_movil: form.procesadoTelefono,
-        },
-        caso: {
-          spoa: form.casoSpoa,
-          delito: form.casoDelito,
-          etapa_procesal: form.casoEtapa,
-          fecha_proxima_audiencia: form.casoFechaProximaAudiencia,
-        },
-        solicitud: {
-          regional_servicio: form.solicitudRegionalServicio,
-          breve_relacion_hechos: form.solicitudBreveRelacionHechos,
-          hipotesis: form.solicitudHipotesis,
-          observaciones: form.solicitudObservaciones,
-          prioridad: form.solicitudPrioridad,
-          es_urgente: form.solicitudEsUrgente,
-          causal_urgencia: form.solicitudCausalUrgencia,
-          tipo_tramite: form.solicitudTipoTramite,
-        },
-        especialidades: selected,
-        firma_osndp: form.firmaOsndp,
-      };
-
-      const response = await apiCreateSolicitud(token, payload);
-      setOkMessage(response.message);
-      onCreated(response.missions || []);
-      setStep(1);
-      setSelected([]);
-      setForm({
-        defensorNombre: "",
-        defensorTelefono: "",
-        defensorCorreoInstitucional: "",
-        defensorRegionalOrigen: "",
-        defensorPagSupervisor: "",
-        procesadoNombresApellidos: "",
-        procesadoDocumento: "",
-        procesadoDireccion: "",
-        procesadoTelefono: "",
-        casoSpoa: "",
-        casoDelito: "",
-        casoEtapa: "",
-        casoFechaProximaAudiencia: "",
-        solicitudRegionalServicio: "",
-        solicitudBreveRelacionHechos: "",
-        solicitudHipotesis: "",
-        solicitudObservaciones: "",
-        solicitudPrioridad: "normal",
-        solicitudEsUrgente: false,
-        solicitudCausalUrgencia: "",
-        solicitudTipoTramite: "asignacion_normal",
-        firmaOsndp: false,
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const selectedNames = specialties
-    .filter((item) => selected.includes(item.id))
-    .map((item) => item.nombre);
-
+function ExecutorActions({ item, token, busy, run, area }) {
+  const [progress, setProgress] = useState(70);
+  const [observation, setObservation] = useState(
+    "Avance sintético registrado durante la demostración",
+  );
+  const [reference, setReference] = useState(
+    area === "VICTIMAS" ? "F171-DEMO-2026-002" : "INF-DEMO-2026-002",
+  );
+  const action =
+    area === "VICTIMAS" ? apiVictimsAction : apiInvestigationAction;
   return (
-    <section className="section-stack">
-      <div className="panel">
-        <div className="panel-header">
-          Nueva solicitud alineada con SD-P03-F04
-        </div>
-
-        <div className="wizard-steps">
-          {stepLabels.map((label, index) => {
-            const item = index + 1;
-            return (
-              <span
-                key={label}
-                className={item === step ? "active" : item < step ? "done" : ""}
-              >
-                {label}
-              </span>
-            );
-          })}
-        </div>
-
-        {step === 1 && (
-          <div className="wizard-grid">
+    <div className="executor-actions">
+      {item.status === "ASIGNADA" && (
+        <button
+          disabled={busy}
+          onClick={() =>
+            run(
+              item.id,
+              () => action(token, item.id, "iniciar"),
+              "Encargo iniciado",
+            )
+          }
+        >
+          Iniciar
+        </button>
+      )}
+      {item.status === "EN_EJECUCION" && (
+        <>
+          <div className="inline-action">
             <input
-              placeholder="Defensor publico (obligatorio)"
-              value={form.defensorNombre}
-              onChange={(e) => update("defensorNombre", e.target.value)}
+              type="number"
+              min="1"
+              max="99"
+              value={progress}
+              onChange={(event) => setProgress(event.target.value)}
             />
             <input
-              placeholder="Telefono defensor (numerico)"
-              value={form.defensorTelefono}
-              onChange={(e) => update("defensorTelefono", e.target.value)}
+              value={observation}
+              onChange={(event) => setObservation(event.target.value)}
             />
-            <input
-              placeholder="Correo institucional @defensoria.gov.co"
-              value={form.defensorCorreoInstitucional}
-              onChange={(e) =>
-                update("defensorCorreoInstitucional", e.target.value)
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(
+                  item.id,
+                  () =>
+                    action(token, item.id, "avance", {
+                      progress: Number(progress),
+                      observation,
+                    }),
+                  "Avance persistido en backend",
+                )
               }
-            />
-            <input
-              placeholder="Regional de origen"
-              value={form.defensorRegionalOrigen}
-              onChange={(e) => update("defensorRegionalOrigen", e.target.value)}
-            />
-            <input
-              placeholder="PAG supervisor del operador"
-              value={form.defensorPagSupervisor}
-              onChange={(e) => update("defensorPagSupervisor", e.target.value)}
-            />
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="wizard-grid">
-            <input
-              placeholder="Nombres y apellidos usuario/procesado"
-              value={form.procesadoNombresApellidos}
-              onChange={(e) =>
-                update("procesadoNombresApellidos", e.target.value)
-              }
-            />
-            <input
-              placeholder="Documento usuario (opcional)"
-              value={form.procesadoDocumento}
-              onChange={(e) => update("procesadoDocumento", e.target.value)}
-            />
-            <input
-              placeholder="Direccion residencia (opcional)"
-              value={form.procesadoDireccion}
-              onChange={(e) => update("procesadoDireccion", e.target.value)}
-            />
-            <input
-              placeholder="Telefono usuario (opcional)"
-              value={form.procesadoTelefono}
-              onChange={(e) => update("procesadoTelefono", e.target.value)}
-            />
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="wizard-grid">
-            <input
-              placeholder="SPOA 21 digitos"
-              value={form.casoSpoa}
-              onChange={(e) => update("casoSpoa", e.target.value)}
-            />
-            <input
-              placeholder="Delito"
-              value={form.casoDelito}
-              onChange={(e) => update("casoDelito", e.target.value)}
-            />
-            <select
-              value={form.casoEtapa}
-              onChange={(e) => update("casoEtapa", e.target.value)}
             >
-              <option value="">Seleccione etapa procesal</option>
-              {processStages.map((stage) => (
-                <option key={stage} value={stage}>
-                  {stage}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={form.casoFechaProximaAudiencia}
-              onChange={(e) =>
-                update("casoFechaProximaAudiencia", e.target.value)
-              }
-            />
-            <input
-              placeholder="Regional donde se asigna el servicio"
-              value={form.solicitudRegionalServicio}
-              onChange={(e) =>
-                update("solicitudRegionalServicio", e.target.value)
-              }
-            />
-            <textarea
-              placeholder="Breve relacion de los hechos"
-              value={form.solicitudBreveRelacionHechos}
-              onChange={(e) =>
-                update("solicitudBreveRelacionHechos", e.target.value)
-              }
-            />
-            <textarea
-              placeholder="Hipotesis de la defensa"
-              value={form.solicitudHipotesis}
-              onChange={(e) => update("solicitudHipotesis", e.target.value)}
-            />
+              Guardar avance
+            </button>
           </div>
-        )}
+          <div className="inline-action">
+            <input
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+            />
+            <button
+              className="primary-demo"
+              disabled={busy}
+              onClick={() =>
+                run(
+                  item.id,
+                  () =>
+                    action(
+                      token,
+                      item.id,
+                      area === "VICTIMAS" ? "finalizar" : "entregar",
+                      area === "VICTIMAS"
+                        ? { f171Reference: reference }
+                        : { reference },
+                    ),
+                  area === "VICTIMAS"
+                    ? "F-171 ficticio registrado; peritaje cerrado directamente"
+                    : "Informe entregado; pendiente aprobación PAG",
+                )
+              }
+            >
+              {area === "VICTIMAS" ? "Finalizar con F-171" : "Entregar informe"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-        {step === 4 && (
-          <div className="spec-grid">
-            {specialties.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                onClick={() => toggleSpec(item.id)}
-                className={
-                  selected.includes(item.id)
-                    ? "spec-item selected"
-                    : "spec-item"
-                }
-              >
-                <strong>{item.nombre}</strong>
-                <small>
-                  {item.tipo_servicio} - {item.dias_respuesta} dias
-                </small>
-              </button>
+function AssignmentExplanation({ assignment }) {
+  const included =
+    assignment.evaluated?.filter((candidate) => candidate.eligible) || [];
+  const excluded =
+    assignment.evaluated?.filter((candidate) => !candidate.eligible) || [];
+  return (
+    <details className="assignment-explanation" open>
+      <summary>¿Por qué se seleccionó este responsable?</summary>
+      <p>
+        <strong>{assignment.selectedName || "Sin candidato"}</strong> ·{" "}
+        {assignment.selectedReason}
+      </p>
+      <div className="assignment-meta">
+        <span>Política {assignment.policyVersion}</span>
+        <span>{assignment.strategy || "SEMILLA_DEMO"}</span>
+      </div>
+      {assignment.evaluated?.length > 0 && (
+        <div className="candidate-columns">
+          <div>
+            <strong>Elegibles ({included.length})</strong>
+            {included.map((candidate) => (
+              <span key={candidate.candidateId}>
+                {candidate.candidateName} · carga {candidate.metrics.load}
+              </span>
             ))}
           </div>
-        )}
-
-        {step === 5 && (
-          <div className="wizard-grid">
-            <select
-              value={form.solicitudTipoTramite}
-              onChange={(e) => update("solicitudTipoTramite", e.target.value)}
-            >
-              <option value="asignacion_normal">Asignacion normal</option>
-              <option value="utilidad_publica">
-                Utilidad publica / Ley 2292
-              </option>
-            </select>
-            <select
-              value={form.solicitudPrioridad}
-              onChange={(e) => update("solicitudPrioridad", e.target.value)}
-            >
-              <option value="normal">Normal</option>
-              <option value="alta">Alta</option>
-              <option value="urgente">Urgente</option>
-            </select>
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={form.solicitudEsUrgente}
-                onChange={(e) => update("solicitudEsUrgente", e.target.checked)}
-              />
-              Marcar como urgente/prioritaria
-            </label>
-            {form.solicitudEsUrgente && (
-              <input
-                placeholder="Causal de urgencia (obligatoria)"
-                value={form.solicitudCausalUrgencia}
-                onChange={(e) =>
-                  update("solicitudCausalUrgencia", e.target.value)
-                }
-              />
-            )}
-            <textarea
-              placeholder="Observaciones adicionales"
-              value={form.solicitudObservaciones}
-              onChange={(e) => update("solicitudObservaciones", e.target.value)}
-            />
+          <div>
+            <strong>Excluidos ({excluded.length})</strong>
+            {excluded.map((candidate) => (
+              <span key={candidate.candidateId}>
+                {candidate.candidateName} · {candidate.exclusions.join(", ")}
+              </span>
+            ))}
           </div>
-        )}
-
-        {step === 6 && (
-          <div className="summary-block">
-            <p>
-              <strong>Defensor:</strong> {form.defensorNombre || "-"}
-            </p>
-            <p>
-              <strong>SPOA:</strong> {form.casoSpoa || "-"}
-            </p>
-            <p>
-              <strong>Etapa:</strong> {form.casoEtapa || "-"}
-            </p>
-            <p>
-              <strong>Especialidades:</strong> {selectedNames.join(", ") || "-"}
-            </p>
-            <p>
-              <strong>Tramite:</strong> {form.solicitudTipoTramite}
-            </p>
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={form.firmaOsndp}
-                onChange={(e) => update("firmaOsndp", e.target.checked)}
-              />
-              Firma/certificacion OSNDP
-            </label>
-          </div>
-        )}
-
-        {error && <p className="error-text">{error}</p>}
-        {okMessage && <p className="ok-text">{okMessage}</p>}
-
-        <div className="wizard-actions">
-          <button
-            type="button"
-            className="secondary-outline"
-            onClick={prev}
-            disabled={step === 1 || saving}
-          >
-            Anterior
-          </button>
-          {step < 6 ? (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={next}
-              disabled={saving}
-            >
-              Siguiente
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={submit}
-              disabled={saving}
-            >
-              {saving ? "Enviando..." : "Enviar solicitud"}
-            </button>
-          )}
         </div>
-      </div>
-    </section>
-  );
-}
-
-export default function PortalPage() {
-  const { profile, token, logout } = useAuth();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const role = profile?.role;
-  const menu = data?.sections?.length
-    ? data.sections
-    : navByRole[role] || EMPTY_MENU;
-  const [activeSection, setActiveSection] = useState(menu[0] || "dashboard");
-
-  useEffect(() => {
-    setActiveSection(menu[0] || "dashboard");
-  }, [menu]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-
-    apiBootstrap(token)
-      .then((response) => {
-        if (!cancelled) setData(response);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  if (loading) return <div className="screen-loader">Cargando portal...</div>;
-  if (error) return <div className="screen-loader">{error}</div>;
-
-  const missions = data?.missions || [];
-  const specialties = data?.specialties || [];
-  const statusLabels = data?.statusLabels || {};
-  const statusFlow = data?.statusFlow || [];
-  const processStages = data?.processStages || [];
-
-  function handleCreatedMissions(newMissions) {
-    if (!Array.isArray(newMissions) || newMissions.length === 0) return;
-    setData((prev) => {
-      if (!prev) return prev;
-      const nextMissions = [...newMissions, ...prev.missions];
-      return {
-        ...prev,
-        missions: nextMissions,
-      };
-    });
-  }
-
-  function handleMissionUpdated(updatedMission) {
-    setData((prev) => {
-      if (!prev) return prev;
-      const exists = prev.missions.some(
-        (mission) => mission.id === updatedMission.id,
-      );
-      const missions = exists
-        ? prev.missions.map((mission) =>
-            mission.id === updatedMission.id ? updatedMission : mission,
-          )
-        : [updatedMission, ...prev.missions];
-      return { ...prev, missions };
-    });
-  }
-
-  return (
-    <div className="portal-layout">
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <BrandMark className="sidebar-logo" />
-          <small>Republica de Colombia</small>
-          <strong>Defensoria del Pueblo</strong>
-          <span>{profile?.roleLabel}</span>
-        </div>
-
-        <nav>
-          {menu.map((item) => (
-            <button
-              key={item}
-              className={activeSection === item ? "nav-btn active" : "nav-btn"}
-              onClick={() => setActiveSection(item)}
-            >
-              {sectionTitles[item]}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-user">
-          <div>{profile?.initials}</div>
-          <article>
-            <strong>{profile?.fullName}</strong>
-            <span>{profile?.email}</span>
-          </article>
-        </div>
-      </aside>
-
-      <main className="portal-main">
-        <header className="portal-header">
-          <div className="portal-title">
-            <BrandMark className="header-logo" />
-            <div>
-              <h1>{sectionTitles[activeSection] || "Portal"}</h1>
-              <p>Inicio / {sectionTitles[activeSection] || "Portal"}</p>
-            </div>
-          </div>
-          <button className="secondary-outline" onClick={logout}>
-            Cerrar sesion
-          </button>
-        </header>
-
-        <div className="portal-content">
-          {activeSection === "dashboard" && (
-            <DashboardSection
-              missions={missions}
-              statusLabels={statusLabels}
-              dashboard={data.dashboard}
-            />
-          )}
-          {activeSection === "solicitudes" && (
-            <SolicitudesSection
-              missions={missions}
-              statusLabels={statusLabels}
-              statusFlow={statusFlow}
-              token={token}
-              profile={profile}
-              investigators={data.investigators || []}
-              onMissionUpdated={handleMissionUpdated}
-            />
-          )}
-          {activeSection === "misiones" && (
-            <MisionesSection missions={missions} statusLabels={statusLabels} />
-          )}
-          {activeSection === "reportes" && (
-            <ReportesSection missions={missions} />
-          )}
-          {activeSection === "catalogo" && (
-            <CatalogSection specialties={specialties} />
-          )}
-          {activeSection === "mis-solicitudes" && (
-            <MisSolicitudesSection
-              missions={missions}
-              statusLabels={statusLabels}
-            />
-          )}
-          {activeSection === "mis-misiones" && (
-            <MisMisionesSection
-              missions={missions}
-              statusLabels={statusLabels}
-              token={token}
-              profile={profile}
-              onMissionUpdated={handleMissionUpdated}
-            />
-          )}
-          {activeSection === "nueva-solicitud" && (
-            <NuevaSolicitudSection
-              specialties={specialties}
-              processStages={processStages}
-              token={token}
-              onCreated={handleCreatedMissions}
-            />
-          )}
-        </div>
-      </main>
-    </div>
+      )}
+    </details>
   );
 }

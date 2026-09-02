@@ -8,4 +8,5 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.demo.example
 Documentos Fuente/

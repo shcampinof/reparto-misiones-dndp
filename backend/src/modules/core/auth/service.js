@@ -59,18 +59,7 @@ export function createAuthService({ config, users }) {
       throw new AppError(404, "ACCOUNT_NOT_FOUND", "Cuenta no encontrada");
     }
 
-    const claims = {
-      sub: user.id,
-      accountId: account.id,
-      role: account.role,
-      email: account.email,
-      fullName: user.fullName,
-      initials: account.initials,
-      investigatorId: account.investigatorId || null,
-    };
-    const accessToken = jwt.sign(claims, config.auth.jwtSecret, {
-      expiresIn: session.remember ? "30d" : "8h",
-    });
+    const accessToken = issueToken(user, account, session.remember);
     preAuthSessions.delete(preAuthToken);
 
     return { accessToken, profile: profileFrom(user, account) };
@@ -84,7 +73,74 @@ export function createAuthService({ config, users }) {
     return profileFrom(user, account);
   }
 
-  return { login, selectAccount, getProfile };
+  function listDemoAccounts() {
+    if (!config.auth.demoEnabled) return [];
+    const unique = new Map();
+    for (const user of users) {
+      if (
+        !user.id.startsWith("demo-") ||
+        user.password !== null ||
+        unique.has(user.id)
+      )
+        continue;
+      const account = user.accounts[0];
+      unique.set(user.id, {
+        userId: user.id,
+        fullName: user.fullName,
+        role: account.role,
+        roleLabel: account.roleLabel,
+        area: account.area,
+      });
+    }
+    return [...unique.values()];
+  }
+
+  function demoLogin({ userId }) {
+    if (!config.auth.demoEnabled) {
+      throw new AppError(
+        404,
+        "DEMO_DISABLED",
+        "El modo demostración no está habilitado",
+      );
+    }
+    const user = users.find(
+      (candidate) =>
+        candidate.id === userId &&
+        candidate.id.startsWith("demo-") &&
+        candidate.password === null,
+    );
+    const account = user?.accounts[0];
+    if (!user || !account) {
+      throw new AppError(
+        404,
+        "DEMO_ACCOUNT_NOT_FOUND",
+        "Cuenta demo no encontrada",
+      );
+    }
+    return {
+      accessToken: issueToken(user, account, false),
+      profile: profileFrom(user, account),
+    };
+  }
+
+  function issueToken(user, account, remember) {
+    return jwt.sign(
+      {
+        sub: user.id,
+        accountId: account.id,
+        role: account.role,
+        email: account.email,
+        fullName: user.fullName,
+        initials: account.initials,
+        area: account.area,
+        executorId: account.executorId || null,
+      },
+      config.auth.jwtSecret,
+      { expiresIn: remember ? "30d" : "8h" },
+    );
+  }
+
+  return { login, selectAccount, getProfile, listDemoAccounts, demoLogin };
 }
 
 function profileFrom(user, account) {
@@ -95,6 +151,7 @@ function profileFrom(user, account) {
     roleLabel: account.roleLabel,
     email: account.email,
     initials: account.initials,
-    investigatorId: account.investigatorId || null,
+    area: account.area,
+    executorId: account.executorId || null,
   };
 }

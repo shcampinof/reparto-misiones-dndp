@@ -8,102 +8,77 @@ async function request(path, options = {}) {
       ...(options.headers || {}),
     },
   });
-
   const data = await response.json().catch(() => ({}));
-
   if (!response.ok) {
-    const message =
-      data?.message || data?.error?.message || "Error en la solicitud";
-    throw new Error(message);
+    throw new Error(
+      data?.message || data?.error?.message || "Error en la demostración",
+    );
   }
-
   return data;
 }
 
-export async function apiLogin(payload) {
-  return request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function apiSelectAccount(payload) {
-  return request("/auth/select-account", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function apiMe(token) {
-  return request("/auth/me", {
+function authenticated(token, method = "GET", body) {
+  return {
+    method,
     headers: { Authorization: `Bearer ${token}` },
-  });
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  };
 }
 
-export async function apiBootstrap(token) {
-  return request("/bootstrap", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export function apiDemoAccounts() {
+  return request("/auth/demo-accounts");
 }
 
-export async function apiCreateSolicitud(token, payload) {
-  return request("/solicitudes", {
+export function apiDemoLogin(userId) {
+  return request("/auth/demo-login", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ userId }),
   });
 }
 
-export async function apiAprobarReparto(token, numero) {
-  return request(`/radicados/${encodeURIComponent(numero)}/aprobar-reparto`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export function apiMe(token) {
+  return request("/auth/me", authenticated(token));
 }
 
-export async function apiDevolverRadicado(token, numero, payload) {
-  return request(`/radicados/${encodeURIComponent(numero)}/devolver`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+export function apiDemoBootstrap(token) {
+  return request("/demo/bootstrap", authenticated(token));
 }
 
-export async function apiAsignarRadicado(token, numero, payload) {
-  return request(`/radicados/${encodeURIComponent(numero)}/asignar`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+export function apiResetDemo(token) {
+  return request("/demo/reset", authenticated(token, "POST"));
 }
 
-export async function apiSolicitarAmpliacion(token, numero, payload) {
-  return request(`/radicados/${encodeURIComponent(numero)}/ampliacion`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+export function apiCreateInvestigation(token, payload) {
+  return request(
+    "/demo/investigacion/solicitudes",
+    authenticated(token, "POST", payload),
+  );
 }
 
-export async function apiIniciarMision(token, numero) {
-  return request(`/radicados/${encodeURIComponent(numero)}/iniciar`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export function apiAssignInvestigation(token, itemId) {
+  return request(
+    `/demo/investigacion/items/${encodeURIComponent(itemId)}/repartir`,
+    authenticated(token, "POST"),
+  );
 }
 
-export async function apiActualizarAvance(token, numero, payload) {
-  return request(`/radicados/${encodeURIComponent(numero)}/avance`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+export function apiInvestigationAction(token, itemId, action, payload) {
+  return request(
+    `/demo/investigacion/items/${encodeURIComponent(itemId)}/${action}`,
+    authenticated(token, "POST", payload),
+  );
 }
 
-export async function apiEntregarInforme(token, numero, payload) {
-  return request(`/radicados/${encodeURIComponent(numero)}/informe`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
-  });
+export function apiCreateVictims(token, payload) {
+  return request(
+    "/demo/victimas/solicitudes",
+    authenticated(token, "POST", payload),
+  );
+}
+
+export function apiVictimsAction(token, itemId, action, payload) {
+  return request(
+    `/demo/victimas/items/${encodeURIComponent(itemId)}/${action}`,
+    authenticated(token, "POST", payload),
+  );
 }

@@ -11,14 +11,16 @@ const config = createConfig();
 const logger = createLogger({ level: config.logLevel });
 const app = createApp({ config, logger });
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, config.host, () => {
   logger.info(
     {
       service: config.serviceName,
       version: config.serviceVersion,
       environment: config.environment,
+      host: config.host,
       port: config.port,
       demoAccounts: config.auth.demoEnabled,
+      demoResetOnStart: config.demoResetOnStart,
       ephemeralJwtSecret: config.auth.ephemeralJwtSecret,
     },
     "service_started",

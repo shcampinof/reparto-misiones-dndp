@@ -41,8 +41,10 @@ export function createConfig(env = process.env) {
   const logLevel = env.LOG_LEVEL || "info";
   if (!LOG_LEVELS.has(logLevel)) issues.push("LOG_LEVEL no es valido");
 
-  const demoEnabled = booleanValue(env.ENABLE_DEMO_ACCOUNTS, false);
-  if (demoEnabled && environment === "production") {
+  const productionDemoMode = booleanValue(env.DEMO_MODE, false);
+  const demoEnabled =
+    productionDemoMode || booleanValue(env.ENABLE_DEMO_ACCOUNTS, false);
+  if (demoEnabled && environment === "production" && !productionDemoMode) {
     issues.push("ENABLE_DEMO_ACCOUNTS no puede habilitarse en produccion");
   }
 
@@ -79,14 +81,24 @@ export function createConfig(env = process.env) {
 
   const config = {
     environment,
-    port: integerValue(env.PORT, 4000, "PORT", issues),
+    host: env.HOST || "0.0.0.0",
+    port: integerValue(
+      env.PORT,
+      environment === "production" ? 7860 : 4000,
+      "PORT",
+      issues,
+    ),
     serviceName: env.SERVICE_NAME || "sigip-dp-api",
     serviceVersion: env.SERVICE_VERSION || "1.0.0",
     logLevel,
-    corsOrigins: listValue(env.CORS_ORIGINS, [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ]),
+    staticDir: String(env.STATIC_DIR || "").trim() || null,
+    demoResetOnStart: booleanValue(env.DEMO_RESET_ON_START, true),
+    corsOrigins: listValue(
+      env.CORS_ORIGINS,
+      environment === "production"
+        ? []
+        : ["http://localhost:5173", "http://127.0.0.1:5173"],
+    ),
     auth: {
       jwtSecret,
       ephemeralJwtSecret,

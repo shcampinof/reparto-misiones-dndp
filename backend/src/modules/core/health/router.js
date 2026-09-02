@@ -16,16 +16,20 @@ export function createHealthRouter({ config }) {
   });
 
   router.get("/ready", (req, res) => {
-    res.json({
-      ok: true,
-      status: "ready",
-      checks: {
-        configuration: "ok",
-        persistence: "demo-memory-resettable",
-      },
-      requestId: req.requestId,
-    });
+    res.json(readinessPayload(req));
   });
 
   return router;
+}
+
+export function readinessPayload(req) {
+  return {
+    ok: true,
+    status: "ready",
+    checks: {
+      configuration: "ok",
+      persistence: "demo-memory-resettable",
+    },
+    requestId: req.requestId,
+  };
 }

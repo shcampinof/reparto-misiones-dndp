@@ -35,3 +35,21 @@ test("produccion rechaza cuentas demo", () => {
       ),
   );
 });
+
+test("produccion permite exclusivamente el modo demo explícito para el Space", () => {
+  const config = createConfig({
+    NODE_ENV: "production",
+    PORT: "7860",
+    HOST: "0.0.0.0",
+    DEMO_MODE: "true",
+    DEMO_RESET_ON_START: "true",
+    JWT_SECRET: "s".repeat(32),
+    STATIC_DIR: "/app/public",
+  });
+  assert.equal(config.auth.demoEnabled, true);
+  assert.equal(config.demoResetOnStart, true);
+  assert.equal(config.port, 7860);
+  assert.equal(config.host, "0.0.0.0");
+  assert.equal(config.staticDir, "/app/public");
+  assert.deepEqual(config.corsOrigins, []);
+});

@@ -9,4 +9,5 @@ coverage/
 .env.*
 !.env.example
 !.env.demo.example
+.space-package/
 Documentos Fuente/

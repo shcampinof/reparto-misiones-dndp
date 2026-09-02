@@ -5,11 +5,12 @@ import { createApp } from "../../src/app/create-app.js";
 import { createConfig } from "../../src/config/index.js";
 import { createSilentLogger } from "../../src/shared/logger.js";
 
-function testApp() {
+function testApp(overrides = {}) {
   const config = createConfig({
     NODE_ENV: "test",
     JWT_SECRET: "test-secret-with-at-least-thirty-two-characters",
     ENABLE_DEMO_ACCOUNTS: "true",
+    ...overrides,
   });
   return createApp({ config, logger: createSilentLogger() });
 }
@@ -41,6 +42,8 @@ test("salud, cuentas sintéticas y protección de rutas", async () => {
 
   const ready = await request(app).get("/api/health/ready").expect(200);
   assert.equal(ready.body.checks.persistence, "demo-memory-resettable");
+  const spaceReady = await request(app).get("/api/ready").expect(200);
+  assert.equal(spaceReady.body.status, "ready");
 
   const accounts = await request(app)
     .get("/api/auth/demo-accounts")
@@ -59,6 +62,16 @@ test("salud, cuentas sintéticas y protección de rutas", async () => {
 
   const denied = await request(app).get("/api/demo/bootstrap").expect(401);
   assert.equal(denied.body.error.code, "TOKEN_REQUIRED");
+});
+
+test("sirve la SPA en rutas internas sin interceptar endpoints API", async () => {
+  const app = testApp({ STATIC_DIR: "test/fixtures/public" });
+  const portal = await request(app).get("/portal").expect(200);
+  assert.match(portal.text, /SIGIP-DP fixture/);
+  assert.match(portal.headers["content-type"], /text\/html/);
+
+  const missingApi = await request(app).get("/api/no-existe").expect(404);
+  assert.equal(missingApi.body.error.code, "ROUTE_NOT_FOUND");
 });
 
 test("recorrido completo de Investigación exige aprobación final PAG", async () => {

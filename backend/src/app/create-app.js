@@ -6,7 +6,10 @@ import { assignmentModule } from "../modules/assignment/index.js";
 import { createAuthMiddleware } from "../modules/core/auth/middleware.js";
 import { createAuthRouter } from "../modules/core/auth/router.js";
 import { createAuthService } from "../modules/core/auth/service.js";
-import { createHealthRouter } from "../modules/core/health/router.js";
+import {
+  createHealthRouter,
+  readinessPayload,
+} from "../modules/core/health/router.js";
 import { coreModule } from "../modules/core/index.js";
 import { createDemoRouter } from "../modules/demo/router.js";
 import { createDemoService } from "../modules/demo/service.js";
@@ -44,29 +47,42 @@ export function createApp({ config, logger }) {
 
   app.use(requestContext);
   app.use(requestLogger(logger));
-  app.use(
-    cors({
-      origin(origin, callback) {
-        if (!origin || config.corsOrigins.includes(origin))
-          return callback(null, true);
-        return callback(
-          new AppError(
-            403,
-            "CORS_ORIGIN_DENIED",
-            "Origen no permitido por CORS",
-          ),
-        );
-      },
-      credentials: true,
-      exposedHeaders: ["x-request-id"],
-    }),
-  );
+  if (config.corsOrigins.length > 0) {
+    app.use(
+      cors({
+        origin(origin, callback) {
+          if (!origin || config.corsOrigins.includes(origin))
+            return callback(null, true);
+          return callback(
+            new AppError(
+              403,
+              "CORS_ORIGIN_DENIED",
+              "Origen no permitido por CORS",
+            ),
+          );
+        },
+        credentials: true,
+        exposedHeaders: ["x-request-id"],
+      }),
+    );
+  }
   app.use(express.json({ limit: "5mb" }));
 
   app.use("/api/health", createHealthRouter({ config }));
+  app.get("/api/ready", (req, res) => res.json(readinessPayload(req)));
   app.use("/api/auth", createAuthRouter({ authService, authMiddleware }));
   if (config.auth.demoEnabled) {
     app.use("/api/demo", createDemoRouter({ authMiddleware, demoService }));
+  }
+
+  if (config.staticDir) {
+    app.use(express.static(config.staticDir, { index: false }));
+    app.get("*", (req, res, next) => {
+      if (req.path === "/api" || req.path.startsWith("/api/")) return next();
+      return res.sendFile("index.html", { root: config.staticDir }, (error) => {
+        if (error) next(error);
+      });
+    });
   }
 
   app.use(notFoundHandler);

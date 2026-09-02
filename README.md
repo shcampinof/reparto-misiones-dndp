@@ -1,76 +1,100 @@
-# Mesa de Atencion Investigativa (React + Express)
+# SIGIP-DP
 
-Proyecto dividido en:
+Base técnica del Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo.
 
-- `backend`: API Express con autenticacion, seleccion de cuenta y datos base del portal.
-- `frontend`: SPA React con login (segun mockup), seleccion de cuenta y portal por rol.
+El repositorio mantiene React + Express como monolito modular inicial. El flujo visible continúa siendo un prototipo de Investigación; Víctimas, persistencia Oracle y el motor real de reparto se implementarán en fases posteriores conforme a [`docs/sigip/`](docs/sigip/00_LEEME.md).
 
 ## Requisitos
 
-- Node.js 18+
+- Node.js 20 LTS recomendado (mínimo declarado: 18).
+- npm con soporte para `npm ci`.
 
-## Ejecucion
-
-### 1) Backend
+## Instalación y ejecución
 
 ```bash
 cd backend
-npm install
-npm run dev
+npm ci
+npm start
 ```
 
-API en `http://localhost:4000`.
-
-### 2) Frontend
+En otra terminal:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-App en `http://localhost:5173`.
+La API usa `http://localhost:4000` y la SPA `http://localhost:5173` por defecto.
 
-## Publicacion en GitHub Pages
+## Configuración
 
-El workflow `.github/workflows/deploy-pages.yml` compila y publica automaticamente
-el frontend cuando se envian cambios a la rama `main`. El frontend usa rutas con
-hash para funcionar correctamente dentro de la URL de un repositorio de GitHub Pages.
+Copie `.env.example` a `.env` local. `.env` está ignorado y nunca debe versionarse.
 
-En GitHub, abre `Settings > Pages` y selecciona `GitHub Actions` como fuente.
+- `NODE_ENV`: `development`, `test` o `production`.
+- `JWT_SECRET`: obligatorio en producción y con al menos 32 caracteres. Si falta en desarrollo se genera uno efímero.
+- `CORS_ORIGINS`: lista separada por comas.
+- `LOG_LEVEL`: `debug`, `info`, `warn`, `error` o `silent`.
+- `ENABLE_DEMO_ACCOUNTS`: solo se admite en `development`/`test` y queda deshabilitado por defecto.
 
-GitHub Pages solo aloja el frontend estatico. Para que el inicio de sesion y las
-demas funciones operen en Internet, publica el backend en un servicio compatible
-con Node.js y crea en el repositorio la variable `VITE_API_URL` con la URL publica
-de la API, incluido el sufijo `/api`.
+Para usar el prototipo local, active explícitamente el modo demo y defina una contraseña:
 
-## Usuarios demo
+```dotenv
+NODE_ENV=development
+ENABLE_DEMO_ACCOUNTS=true
+DEMO_ADMIN_USER=admin
+DEMO_ADMIN_PASSWORD=una-clave-local-no-versionada
+```
 
-- `admin / admin` (administrador, configurable por `.env`)
-- `user / user` (usuario demo, por defecto defensor, configurable por `.env`)
-- `1010101010 / Defensoria2026*` (cuentas coordinador e investigador)
-- `scampino / Scampino2026*` (investigador)
-- `1234567890 / Defensor2026*` (cuenta defensor)
-- `2002002000 / Regional2026*` (defensor regional)
-- `3003003000 / Pag2026*` (PAG)
-- `4004004000 / Delegado2026*` (administrativo delegado)
-- `5005005000 / Unidad2026*` (PAG unidad operativa)
+Las credenciales fijas publicadas por el prototipo anterior fueron retiradas. El modo demo no puede iniciar en producción.
 
-## Configuracion de accesos por `.env`
+## Verificaciones
 
-El backend carga variables desde `.env` en la raiz del proyecto o desde `backend/.env`.
-Usa `.env.example` como plantilla.
+Backend:
 
-Variables principales:
+```bash
+cd backend
+npm run check
+```
 
-- `ENABLE_DEMO_ACCOUNTS=true`: habilita las cuentas demo del prototipo.
-- `ENABLE_ROLE_ADMINISTRADOR=true`
-- `ENABLE_ROLE_COORDINADOR=true`
-- `ENABLE_ROLE_PAG=true`
-- `ENABLE_ROLE_ADMINISTRATIVO_DELEGADO=true`
-- `ENABLE_ROLE_DEFENSOR=true`
-- `ENABLE_ROLE_INVESTIGADOR=true`
-- `ENABLE_ROLE_DEFENSOR_REGIONAL=true`
-- `ENABLE_ROLE_PAG_UNIDAD_OPERATIVA=true`
+Esto ejecuta lint, formato y pruebas unitarias/API. Los comandos individuales son `npm run lint`, `npm run format:check`, `npm run test:unit` y `npm run test:api`.
 
-Si una variable de rol queda en `false`, las cuentas de ese rol no aparecen en seleccion de cuenta y no pueden operar.
+Frontend:
+
+```bash
+cd frontend
+npm run check
+```
+
+Esto ejecuta lint, formato y build de producción.
+
+## Arquitectura
+
+```text
+backend/src/
+  app/                    composición y arranque HTTP
+  config/                 carga y validación por ambiente
+  modules/
+    core/                 identidad demo, autorización, portal y salud
+    investigacion/        compatibilidad del flujo investigativo actual
+    victimas/             frontera reservada, sin flujo implementado
+    assignment/           frontera del reparto; aún conserva el prototipo
+    reporting/            frontera de lecturas e indicadores
+    integrations/         frontera para adaptadores externos
+  infrastructure/demo/    proveedor de cuentas exclusivamente local/test
+  shared/                 errores, logs y middleware transversal
+```
+
+Los endpoints existentes conservan sus rutas. Los errores centrales nuevos usan `{ error: { code, message, requestId } }`; el cliente acepta también el contrato legado `{ message }` durante la migración.
+
+`GET /api/health` conserva `ok` y `service`, y agrega versión, ambiente, uptime y correlación. `GET /api/health/ready` hace explícito que la persistencia actual sigue siendo `demo-memory`.
+
+## Límites actuales
+
+- La API aún usa arreglos en memoria y pierde cambios al reiniciar.
+- El reparto “automático” sigue siendo la simulación del prototipo; no es un motor confiable.
+- Los plazos y semáforos visibles son datos heredados pendientes de parametrización.
+- No existe todavía flujo de Víctimas ni integraciones reales.
+- GitHub Pages publica únicamente la SPA; no constituye un despliegue funcional de la API.
+
+Consulte [la línea base técnica](docs/sigip/08_LINEA_BASE_TECNICA.md) y [la base de ingeniería implementada](docs/sigip/08A_BASE_INGENIERIA_IMPLEMENTADA.md) antes de continuar con la siguiente fase.

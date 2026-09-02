@@ -55,7 +55,9 @@ export default function AccountSelectionPage() {
               >
                 <span className="device-icon">PC</span>
                 <span className="account-summary">
-                  <strong>{loadingId === account.id ? "Ingresando..." : account.email}</strong>
+                  <strong>
+                    {loadingId === account.id ? "Ingresando..." : account.email}
+                  </strong>
                   <small>{account.roleLabel || account.role}</small>
                 </span>
               </button>
@@ -72,7 +74,9 @@ export default function AccountSelectionPage() {
         </section>
       </main>
 
-      <footer className="public-footer">2026 DEFENSORIA DEL PUEBLO DE COLOMBIA</footer>
+      <footer className="public-footer">
+        2026 DEFENSORIA DEL PUEBLO DE COLOMBIA
+      </footer>
     </div>
   );
 }

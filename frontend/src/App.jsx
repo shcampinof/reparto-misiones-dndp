@@ -7,7 +7,8 @@ import PortalPage from "./pages/PortalPage";
 function ProtectedPortal() {
   const { token, loadingProfile } = useAuth();
 
-  if (loadingProfile) return <div className="screen-loader">Cargando sesion...</div>;
+  if (loadingProfile)
+    return <div className="screen-loader">Cargando sesion...</div>;
   if (!token) return <Navigate to="/" replace />;
 
   return <PortalPage />;
@@ -17,7 +18,8 @@ function AccountSelectionGuard() {
   const { token, accounts, preAuthToken } = useAuth();
 
   if (token) return <Navigate to="/portal" replace />;
-  if (!preAuthToken || accounts.length === 0) return <Navigate to="/" replace />;
+  if (!preAuthToken || accounts.length === 0)
+    return <Navigate to="/" replace />;
 
   return <AccountSelectionPage />;
 }

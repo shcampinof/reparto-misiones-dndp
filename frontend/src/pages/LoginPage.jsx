@@ -86,10 +86,9 @@ export default function LoginPage() {
         </form>
 
         <p className="legal-note">
-          Este es un sistema de acceso restringido para personal autorizado. El uso indebido sera
-          sancionado conforme a la ley.
+          Este es un sistema de acceso restringido para personal autorizado. El
+          uso indebido sera sancionado conforme a la ley.
         </p>
-
       </div>
     </div>
   );

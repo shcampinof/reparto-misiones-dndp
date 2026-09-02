@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { apiLogin, apiMe, apiSelectAccount } from "../api";
 
 const AuthContext = createContext(null);
@@ -7,7 +14,9 @@ const PERSIST_KEY = "mesa-atencion-token";
 const SESSION_KEY = "mesa-atencion-token-session";
 
 function getStoredToken() {
-  return localStorage.getItem(PERSIST_KEY) || sessionStorage.getItem(SESSION_KEY);
+  return (
+    localStorage.getItem(PERSIST_KEY) || sessionStorage.getItem(SESSION_KEY)
+  );
 }
 
 export function AuthProvider({ children }) {
@@ -16,7 +25,18 @@ export function AuthProvider({ children }) {
   const [accounts, setAccounts] = useState([]);
   const [preAuthToken, setPreAuthToken] = useState("");
   const [remember, setRemember] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(Boolean(getStoredToken()));
+  const [loadingProfile, setLoadingProfile] = useState(
+    Boolean(getStoredToken()),
+  );
+
+  const logout = useCallback(() => {
+    setToken("");
+    setProfile(null);
+    setAccounts([]);
+    setPreAuthToken("");
+    localStorage.removeItem(PERSIST_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -42,15 +62,22 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, logout]);
 
-  const login = useCallback(async ({ document, password, remember: shouldRemember }) => {
-    const data = await apiLogin({ document, password, remember: shouldRemember });
-    setRemember(Boolean(shouldRemember));
-    setAccounts(data.accounts || []);
-    setPreAuthToken(data.preAuthToken || "");
-    return data;
-  }, []);
+  const login = useCallback(
+    async ({ document, password, remember: shouldRemember }) => {
+      const data = await apiLogin({
+        document,
+        password,
+        remember: shouldRemember,
+      });
+      setRemember(Boolean(shouldRemember));
+      setAccounts(data.accounts || []);
+      setPreAuthToken(data.preAuthToken || "");
+      return data;
+    },
+    [],
+  );
 
   const selectAccount = useCallback(
     async (accountId) => {
@@ -71,17 +98,8 @@ export function AuthProvider({ children }) {
       setPreAuthToken("");
       return data;
     },
-    [preAuthToken, remember]
+    [preAuthToken, remember],
   );
-
-  const logout = useCallback(() => {
-    setToken("");
-    setProfile(null);
-    setAccounts([]);
-    setPreAuthToken("");
-    localStorage.removeItem(PERSIST_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-  }, []);
 
   const value = useMemo(
     () => ({
@@ -94,9 +112,18 @@ export function AuthProvider({ children }) {
       selectAccount,
       logout,
       setAccounts,
-      setPreAuthToken
+      setPreAuthToken,
     }),
-    [token, profile, accounts, preAuthToken, loadingProfile, login, selectAccount, logout]
+    [
+      token,
+      profile,
+      accounts,
+      preAuthToken,
+      loadingProfile,
+      login,
+      selectAccount,
+      logout,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

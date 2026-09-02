@@ -22,7 +22,8 @@
 
 body {
   margin: 0;
-  font-family: "Geomanist", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family:
+    "Geomanist", "Trebuchet MS", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -51,7 +52,12 @@ select {
   place-items: center;
   padding: 20px;
   background:
-    linear-gradient(135deg, rgba(7, 71, 148, 0.08) 0%, rgba(47, 100, 173, 0.03) 45%, rgba(25, 107, 47, 0.08) 100%),
+    linear-gradient(
+      135deg,
+      rgba(7, 71, 148, 0.08) 0%,
+      rgba(47, 100, 173, 0.03) 45%,
+      rgba(25, 107, 47, 0.08) 100%
+    ),
     #f7f9fc;
 }
 
@@ -247,8 +253,7 @@ select {
   display: grid;
   grid-template-rows: 62px 1fr 44px;
   background:
-    linear-gradient(180deg, rgba(47, 100, 173, 0.1), transparent 36%),
-    var(--bg);
+    linear-gradient(180deg, rgba(47, 100, 173, 0.1), transparent 36%), var(--bg);
 }
 
 .public-header,

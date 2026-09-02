@@ -8,7 +8,7 @@ import {
   apiDevolverRadicado,
   apiEntregarInforme,
   apiIniciarMision,
-  apiSolicitarAmpliacion
+  apiSolicitarAmpliacion,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 
@@ -20,18 +20,26 @@ const sectionTitles = {
   catalogo: "Catalogo de Servicios",
   "nueva-solicitud": "Nueva Solicitud de Mision",
   "mis-solicitudes": "Mis Solicitudes",
-  "mis-misiones": "Mis Misiones"
+  "mis-misiones": "Mis Misiones",
 };
+
+const EMPTY_MENU = [];
 
 const navByRole = {
   coordinador: ["dashboard", "solicitudes", "misiones", "reportes", "catalogo"],
   defensor: ["nueva-solicitud", "mis-solicitudes", "catalogo"],
   investigador: ["mis-misiones", "catalogo"],
-  administrador: ["dashboard", "solicitudes", "misiones", "reportes", "catalogo"],
+  administrador: [
+    "dashboard",
+    "solicitudes",
+    "misiones",
+    "reportes",
+    "catalogo",
+  ],
   pag: ["solicitudes", "misiones", "reportes", "catalogo"],
   administrativo_delegado: ["solicitudes", "catalogo"],
   defensor_regional: ["solicitudes", "reportes", "catalogo"],
-  pag_unidad_operativa: ["solicitudes", "misiones", "catalogo"]
+  pag_unidad_operativa: ["solicitudes", "misiones", "catalogo"],
 };
 
 function formatDate(value) {
@@ -39,7 +47,7 @@ function formatDate(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("es-CO", {
     day: "numeric",
     month: "short",
-    year: "numeric"
+    year: "numeric",
   });
 }
 
@@ -48,8 +56,13 @@ function Badge({ type, text }) {
 }
 
 function SemaphoreBadge({ semaphore }) {
-  if (!semaphore) return <span className="semaphore semaphore-gris">Sin fecha limite</span>;
-  return <span className={`semaphore semaphore-${semaphore.color}`}>{semaphore.label}</span>;
+  if (!semaphore)
+    return <span className="semaphore semaphore-gris">Sin fecha limite</span>;
+  return (
+    <span className={`semaphore semaphore-${semaphore.color}`}>
+      {semaphore.label}
+    </span>
+  );
 }
 
 function countBy(items, getKey) {
@@ -82,7 +95,12 @@ function BarChartPanel({ title, rows, emptyText = "Sin datos para graficar" }) {
               <strong>{row.value}</strong>
             </div>
             <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${max ? Math.max((row.value / max) * 100, 8) : 0}%` }} />
+              <div
+                className="bar-fill"
+                style={{
+                  width: `${max ? Math.max((row.value / max) * 100, 8) : 0}%`,
+                }}
+              />
             </div>
           </div>
         ))}
@@ -97,23 +115,28 @@ function DonutPanel({ title, items, total }) {
     amarillo: "#f5b301",
     naranja: "#d8612f",
     rojo: "#b42318",
-    gris: "#8a94a6"
+    gris: "#8a94a6",
   };
   let current = 0;
   const gradient = items.length
-    ? items.map((item) => {
-        const start = current;
-        const end = current + (item.value / Math.max(total, 1)) * 100;
-        current = end;
-        return `${palette[item.key] || "#2f64ad"} ${start}% ${end}%`;
-      }).join(", ")
+    ? items
+        .map((item) => {
+          const start = current;
+          const end = current + (item.value / Math.max(total, 1)) * 100;
+          current = end;
+          return `${palette[item.key] || "#2f64ad"} ${start}% ${end}%`;
+        })
+        .join(", ")
     : "#edf2f7 0% 100%";
 
   return (
     <div className="panel chart-panel">
       <div className="panel-header">{title}</div>
       <div className="donut-wrap">
-        <div className="donut-chart" style={{ background: `conic-gradient(${gradient})` }}>
+        <div
+          className="donut-chart"
+          style={{ background: `conic-gradient(${gradient})` }}
+        >
           <span>{total}</span>
         </div>
         <div className="donut-legend">
@@ -134,39 +157,51 @@ function StatusSummaryPanel({ missions }) {
     {
       key: "radicadas",
       label: "Radicadas",
-      value: missions.filter((mission) => ["recibida", "radicada", "en_revision"].includes(mission.status)).length,
-      tone: "blue"
+      value: missions.filter((mission) =>
+        ["recibida", "radicada", "en_revision"].includes(mission.status),
+      ).length,
+      tone: "blue",
     },
     {
       key: "asignadas",
       label: "Asignadas",
       value: missions.filter((mission) => mission.status === "asignada").length,
-      tone: "navy"
+      tone: "navy",
     },
     {
       key: "en-proceso",
       label: "En Proceso",
-      value: missions.filter((mission) => ["en_ejecucion", "solicitud_ampliacion", "ampliacion_aprobada"].includes(mission.status)).length,
-      tone: "purple"
+      value: missions.filter((mission) =>
+        [
+          "en_ejecucion",
+          "solicitud_ampliacion",
+          "ampliacion_aprobada",
+        ].includes(mission.status),
+      ).length,
+      tone: "purple",
     },
     {
       key: "pendientes",
       label: "Pend. Aprob.",
-      value: missions.filter((mission) => mission.status === "aprobada_para_reparto").length,
-      tone: "gold"
+      value: missions.filter(
+        (mission) => mission.status === "aprobada_para_reparto",
+      ).length,
+      tone: "gold",
     },
     {
       key: "completadas",
       label: "Completadas",
-      value: missions.filter((mission) => ["informe_entregado", "finalizada"].includes(mission.status)).length,
-      tone: "green"
+      value: missions.filter((mission) =>
+        ["informe_entregado", "finalizada"].includes(mission.status),
+      ).length,
+      tone: "green",
     },
     {
       key: "devueltas",
       label: "Devueltas",
       value: missions.filter((mission) => mission.status === "devuelta").length,
-      tone: "red"
-    }
+      tone: "red",
+    },
   ];
 
   return (
@@ -174,7 +209,10 @@ function StatusSummaryPanel({ missions }) {
       <div className="panel-header">Radicados por estado</div>
       <div className="status-card-grid">
         {cards.map((card) => (
-          <article className={`status-card status-card-${card.tone}`} key={card.key}>
+          <article
+            className={`status-card status-card-${card.tone}`}
+            key={card.key}
+          >
             <strong>{card.value}</strong>
             <span>{card.label}</span>
           </article>
@@ -187,32 +225,57 @@ function StatusSummaryPanel({ missions }) {
 function DashboardCharts({ missions }) {
   const bySemaphore = buildChartRows(
     countBy(missions, (mission) => mission.semaphore?.color || "gris"),
-    { verde: "Mas de 7 dias", amarillo: "4 a 7 dias", naranja: "1 a 3 dias", rojo: "Vencido", gris: "Sin fecha" },
-    5
+    {
+      verde: "Mas de 7 dias",
+      amarillo: "4 a 7 dias",
+      naranja: "1 a 3 dias",
+      rojo: "Vencido",
+      gris: "Sin fecha",
+    },
+    5,
   );
 
   return (
     <div className="management-grid dashboard-grid">
       <StatusSummaryPanel missions={missions} />
-      <DonutPanel title="Semaforo de terminos" items={bySemaphore} total={missions.length} />
+      <DonutPanel
+        title="Semaforo de terminos"
+        items={bySemaphore}
+        total={missions.length}
+      />
     </div>
   );
 }
 
 function ReportCharts({ missions }) {
-  const bySpecialty = buildChartRows(countBy(missions, (mission) => mission.specialty), {}, 6);
-  const byRegion = buildChartRows(countBy(missions, (mission) => mission.defenderRegion), {}, 6);
-  const byInvestigator = buildChartRows(
-    countBy(missions.filter((mission) => mission.investigator !== "Sin asignar"), (mission) => mission.investigator),
+  const bySpecialty = buildChartRows(
+    countBy(missions, (mission) => mission.specialty),
     {},
-    6
+    6,
+  );
+  const byRegion = buildChartRows(
+    countBy(missions, (mission) => mission.defenderRegion),
+    {},
+    6,
+  );
+  const byInvestigator = buildChartRows(
+    countBy(
+      missions.filter((mission) => mission.investigator !== "Sin asignar"),
+      (mission) => mission.investigator,
+    ),
+    {},
+    6,
   );
 
   return (
     <div className="management-grid report-grid">
       <BarChartPanel title="Carga por especialidad" rows={bySpecialty} />
       <BarChartPanel title="Radicados por regional" rows={byRegion} />
-      <BarChartPanel title="Carga por investigador" rows={byInvestigator} emptyText="No hay radicados asignados a investigadores" />
+      <BarChartPanel
+        title="Carga por investigador"
+        rows={byInvestigator}
+        emptyText="No hay radicados asignados a investigadores"
+      />
     </div>
   );
 }
@@ -255,7 +318,9 @@ function SummaryCards({ dashboard }) {
 }
 
 function DashboardSection({ missions, dashboard, statusLabels }) {
-  const pending = missions.filter((m) => ["recibida", "en_revision", "aprobada_para_reparto"].includes(m.status));
+  const pending = missions.filter((m) =>
+    ["recibida", "en_revision", "aprobada_para_reparto"].includes(m.status),
+  );
 
   return (
     <section className="section-stack">
@@ -283,7 +348,10 @@ function DashboardSection({ missions, dashboard, statusLabels }) {
                   <td>{mission.defender}</td>
                   <td>{mission.specialty}</td>
                   <td>
-                    <Badge type={mission.status} text={statusLabels[mission.status]} />
+                    <Badge
+                      type={mission.status}
+                      text={statusLabels[mission.status]}
+                    />
                   </td>
                   <td>
                     <SemaphoreBadge semaphore={mission.semaphore} />
@@ -298,14 +366,24 @@ function DashboardSection({ missions, dashboard, statusLabels }) {
   );
 }
 
-function SolicitudesSection({ missions, statusLabels, statusFlow, token, profile, investigators, onMissionUpdated }) {
+function SolicitudesSection({
+  missions,
+  statusLabels,
+  statusFlow,
+  token,
+  profile,
+  investigators,
+  onMissionUpdated,
+}) {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canOperate = ["coordinador", "administrador", "pag"].includes(profile?.role);
+  const canOperate = ["coordinador", "administrador", "pag"].includes(
+    profile?.role,
+  );
 
   async function runAction(mission, action) {
     setBusyId(mission.id);
@@ -323,30 +401,38 @@ function SolicitudesSection({ missions, statusLabels, statusFlow, token, profile
         if (!motivo) return;
         const observacion = window.prompt("Observacion para el defensor");
         if (!observacion) return;
-        response = await apiDevolverRadicado(token, mission.id, { motivo, observacion });
+        response = await apiDevolverRadicado(token, mission.id, {
+          motivo,
+          observacion,
+        });
       }
 
       if (action === "asignar-auto") {
-        const candidate = investigators.find((item) => item.especialidades.includes(mission.specialtyId));
-        if (!candidate) throw new Error("No hay investigador activo para esta especialidad");
+        const candidate = investigators.find((item) =>
+          item.especialidades.includes(mission.specialtyId),
+        );
+        if (!candidate)
+          throw new Error("No hay investigador activo para esta especialidad");
         response = await apiAsignarRadicado(token, mission.id, {
           investigador_id: candidate.id,
-          tipo_asignacion: "automatica"
+          tipo_asignacion: "automatica",
         });
       }
 
       if (action === "asignar-manual") {
         const investigatorId = window.prompt(
-          `ID investigador (${investigators.map((item) => `${item.id}: ${item.nombre}`).join(" | ")})`
+          `ID investigador (${investigators.map((item) => `${item.id}: ${item.nombre}`).join(" | ")})`,
         );
         if (!investigatorId) return;
-        const justificacion = window.prompt("Justificacion de asignacion manual");
+        const justificacion = window.prompt(
+          "Justificacion de asignacion manual",
+        );
         if (!justificacion) return;
         response = await apiAsignarRadicado(token, mission.id, {
           investigador_id: investigatorId,
           tipo_asignacion: "manual",
           justificacion_manual: justificacion,
-          asignacion_excepcional: mission.status !== "aprobada_para_reparto"
+          asignacion_excepcional: mission.status !== "aprobada_para_reparto",
         });
       }
 
@@ -420,7 +506,10 @@ function SolicitudesSection({ missions, statusLabels, statusFlow, token, profile
                   <td>{mission.spoa}</td>
                   <td>{mission.specialty}</td>
                   <td>
-                    <Badge type={mission.status} text={statusLabels[mission.status]} />
+                    <Badge
+                      type={mission.status}
+                      text={statusLabels[mission.status]}
+                    />
                   </td>
                   <td>
                     <Badge type={mission.priority} text={mission.priority} />
@@ -431,16 +520,35 @@ function SolicitudesSection({ missions, statusLabels, statusFlow, token, profile
                   {canOperate && (
                     <td>
                       <div className="row-actions">
-                        <button type="button" onClick={() => runAction(mission, "aprobar")} disabled={busyId === mission.id || mission.status === "aprobada_para_reparto"}>
+                        <button
+                          type="button"
+                          onClick={() => runAction(mission, "aprobar")}
+                          disabled={
+                            busyId === mission.id ||
+                            mission.status === "aprobada_para_reparto"
+                          }
+                        >
                           Aprobar
                         </button>
-                        <button type="button" onClick={() => runAction(mission, "asignar-auto")} disabled={busyId === mission.id}>
+                        <button
+                          type="button"
+                          onClick={() => runAction(mission, "asignar-auto")}
+                          disabled={busyId === mission.id}
+                        >
                           Auto
                         </button>
-                        <button type="button" onClick={() => runAction(mission, "asignar-manual")} disabled={busyId === mission.id}>
+                        <button
+                          type="button"
+                          onClick={() => runAction(mission, "asignar-manual")}
+                          disabled={busyId === mission.id}
+                        >
                           Manual
                         </button>
-                        <button type="button" onClick={() => runAction(mission, "devolver")} disabled={busyId === mission.id}>
+                        <button
+                          type="button"
+                          onClick={() => runAction(mission, "devolver")}
+                          disabled={busyId === mission.id}
+                        >
                           Devolver
                         </button>
                       </div>
@@ -457,7 +565,14 @@ function SolicitudesSection({ missions, statusLabels, statusFlow, token, profile
 }
 
 function MisionesSection({ missions, statusLabels }) {
-  const active = missions.filter((m) => ["asignada", "en_ejecucion", "solicitud_ampliacion", "ampliacion_aprobada"].includes(m.status));
+  const active = missions.filter((m) =>
+    [
+      "asignada",
+      "en_ejecucion",
+      "solicitud_ampliacion",
+      "ampliacion_aprobada",
+    ].includes(m.status),
+  );
 
   return (
     <section className="section-stack">
@@ -482,9 +597,16 @@ function MisionesSection({ missions, statusLabels }) {
                   <td>{mission.id}</td>
                   <td>{mission.specialty}</td>
                   <td>{mission.investigator}</td>
-                  <td>{mission.dueDate ? formatDate(mission.dueDate) : "Pendiente"}</td>
                   <td>
-                    <Badge type={mission.status} text={statusLabels[mission.status]} />
+                    {mission.dueDate
+                      ? formatDate(mission.dueDate)
+                      : "Pendiente"}
+                  </td>
+                  <td>
+                    <Badge
+                      type={mission.status}
+                      text={statusLabels[mission.status]}
+                    />
                   </td>
                   <td>
                     <SemaphoreBadge semaphore={mission.semaphore} />
@@ -492,7 +614,10 @@ function MisionesSection({ missions, statusLabels }) {
                   <td>
                     <div className="progress-row">
                       <div className="progress-track">
-                        <div className="progress-fill" style={{ width: `${mission.progress}%` }} />
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${mission.progress}%` }}
+                        />
                       </div>
                       <span>{mission.progress}%</span>
                     </div>
@@ -512,7 +637,7 @@ function ReportesSection({ missions }) {
     total: missions.length,
     urgentes: missions.filter((m) => m.priority === "urgente").length,
     vencidas: missions.filter((m) => m.semaphore?.color === "rojo").length,
-    enEjecucion: missions.filter((m) => m.status === "en_ejecucion").length
+    enEjecucion: missions.filter((m) => m.status === "en_ejecucion").length,
   };
 
   return (
@@ -544,7 +669,7 @@ function CatalogSection({ specialties }) {
   const [search, setSearch] = useState("");
 
   const filtered = specialties.filter((item) =>
-    item.nombre.toLowerCase().includes(search.trim().toLowerCase())
+    item.nombre.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
   return (
@@ -572,11 +697,23 @@ function CatalogSection({ specialties }) {
               </summary>
               <div className="catalog-body">
                 <h4>Servicios disponibles</h4>
-                <ul>{item.servicios_disponibles.map((s) => <li key={s}>{s}</li>)}</ul>
+                <ul>
+                  {item.servicios_disponibles.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
                 <h4>Informacion requerida</h4>
-                <ul>{item.informacion_requerida.map((s) => <li key={s}>{s}</li>)}</ul>
+                <ul>
+                  {item.informacion_requerida.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
                 <h4>No disponible</h4>
-                <ul>{item.servicios_no_disponibles.map((s) => <li key={s}>{s}</li>)}</ul>
+                <ul>
+                  {item.servicios_no_disponibles.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
               </div>
             </details>
           ))}
@@ -605,19 +742,40 @@ function MisSolicitudesSection({ missions, statusLabels }) {
   );
 }
 
-function MisMisionesSection({ missions, statusLabels, token, profile, onMissionUpdated }) {
+function MisMisionesSection({
+  missions,
+  statusLabels,
+  token,
+  profile,
+  onMissionUpdated,
+}) {
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const visibleStatuses = ["asignada", "en_ejecucion", "solicitud_ampliacion", "ampliacion_aprobada", "informe_entregado"];
-  const mine = missions.filter((mission) =>
-    visibleStatuses.includes(mission.status) &&
-    (!profile?.investigatorId || mission.investigatorId === profile.investigatorId)
+  const visibleStatuses = [
+    "asignada",
+    "en_ejecucion",
+    "solicitud_ampliacion",
+    "ampliacion_aprobada",
+    "informe_entregado",
+  ];
+  const mine = missions.filter(
+    (mission) =>
+      visibleStatuses.includes(mission.status) &&
+      (!profile?.investigatorId ||
+        mission.investigatorId === profile.investigatorId),
   );
   const totals = {
-    active: mine.filter((mission) => ["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(mission.status)).length,
-    nearDue: mine.filter((mission) => ["amarillo", "naranja", "rojo"].includes(mission.semaphore?.color)).length,
-    delivered: mine.filter((mission) => mission.status === "informe_entregado").length
+    active: mine.filter((mission) =>
+      ["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(
+        mission.status,
+      ),
+    ).length,
+    nearDue: mine.filter((mission) =>
+      ["amarillo", "naranja", "rojo"].includes(mission.semaphore?.color),
+    ).length,
+    delivered: mine.filter((mission) => mission.status === "informe_entregado")
+      .length,
   };
 
   async function runMissionAction(mission, action) {
@@ -633,11 +791,19 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
       }
 
       if (action === "avance") {
-        const porcentaje = Number(window.prompt("Porcentaje de avance (0 a 100)", String(mission.progress || 0)));
+        const porcentaje = Number(
+          window.prompt(
+            "Porcentaje de avance (0 a 100)",
+            String(mission.progress || 0),
+          ),
+        );
         if (!Number.isFinite(porcentaje)) return;
         const observacion = window.prompt("Observacion de avance");
         if (!observacion) return;
-        response = await apiActualizarAvance(token, mission.id, { porcentaje, observacion });
+        response = await apiActualizarAvance(token, mission.id, {
+          porcentaje,
+          observacion,
+        });
       }
 
       if (action === "informe") {
@@ -647,7 +813,11 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
         if (!referencia) return;
         const conclusiones = window.prompt("Conclusiones o resumen de entrega");
         if (!conclusiones) return;
-        response = await apiEntregarInforme(token, mission.id, { titulo, referencia, conclusiones });
+        response = await apiEntregarInforme(token, mission.id, {
+          titulo,
+          referencia,
+          conclusiones,
+        });
       }
 
       if (response?.mission) onMissionUpdated(response.mission);
@@ -668,11 +838,12 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
       const argumentacion = window.prompt("Argumentacion de la ampliacion");
       if (!argumentacion) return;
       const days = Number(window.prompt("Dias adicionales solicitados"));
-      if (!Number.isFinite(days) || days <= 0) throw new Error("Ingrese dias adicionales validos");
+      if (!Number.isFinite(days) || days <= 0)
+        throw new Error("Ingrese dias adicionales validos");
 
       const response = await apiSolicitarAmpliacion(token, mission.id, {
         argumentacion,
-        dias_adicionales: days
+        dias_adicionales: days,
       });
       if (response?.mission) onMissionUpdated(response.mission);
       if (response?.message) setMessage(response.message);
@@ -711,23 +882,47 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
                 <p>{mission.specialty}</p>
               </div>
               <div className="badge-stack">
-                <Badge type={mission.status} text={statusLabels[mission.status]} />
+                <Badge
+                  type={mission.status}
+                  text={statusLabels[mission.status]}
+                />
                 <SemaphoreBadge semaphore={mission.semaphore} />
               </div>
             </div>
 
             <div className="mission-meta-grid">
-              <span><strong>Defensor</strong>{mission.defender}</span>
-              <span><strong>Regional</strong>{mission.defenderRegion}</span>
-              <span><strong>SPOA</strong>{mission.spoa}</span>
-              <span><strong>Limite</strong>{mission.dueDate ? formatDate(mission.dueDate) : "Pendiente"}</span>
-              <span><strong>Termino</strong>{mission.daysResponse || "-"} dias</span>
-              <span><strong>Asignacion</strong>{mission.assignmentType || "-"}</span>
+              <span>
+                <strong>Defensor</strong>
+                {mission.defender}
+              </span>
+              <span>
+                <strong>Regional</strong>
+                {mission.defenderRegion}
+              </span>
+              <span>
+                <strong>SPOA</strong>
+                {mission.spoa}
+              </span>
+              <span>
+                <strong>Limite</strong>
+                {mission.dueDate ? formatDate(mission.dueDate) : "Pendiente"}
+              </span>
+              <span>
+                <strong>Termino</strong>
+                {mission.daysResponse || "-"} dias
+              </span>
+              <span>
+                <strong>Asignacion</strong>
+                {mission.assignmentType || "-"}
+              </span>
             </div>
 
             <div className="progress-row">
               <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${mission.progress}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{ width: `${mission.progress}%` }}
+                />
               </div>
               <span>{mission.progress}%</span>
             </div>
@@ -738,7 +933,9 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
                 <strong>Hechos</strong>
                 <p>{mission.caseInfo?.hechos || "Sin resumen registrado"}</p>
                 <strong>Hipotesis</strong>
-                <p>{mission.caseInfo?.hipotesis || "Sin hipotesis registrada"}</p>
+                <p>
+                  {mission.caseInfo?.hipotesis || "Sin hipotesis registrada"}
+                </p>
                 <strong>Documentos asociados</strong>
                 <ul>
                   {(mission.documents || []).map((doc) => (
@@ -753,46 +950,101 @@ function MisMisionesSection({ missions, statusLabels, token, profile, onMissionU
             <details className="mission-detail">
               <summary>Historial</summary>
               <ol className="history-list">
-                {(mission.history || []).slice().reverse().map((item) => (
-                  <li key={`${mission.id}-${item.fecha}-${item.evento}`}>
-                    <strong>{statusLabels[item.evento] || item.evento}</strong>
-                    <span>{new Date(item.fecha).toLocaleString("es-CO")}</span>
-                    <p>{item.detalle}</p>
-                  </li>
-                ))}
+                {(mission.history || [])
+                  .slice()
+                  .reverse()
+                  .map((item) => (
+                    <li key={`${mission.id}-${item.fecha}-${item.evento}`}>
+                      <strong>
+                        {statusLabels[item.evento] || item.evento}
+                      </strong>
+                      <span>
+                        {new Date(item.fecha).toLocaleString("es-CO")}
+                      </span>
+                      <p>{item.detalle}</p>
+                    </li>
+                  ))}
               </ol>
             </details>
 
             {mission.report && (
               <div className="report-box">
                 <strong>Informe entregado</strong>
-                <span>{mission.report.titulo} - {mission.report.referencia}</span>
+                <span>
+                  {mission.report.titulo} - {mission.report.referencia}
+                </span>
               </div>
             )}
 
             <div className="mission-actions">
-              <button type="button" className="secondary-outline compact-btn" onClick={() => runMissionAction(mission, "iniciar")} disabled={busyId === mission.id || mission.status !== "asignada"}>
+              <button
+                type="button"
+                className="secondary-outline compact-btn"
+                onClick={() => runMissionAction(mission, "iniciar")}
+                disabled={
+                  busyId === mission.id || mission.status !== "asignada"
+                }
+              >
                 Iniciar
               </button>
-              <button type="button" className="secondary-outline compact-btn" onClick={() => runMissionAction(mission, "avance")} disabled={busyId === mission.id || ["informe_entregado", "finalizada"].includes(mission.status)}>
+              <button
+                type="button"
+                className="secondary-outline compact-btn"
+                onClick={() => runMissionAction(mission, "avance")}
+                disabled={
+                  busyId === mission.id ||
+                  ["informe_entregado", "finalizada"].includes(mission.status)
+                }
+              >
                 Actualizar avance
               </button>
-              <button type="button" className="secondary-outline compact-btn" onClick={() => requestExtension(mission)} disabled={busyId === mission.id || ["solicitud_ampliacion", "informe_entregado", "finalizada"].includes(mission.status)}>
+              <button
+                type="button"
+                className="secondary-outline compact-btn"
+                onClick={() => requestExtension(mission)}
+                disabled={
+                  busyId === mission.id ||
+                  [
+                    "solicitud_ampliacion",
+                    "informe_entregado",
+                    "finalizada",
+                  ].includes(mission.status)
+                }
+              >
                 Solicitar ampliacion
               </button>
-              <button type="button" className="primary-btn compact-btn" onClick={() => runMissionAction(mission, "informe")} disabled={busyId === mission.id || !["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(mission.status)}>
+              <button
+                type="button"
+                className="primary-btn compact-btn"
+                onClick={() => runMissionAction(mission, "informe")}
+                disabled={
+                  busyId === mission.id ||
+                  !["asignada", "en_ejecucion", "ampliacion_aprobada"].includes(
+                    mission.status,
+                  )
+                }
+              >
                 Entregar informe
               </button>
             </div>
           </article>
         ))}
       </div>
-      {mine.length === 0 && <div className="panel empty-state">No hay misiones asignadas a este investigador.</div>}
+      {mine.length === 0 && (
+        <div className="panel empty-state">
+          No hay misiones asignadas a este investigador.
+        </div>
+      )}
     </section>
   );
 }
 
-function NuevaSolicitudSection({ specialties, processStages, token, onCreated }) {
+function NuevaSolicitudSection({
+  specialties,
+  processStages,
+  token,
+  onCreated,
+}) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -804,7 +1056,7 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
     "Informacion proceso",
     "Servicios solicitados",
     "Tramite y documentos",
-    "Confirmacion"
+    "Confirmacion",
   ];
 
   const [form, setForm] = useState({
@@ -829,7 +1081,7 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
     solicitudEsUrgente: false,
     solicitudCausalUrgencia: "",
     solicitudTipoTramite: "asignacion_normal",
-    firmaOsndp: false
+    firmaOsndp: false,
   });
 
   function update(name, value) {
@@ -838,7 +1090,7 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
 
   function toggleSpec(id) {
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
   }
 
@@ -868,19 +1120,19 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
           telefono: form.defensorTelefono,
           correo_institucional: form.defensorCorreoInstitucional,
           regional_origen: form.defensorRegionalOrigen,
-          pag_supervisor: form.defensorPagSupervisor
+          pag_supervisor: form.defensorPagSupervisor,
         },
         procesado: {
           nombres_apellidos: form.procesadoNombresApellidos,
           documento: form.procesadoDocumento,
           direccion_residencia: form.procesadoDireccion,
-          telefono_movil: form.procesadoTelefono
+          telefono_movil: form.procesadoTelefono,
         },
         caso: {
           spoa: form.casoSpoa,
           delito: form.casoDelito,
           etapa_procesal: form.casoEtapa,
-          fecha_proxima_audiencia: form.casoFechaProximaAudiencia
+          fecha_proxima_audiencia: form.casoFechaProximaAudiencia,
         },
         solicitud: {
           regional_servicio: form.solicitudRegionalServicio,
@@ -890,10 +1142,10 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
           prioridad: form.solicitudPrioridad,
           es_urgente: form.solicitudEsUrgente,
           causal_urgencia: form.solicitudCausalUrgencia,
-          tipo_tramite: form.solicitudTipoTramite
+          tipo_tramite: form.solicitudTipoTramite,
         },
         especialidades: selected,
-        firma_osndp: form.firmaOsndp
+        firma_osndp: form.firmaOsndp,
       };
 
       const response = await apiCreateSolicitud(token, payload);
@@ -923,7 +1175,7 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
         solicitudEsUrgente: false,
         solicitudCausalUrgencia: "",
         solicitudTipoTramite: "asignacion_normal",
-        firmaOsndp: false
+        firmaOsndp: false,
       });
     } catch (err) {
       setError(err.message);
@@ -939,13 +1191,18 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
   return (
     <section className="section-stack">
       <div className="panel">
-        <div className="panel-header">Nueva solicitud alineada con SD-P03-F04</div>
+        <div className="panel-header">
+          Nueva solicitud alineada con SD-P03-F04
+        </div>
 
         <div className="wizard-steps">
           {stepLabels.map((label, index) => {
             const item = index + 1;
             return (
-              <span key={label} className={item === step ? "active" : item < step ? "done" : ""}>
+              <span
+                key={label}
+                className={item === step ? "active" : item < step ? "done" : ""}
+              >
                 {label}
               </span>
             );
@@ -954,28 +1211,79 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
 
         {step === 1 && (
           <div className="wizard-grid">
-            <input placeholder="Defensor publico (obligatorio)" value={form.defensorNombre} onChange={(e) => update("defensorNombre", e.target.value)} />
-            <input placeholder="Telefono defensor (numerico)" value={form.defensorTelefono} onChange={(e) => update("defensorTelefono", e.target.value)} />
-            <input placeholder="Correo institucional @defensoria.gov.co" value={form.defensorCorreoInstitucional} onChange={(e) => update("defensorCorreoInstitucional", e.target.value)} />
-            <input placeholder="Regional de origen" value={form.defensorRegionalOrigen} onChange={(e) => update("defensorRegionalOrigen", e.target.value)} />
-            <input placeholder="PAG supervisor del operador" value={form.defensorPagSupervisor} onChange={(e) => update("defensorPagSupervisor", e.target.value)} />
+            <input
+              placeholder="Defensor publico (obligatorio)"
+              value={form.defensorNombre}
+              onChange={(e) => update("defensorNombre", e.target.value)}
+            />
+            <input
+              placeholder="Telefono defensor (numerico)"
+              value={form.defensorTelefono}
+              onChange={(e) => update("defensorTelefono", e.target.value)}
+            />
+            <input
+              placeholder="Correo institucional @defensoria.gov.co"
+              value={form.defensorCorreoInstitucional}
+              onChange={(e) =>
+                update("defensorCorreoInstitucional", e.target.value)
+              }
+            />
+            <input
+              placeholder="Regional de origen"
+              value={form.defensorRegionalOrigen}
+              onChange={(e) => update("defensorRegionalOrigen", e.target.value)}
+            />
+            <input
+              placeholder="PAG supervisor del operador"
+              value={form.defensorPagSupervisor}
+              onChange={(e) => update("defensorPagSupervisor", e.target.value)}
+            />
           </div>
         )}
 
         {step === 2 && (
           <div className="wizard-grid">
-            <input placeholder="Nombres y apellidos usuario/procesado" value={form.procesadoNombresApellidos} onChange={(e) => update("procesadoNombresApellidos", e.target.value)} />
-            <input placeholder="Documento usuario (opcional)" value={form.procesadoDocumento} onChange={(e) => update("procesadoDocumento", e.target.value)} />
-            <input placeholder="Direccion residencia (opcional)" value={form.procesadoDireccion} onChange={(e) => update("procesadoDireccion", e.target.value)} />
-            <input placeholder="Telefono usuario (opcional)" value={form.procesadoTelefono} onChange={(e) => update("procesadoTelefono", e.target.value)} />
+            <input
+              placeholder="Nombres y apellidos usuario/procesado"
+              value={form.procesadoNombresApellidos}
+              onChange={(e) =>
+                update("procesadoNombresApellidos", e.target.value)
+              }
+            />
+            <input
+              placeholder="Documento usuario (opcional)"
+              value={form.procesadoDocumento}
+              onChange={(e) => update("procesadoDocumento", e.target.value)}
+            />
+            <input
+              placeholder="Direccion residencia (opcional)"
+              value={form.procesadoDireccion}
+              onChange={(e) => update("procesadoDireccion", e.target.value)}
+            />
+            <input
+              placeholder="Telefono usuario (opcional)"
+              value={form.procesadoTelefono}
+              onChange={(e) => update("procesadoTelefono", e.target.value)}
+            />
           </div>
         )}
 
         {step === 3 && (
           <div className="wizard-grid">
-            <input placeholder="SPOA 21 digitos" value={form.casoSpoa} onChange={(e) => update("casoSpoa", e.target.value)} />
-            <input placeholder="Delito" value={form.casoDelito} onChange={(e) => update("casoDelito", e.target.value)} />
-            <select value={form.casoEtapa} onChange={(e) => update("casoEtapa", e.target.value)}>
+            <input
+              placeholder="SPOA 21 digitos"
+              value={form.casoSpoa}
+              onChange={(e) => update("casoSpoa", e.target.value)}
+            />
+            <input
+              placeholder="Delito"
+              value={form.casoDelito}
+              onChange={(e) => update("casoDelito", e.target.value)}
+            />
+            <select
+              value={form.casoEtapa}
+              onChange={(e) => update("casoEtapa", e.target.value)}
+            >
               <option value="">Seleccione etapa procesal</option>
               {processStages.map((stage) => (
                 <option key={stage} value={stage}>
@@ -983,12 +1291,26 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
                 </option>
               ))}
             </select>
-            <input type="date" value={form.casoFechaProximaAudiencia} onChange={(e) => update("casoFechaProximaAudiencia", e.target.value)} />
-            <input placeholder="Regional donde se asigna el servicio" value={form.solicitudRegionalServicio} onChange={(e) => update("solicitudRegionalServicio", e.target.value)} />
+            <input
+              type="date"
+              value={form.casoFechaProximaAudiencia}
+              onChange={(e) =>
+                update("casoFechaProximaAudiencia", e.target.value)
+              }
+            />
+            <input
+              placeholder="Regional donde se asigna el servicio"
+              value={form.solicitudRegionalServicio}
+              onChange={(e) =>
+                update("solicitudRegionalServicio", e.target.value)
+              }
+            />
             <textarea
               placeholder="Breve relacion de los hechos"
               value={form.solicitudBreveRelacionHechos}
-              onChange={(e) => update("solicitudBreveRelacionHechos", e.target.value)}
+              onChange={(e) =>
+                update("solicitudBreveRelacionHechos", e.target.value)
+              }
             />
             <textarea
               placeholder="Hipotesis de la defensa"
@@ -1005,10 +1327,16 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
                 type="button"
                 key={item.id}
                 onClick={() => toggleSpec(item.id)}
-                className={selected.includes(item.id) ? "spec-item selected" : "spec-item"}
+                className={
+                  selected.includes(item.id)
+                    ? "spec-item selected"
+                    : "spec-item"
+                }
               >
                 <strong>{item.nombre}</strong>
-                <small>{item.tipo_servicio} - {item.dias_respuesta} dias</small>
+                <small>
+                  {item.tipo_servicio} - {item.dias_respuesta} dias
+                </small>
               </button>
             ))}
           </div>
@@ -1016,11 +1344,19 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
 
         {step === 5 && (
           <div className="wizard-grid">
-            <select value={form.solicitudTipoTramite} onChange={(e) => update("solicitudTipoTramite", e.target.value)}>
+            <select
+              value={form.solicitudTipoTramite}
+              onChange={(e) => update("solicitudTipoTramite", e.target.value)}
+            >
               <option value="asignacion_normal">Asignacion normal</option>
-              <option value="utilidad_publica">Utilidad publica / Ley 2292</option>
+              <option value="utilidad_publica">
+                Utilidad publica / Ley 2292
+              </option>
             </select>
-            <select value={form.solicitudPrioridad} onChange={(e) => update("solicitudPrioridad", e.target.value)}>
+            <select
+              value={form.solicitudPrioridad}
+              onChange={(e) => update("solicitudPrioridad", e.target.value)}
+            >
               <option value="normal">Normal</option>
               <option value="alta">Alta</option>
               <option value="urgente">Urgente</option>
@@ -1037,7 +1373,9 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
               <input
                 placeholder="Causal de urgencia (obligatoria)"
                 value={form.solicitudCausalUrgencia}
-                onChange={(e) => update("solicitudCausalUrgencia", e.target.value)}
+                onChange={(e) =>
+                  update("solicitudCausalUrgencia", e.target.value)
+                }
               />
             )}
             <textarea
@@ -1050,11 +1388,21 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
 
         {step === 6 && (
           <div className="summary-block">
-            <p><strong>Defensor:</strong> {form.defensorNombre || "-"}</p>
-            <p><strong>SPOA:</strong> {form.casoSpoa || "-"}</p>
-            <p><strong>Etapa:</strong> {form.casoEtapa || "-"}</p>
-            <p><strong>Especialidades:</strong> {selectedNames.join(", ") || "-"}</p>
-            <p><strong>Tramite:</strong> {form.solicitudTipoTramite}</p>
+            <p>
+              <strong>Defensor:</strong> {form.defensorNombre || "-"}
+            </p>
+            <p>
+              <strong>SPOA:</strong> {form.casoSpoa || "-"}
+            </p>
+            <p>
+              <strong>Etapa:</strong> {form.casoEtapa || "-"}
+            </p>
+            <p>
+              <strong>Especialidades:</strong> {selectedNames.join(", ") || "-"}
+            </p>
+            <p>
+              <strong>Tramite:</strong> {form.solicitudTipoTramite}
+            </p>
             <label className="check-label">
               <input
                 type="checkbox"
@@ -1070,15 +1418,30 @@ function NuevaSolicitudSection({ specialties, processStages, token, onCreated })
         {okMessage && <p className="ok-text">{okMessage}</p>}
 
         <div className="wizard-actions">
-          <button type="button" className="secondary-outline" onClick={prev} disabled={step === 1 || saving}>
+          <button
+            type="button"
+            className="secondary-outline"
+            onClick={prev}
+            disabled={step === 1 || saving}
+          >
             Anterior
           </button>
           {step < 6 ? (
-            <button type="button" className="primary-btn" onClick={next} disabled={saving}>
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={next}
+              disabled={saving}
+            >
               Siguiente
             </button>
           ) : (
-            <button type="button" className="primary-btn" onClick={submit} disabled={saving}>
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={submit}
+              disabled={saving}
+            >
               {saving ? "Enviando..." : "Enviar solicitud"}
             </button>
           )}
@@ -1095,13 +1458,14 @@ export default function PortalPage() {
   const [error, setError] = useState("");
 
   const role = profile?.role;
-  const menu = data?.sections?.length ? data.sections : navByRole[role] || [];
-  const menuKey = menu.join("|");
+  const menu = data?.sections?.length
+    ? data.sections
+    : navByRole[role] || EMPTY_MENU;
   const [activeSection, setActiveSection] = useState(menu[0] || "dashboard");
 
   useEffect(() => {
     setActiveSection(menu[0] || "dashboard");
-  }, [role, menuKey]);
+  }, [menu]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1139,7 +1503,7 @@ export default function PortalPage() {
       const nextMissions = [...newMissions, ...prev.missions];
       return {
         ...prev,
-        missions: nextMissions
+        missions: nextMissions,
       };
     });
   }
@@ -1147,9 +1511,13 @@ export default function PortalPage() {
   function handleMissionUpdated(updatedMission) {
     setData((prev) => {
       if (!prev) return prev;
-      const exists = prev.missions.some((mission) => mission.id === updatedMission.id);
+      const exists = prev.missions.some(
+        (mission) => mission.id === updatedMission.id,
+      );
       const missions = exists
-        ? prev.missions.map((mission) => (mission.id === updatedMission.id ? updatedMission : mission))
+        ? prev.missions.map((mission) =>
+            mission.id === updatedMission.id ? updatedMission : mission,
+          )
         : [updatedMission, ...prev.missions];
       return { ...prev, missions };
     });
@@ -1222,10 +1590,17 @@ export default function PortalPage() {
           {activeSection === "misiones" && (
             <MisionesSection missions={missions} statusLabels={statusLabels} />
           )}
-          {activeSection === "reportes" && <ReportesSection missions={missions} />}
-          {activeSection === "catalogo" && <CatalogSection specialties={specialties} />}
+          {activeSection === "reportes" && (
+            <ReportesSection missions={missions} />
+          )}
+          {activeSection === "catalogo" && (
+            <CatalogSection specialties={specialties} />
+          )}
           {activeSection === "mis-solicitudes" && (
-            <MisSolicitudesSection missions={missions} statusLabels={statusLabels} />
+            <MisSolicitudesSection
+              missions={missions}
+              statusLabels={statusLabels}
+            />
           )}
           {activeSection === "mis-misiones" && (
             <MisMisionesSection

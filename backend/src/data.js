@@ -4,7 +4,7 @@
   "Preparatoria",
   "Juicio",
   "Incidente de reparacion",
-  "Casacion"
+  "Casacion",
 ];
 
 export const PRIORITIES = ["normal", "alta", "urgente"];
@@ -23,7 +23,7 @@ export const STATUS_FLOW = [
   "ampliacion_rechazada",
   "informe_entregado",
   "finalizada",
-  "anulada"
+  "anulada",
 ];
 
 export const STATUS_LABELS = {
@@ -40,33 +40,53 @@ export const STATUS_LABELS = {
   ampliacion_rechazada: "Ampliacion rechazada",
   informe_entregado: "Informe entregado",
   finalizada: "Finalizada",
-  anulada: "Anulada"
+  anulada: "Anulada",
 };
 
 export const specialties = [
   {
     id: 1,
     nombre: "Analisis de informacion forense",
-    descripcion: "Analisis logico y correlacion de datos para controversia tecnica.",
+    descripcion:
+      "Analisis logico y correlacion de datos para controversia tecnica.",
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Linea de tiempo", "Correlacion de datos", "Apoyo en controversia"],
+    servicios_disponibles: [
+      "Linea de tiempo",
+      "Correlacion de datos",
+      "Apoyo en controversia",
+    ],
     informacion_requerida: ["Documentos del proceso", "Evidencia digital"],
     servicios_no_disponibles: ["Casos fuera del alcance tecnico"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 2,
     nombre: "Financiera forense",
-    descripcion: "Evaluacion financiera, economica y contable para procesos penales.",
+    descripcion:
+      "Evaluacion financiera, economica y contable para procesos penales.",
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Estados financieros", "Tasacion de danos", "Cuestionarios"],
+    servicios_disponibles: [
+      "Estados financieros",
+      "Tasacion de danos",
+      "Cuestionarios",
+    ],
     informacion_requerida: ["Documentacion financiera", "Informes contables"],
     servicios_no_disponibles: ["Analisis sin soportes"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 3,
@@ -76,9 +96,17 @@ export const specialties = [
     dias_respuesta: 45,
     activo: true,
     servicios_disponibles: ["Mediciones antropometricas", "Retrato hablado"],
-    informacion_requerida: ["Descubrimiento probatorio", "Material fotografico"],
+    informacion_requerida: [
+      "Descubrimiento probatorio",
+      "Material fotografico",
+    ],
     servicios_no_disponibles: ["Determinacion de responsabilidad"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 4,
@@ -87,10 +115,19 @@ export const specialties = [
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Trayectorias", "Colisiones", "Calculos de velocidad"],
+    servicios_disponibles: [
+      "Trayectorias",
+      "Colisiones",
+      "Calculos de velocidad",
+    ],
     informacion_requerida: ["IPAT", "Planos", "Evidencia fisica"],
     servicios_no_disponibles: ["Animaciones procesales"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 5,
@@ -99,10 +136,19 @@ export const specialties = [
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Aptitud de disparo", "Calibre", "Estudio microscopico"],
+    servicios_disponibles: [
+      "Aptitud de disparo",
+      "Calibre",
+      "Estudio microscopico",
+    ],
     informacion_requerida: ["Informe de balistica", "Necropsia", "EMP"],
     servicios_no_disponibles: ["Determinacion de autoria"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 6,
@@ -114,7 +160,12 @@ export const specialties = [
     servicios_disponibles: ["Fijacion fotografica", "Analisis de video"],
     informacion_requerida: ["Teoria del caso", "Ubicaciones"],
     servicios_no_disponibles: ["Funciones de policia judicial"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 7,
@@ -126,7 +177,12 @@ export const specialties = [
     servicios_disponibles: ["Revision documental", "Asesoria tecnica"],
     informacion_requerida: ["Acta de destruccion", "Album fotografico"],
     servicios_no_disponibles: ["Casos ajenos al area"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 8,
@@ -138,7 +194,12 @@ export const specialties = [
     servicios_disponibles: ["Cotejo de firmas", "Verificacion documental"],
     informacion_requerida: ["Informes de policia judicial"],
     servicios_no_disponibles: ["Documentos fotocopiados sin originales"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 9,
@@ -147,10 +208,18 @@ export const specialties = [
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Analisis de historia clinica", "Cuestionarios medicos"],
+    servicios_disponibles: [
+      "Analisis de historia clinica",
+      "Cuestionarios medicos",
+    ],
     informacion_requerida: ["Documentos medicos", "Escrito de acusacion"],
     servicios_no_disponibles: ["Necropsias y exhumaciones"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 10,
@@ -159,10 +228,22 @@ export const specialties = [
     tipo_servicio: "investigacion_campo",
     dias_respuesta: 25,
     activo: true,
-    servicios_disponibles: ["Visita al lugar", "Entrevistas", "Labores de vecindario"],
-    informacion_requerida: ["Solicitud detallada", "Descubrimiento de fiscalia"],
+    servicios_disponibles: [
+      "Visita al lugar",
+      "Entrevistas",
+      "Labores de vecindario",
+    ],
+    informacion_requerida: [
+      "Solicitud detallada",
+      "Descubrimiento de fiscalia",
+    ],
     servicios_no_disponibles: ["Labores de policia judicial"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 11,
@@ -171,10 +252,18 @@ export const specialties = [
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Analisis psicologico", "Acompanamiento como asesor"],
+    servicios_disponibles: [
+      "Analisis psicologico",
+      "Acompanamiento como asesor",
+    ],
     informacion_requerida: ["Solicitud concreta", "Entrevista argumentativa"],
     servicios_no_disponibles: ["Procesos terapeuticos"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 12,
@@ -186,7 +275,12 @@ export const specialties = [
     servicios_disponibles: ["Imagen forense", "Asesoria informatica"],
     informacion_requerida: ["Hipotesis clara", "Informes de policia judicial"],
     servicios_no_disponibles: ["Recuperacion sin garantia"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 13,
@@ -198,7 +292,12 @@ export const specialties = [
     servicios_disponibles: ["Fijacion y replanteo", "Mediciones"],
     informacion_requerida: ["Planos", "Escrito de acusacion"],
     servicios_no_disponibles: ["Estudios de visibilidad"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 14,
@@ -210,7 +309,12 @@ export const specialties = [
     servicios_disponibles: ["Costos", "Fallas estructurales"],
     informacion_requerida: ["Visita de obra", "Informe policial"],
     servicios_no_disponibles: ["Actuacion sin soporte tecnico"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 15,
@@ -219,10 +323,18 @@ export const specialties = [
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
-    servicios_disponibles: ["Cotejo de impresiones", "Confrontacion decadactilar"],
+    servicios_disponibles: [
+      "Cotejo de impresiones",
+      "Confrontacion decadactilar",
+    ],
     informacion_requerida: ["EMP", "Informes de policia judicial"],
     servicios_no_disponibles: ["Casos fuera del alcance tecnico"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 16,
@@ -234,23 +346,37 @@ export const specialties = [
     servicios_disponibles: ["Accidentologia", "Analisis de materiales"],
     informacion_requerida: ["Documentacion del proceso", "Informes tecnicos"],
     servicios_no_disponibles: ["Casos fuera del alcance tecnico"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
   },
   {
     id: 17,
     nombre: "Ingenieria ambiental",
-    descripcion: "Analisis de impacto ambiental y evidencias asociadas al caso.",
+    descripcion:
+      "Analisis de impacto ambiental y evidencias asociadas al caso.",
     tipo_servicio: "pericial",
     dias_respuesta: 45,
     activo: true,
     servicios_disponibles: ["Analisis ambiental", "Soporte tecnico pericial"],
     informacion_requerida: ["Documentacion tecnica", "Registros de campo"],
     servicios_no_disponibles: ["Procesos fuera del alcance ambiental"],
-    perfiles_habilitados: ["coordinador", "defensor", "investigador", "administrador"]
-  }
+    perfiles_habilitados: [
+      "coordinador",
+      "defensor",
+      "investigador",
+      "administrador",
+    ],
+  },
 ];
 
-export const stageCatalog = PROCESS_STAGES.map((name, index) => ({ id: index + 1, name }));
+export const stageCatalog = PROCESS_STAGES.map((name, index) => ({
+  id: index + 1,
+  name,
+}));
 
 const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -266,7 +392,7 @@ export const investigators = [
     recomendacion_medica: false,
     capacidad_maxima: null,
     carga_actual: 2,
-    ultima_asignacion: "2026-03-20"
+    ultima_asignacion: "2026-03-20",
   },
   {
     id: "inv-002",
@@ -279,7 +405,7 @@ export const investigators = [
     recomendacion_medica: false,
     capacidad_maxima: null,
     carga_actual: 3,
-    ultima_asignacion: "2026-03-19"
+    ultima_asignacion: "2026-03-19",
   },
   {
     id: "inv-003",
@@ -292,7 +418,7 @@ export const investigators = [
     recomendacion_medica: false,
     capacidad_maxima: null,
     carga_actual: 1,
-    ultima_asignacion: "2026-03-22"
+    ultima_asignacion: "2026-03-22",
   },
   {
     id: "inv-004",
@@ -305,8 +431,8 @@ export const investigators = [
     recomendacion_medica: false,
     capacidad_maxima: null,
     carga_actual: 1,
-    ultima_asignacion: "2026-03-24"
-  }
+    ultima_asignacion: "2026-03-24",
+  },
 ];
 
 export const solicitudesMadre = [
@@ -328,8 +454,8 @@ export const solicitudesMadre = [
     causal_urgencia: null,
     tipo_tramite: "asignacion_normal",
     created_at: "2026-03-02T08:00:00",
-    updated_at: "2026-03-02T08:00:00"
-  }
+    updated_at: "2026-03-02T08:00:00",
+  },
 ];
 
 export const radicados = [
@@ -346,12 +472,28 @@ export const radicados = [
     dias_respuesta: 25,
     prioridad: "normal",
     historial: [
-      { evento: "radicado_generado", fecha: "2026-03-02T08:10:00", detalle: "Generado por sistema" },
-      { evento: "aprobada_para_reparto", fecha: "2026-03-03T08:00:00", detalle: "Revision de conformidad" },
-      { evento: "asignada", fecha: "2026-03-03T08:30:00", detalle: "Asignacion automatica" },
-      { evento: "en_ejecucion", fecha: "2026-03-04T09:00:00", detalle: "Inicio de labores" }
+      {
+        evento: "radicado_generado",
+        fecha: "2026-03-02T08:10:00",
+        detalle: "Generado por sistema",
+      },
+      {
+        evento: "aprobada_para_reparto",
+        fecha: "2026-03-03T08:00:00",
+        detalle: "Revision de conformidad",
+      },
+      {
+        evento: "asignada",
+        fecha: "2026-03-03T08:30:00",
+        detalle: "Asignacion automatica",
+      },
+      {
+        evento: "en_ejecucion",
+        fecha: "2026-03-04T09:00:00",
+        detalle: "Inicio de labores",
+      },
     ],
-    ampliaciones: []
+    ampliaciones: [],
   },
   {
     id: "rad-2026-0002-01",
@@ -366,11 +508,23 @@ export const radicados = [
     dias_respuesta: 45,
     prioridad: "alta",
     historial: [
-      { evento: "radicado_generado", fecha: "2026-03-02T08:11:00", detalle: "Generado por sistema" },
-      { evento: "aprobada_para_reparto", fecha: "2026-03-04T09:00:00", detalle: "Revision de conformidad" },
-      { evento: "asignada_manual", fecha: "2026-03-05T10:00:00", detalle: "Asignacion manual justificada" }
+      {
+        evento: "radicado_generado",
+        fecha: "2026-03-02T08:11:00",
+        detalle: "Generado por sistema",
+      },
+      {
+        evento: "aprobada_para_reparto",
+        fecha: "2026-03-04T09:00:00",
+        detalle: "Revision de conformidad",
+      },
+      {
+        evento: "asignada_manual",
+        fecha: "2026-03-05T10:00:00",
+        detalle: "Asignacion manual justificada",
+      },
     ],
-    ampliaciones: []
+    ampliaciones: [],
   },
   {
     id: "rad-2026-0003-01",
@@ -384,8 +538,14 @@ export const radicados = [
     fecha_limite: null,
     dias_respuesta: 45,
     prioridad: "urgente",
-    historial: [{ evento: "radicado_generado", fecha: "2026-03-02T08:12:00", detalle: "Generado por sistema" }],
-    ampliaciones: []
+    historial: [
+      {
+        evento: "radicado_generado",
+        fecha: "2026-03-02T08:12:00",
+        detalle: "Generado por sistema",
+      },
+    ],
+    ampliaciones: [],
   },
   {
     id: "rad-2026-0004-01",
@@ -401,23 +561,43 @@ export const radicados = [
     prioridad: "normal",
     avance: 20,
     documentos: [
-      { nombre: "Solicitud SD-P03-F04", referencia: "SIMULADO-SGDEA-2026-0142", tipo: "Formulario" },
-      { nombre: "Descubrimiento probatorio", referencia: "IRIS-EXP-2026-7781", tipo: "Soporte" }
+      {
+        nombre: "Solicitud SD-P03-F04",
+        referencia: "SIMULADO-SGDEA-2026-0142",
+        tipo: "Formulario",
+      },
+      {
+        nombre: "Descubrimiento probatorio",
+        referencia: "IRIS-EXP-2026-7781",
+        tipo: "Soporte",
+      },
     ],
     historial: [
-      { evento: "radicado_generado", fecha: "2026-03-02T08:13:00", detalle: "Generado por sistema" },
-      { evento: "aprobada_para_reparto", fecha: "2026-03-04T09:30:00", detalle: "Revision de conformidad" },
-      { evento: "asignada_manual", fecha: "2026-03-24T11:00:00", detalle: "Asignacion manual a Santiago Campino" }
+      {
+        evento: "radicado_generado",
+        fecha: "2026-03-02T08:13:00",
+        detalle: "Generado por sistema",
+      },
+      {
+        evento: "aprobada_para_reparto",
+        fecha: "2026-03-04T09:30:00",
+        detalle: "Revision de conformidad",
+      },
+      {
+        evento: "asignada_manual",
+        fecha: "2026-03-24T11:00:00",
+        detalle: "Asignacion manual a Santiago Campino",
+      },
     ],
-    ampliaciones: []
-  }
+    ampliaciones: [],
+  },
 ];
 
 export const users = [
   {
     id: "u-000",
     document: "admin",
-    password: "admin",
+    password: null,
     fullName: "Administrador",
     accounts: [
       {
@@ -425,14 +605,14 @@ export const users = [
         email: "admin@defensoria.gov.co",
         role: "administrador",
         roleLabel: "Administrador del sistema",
-        initials: "AD"
-      }
-    ]
+        initials: "AD",
+      },
+    ],
   },
   {
     id: "u-001",
     document: "1010101010",
-    password: "Defensoria2026*",
+    password: null,
     fullName: "Ivan Monterrey",
     accounts: [
       {
@@ -440,7 +620,7 @@ export const users = [
         email: "imonterrey@defensoria.gov.co",
         role: "coordinador",
         roleLabel: "Coordinador GID",
-        initials: "IM"
+        initials: "IM",
       },
       {
         id: "acc-02",
@@ -448,14 +628,14 @@ export const users = [
         role: "investigador",
         roleLabel: "Investigador",
         initials: "IM",
-        investigatorId: "inv-001"
-      }
-    ]
+        investigatorId: "inv-001",
+      },
+    ],
   },
   {
     id: "u-002",
     document: "1234567890",
-    password: "Defensor2026*",
+    password: null,
     fullName: "Carlos Garcia",
     accounts: [
       {
@@ -463,14 +643,14 @@ export const users = [
         email: "cgarcia@defensoria.gov.co",
         role: "defensor",
         roleLabel: "Defensor Publico",
-        initials: "CG"
-      }
-    ]
+        initials: "CG",
+      },
+    ],
   },
   {
     id: "u-007",
     document: "scampino",
-    password: "Scampino2026*",
+    password: null,
     fullName: "Santiago Campino",
     accounts: [
       {
@@ -479,14 +659,14 @@ export const users = [
         role: "investigador",
         roleLabel: "Investigador",
         initials: "SC",
-        investigatorId: "inv-004"
-      }
-    ]
+        investigatorId: "inv-004",
+      },
+    ],
   },
   {
     id: "u-003",
     document: "2002002000",
-    password: "Regional2026*",
+    password: null,
     fullName: "Martha Rojas",
     accounts: [
       {
@@ -494,14 +674,14 @@ export const users = [
         email: "mrojas@defensoria.gov.co",
         role: "defensor_regional",
         roleLabel: "Defensor Regional",
-        initials: "MR"
-      }
-    ]
+        initials: "MR",
+      },
+    ],
   },
   {
     id: "u-004",
     document: "3003003000",
-    password: "Pag2026*",
+    password: null,
     fullName: "Nancy Albarracin",
     accounts: [
       {
@@ -509,14 +689,14 @@ export const users = [
         email: "nalbarracin@defensoria.gov.co",
         role: "pag",
         roleLabel: "Profesional Administrativo y de Gestion",
-        initials: "NA"
-      }
-    ]
+        initials: "NA",
+      },
+    ],
   },
   {
     id: "u-005",
     document: "4004004000",
-    password: "Delegado2026*",
+    password: null,
     fullName: "Laura Medina",
     accounts: [
       {
@@ -524,14 +704,14 @@ export const users = [
         email: "lmedina@defensoria.gov.co",
         role: "administrativo_delegado",
         roleLabel: "Administrativo delegado",
-        initials: "LM"
-      }
-    ]
+        initials: "LM",
+      },
+    ],
   },
   {
     id: "u-006",
     document: "5005005000",
-    password: "Unidad2026*",
+    password: null,
     fullName: "Jorge Salazar",
     accounts: [
       {
@@ -539,21 +719,27 @@ export const users = [
         email: "jsalazar@defensoria.gov.co",
         role: "pag_unidad_operativa",
         roleLabel: "PAG unidad operativa",
-        initials: "JS"
-      }
-    ]
-  }
+        initials: "JS",
+      },
+    ],
+  },
 ];
 
 export const roleSections = {
   coordinador: ["dashboard", "solicitudes", "misiones", "reportes", "catalogo"],
   defensor: ["nueva-solicitud", "mis-solicitudes", "catalogo"],
   investigador: ["mis-misiones", "catalogo"],
-  administrador: ["dashboard", "solicitudes", "misiones", "reportes", "catalogo"],
+  administrador: [
+    "dashboard",
+    "solicitudes",
+    "misiones",
+    "reportes",
+    "catalogo",
+  ],
   pag: ["solicitudes", "misiones", "reportes", "catalogo"],
   administrativo_delegado: ["solicitudes", "catalogo"],
   defensor_regional: ["solicitudes", "reportes", "catalogo"],
-  pag_unidad_operativa: ["solicitudes", "misiones", "catalogo"]
+  pag_unidad_operativa: ["solicitudes", "misiones", "catalogo"],
 };
 
 export function nextMissionNumber() {
@@ -594,9 +780,15 @@ export function getSemaphore(fechaLimite) {
 
 export function buildMissionView() {
   return radicados.map((radicado) => {
-    const solicitud = solicitudesMadre.find((item) => item.id === radicado.solicitud_id);
-    const specialty = specialties.find((item) => item.id === radicado.especialidad_id);
-    const investigator = investigators.find((item) => item.id === radicado.investigador_id);
+    const solicitud = solicitudesMadre.find(
+      (item) => item.id === radicado.solicitud_id,
+    );
+    const specialty = specialties.find(
+      (item) => item.id === radicado.especialidad_id,
+    );
+    const investigator = investigators.find(
+      (item) => item.id === radicado.investigador_id,
+    );
     const semaforo = getSemaphore(radicado.fecha_limite);
 
     return {
@@ -616,30 +808,54 @@ export function buildMissionView() {
       assignmentDate: radicado.fecha_asignacion,
       dueDate: radicado.fecha_limite,
       daysResponse: radicado.dias_respuesta,
-      progress: radicado.avance ?? (radicado.estado === "finalizada" || radicado.estado === "informe_entregado" ? 100 : radicado.estado === "en_ejecucion" ? 60 : radicado.estado === "asignada" ? 20 : 0),
+      progress:
+        radicado.avance ??
+        (radicado.estado === "finalizada" ||
+        radicado.estado === "informe_entregado"
+          ? 100
+          : radicado.estado === "en_ejecucion"
+            ? 60
+            : radicado.estado === "asignada"
+              ? 20
+              : 0),
       assignmentType: radicado.tipo_asignacion,
       isUrgent: solicitud?.es_urgente || false,
       urgencyCause: solicitud?.causal_urgencia || null,
       semaphore: semaforo,
       history: radicado.historial,
       documents: radicado.documentos || [
-        { nombre: "Solicitud SD-P03-F04", referencia: "SIMULADO-SGDEA", tipo: "Formulario" }
+        {
+          nombre: "Solicitud SD-P03-F04",
+          referencia: "SIMULADO-SGDEA",
+          tipo: "Formulario",
+        },
       ],
       report: radicado.informe || null,
       caseInfo: {
         delito: solicitud?.delito || "",
         etapa: solicitud?.etapa_procesal || "",
         hechos: solicitud?.breve_relacion_hechos || "",
-        hipotesis: solicitud?.hipotesis || ""
-      }
+        hipotesis: solicitud?.hipotesis || "",
+      },
     };
   });
 }
 
 export function buildDashboardData(missionView) {
-  const active = missionView.filter((m) => ["asignada", "en_ejecucion", "solicitud_ampliacion", "ampliacion_aprobada"].includes(m.status));
-  const pending = missionView.filter((m) => ["recibida", "en_revision", "aprobada_para_reparto"].includes(m.status));
-  const nearDue = missionView.filter((m) => ["amarillo", "naranja", "rojo"].includes(m.semaphore?.color));
+  const active = missionView.filter((m) =>
+    [
+      "asignada",
+      "en_ejecucion",
+      "solicitud_ampliacion",
+      "ampliacion_aprobada",
+    ].includes(m.status),
+  );
+  const pending = missionView.filter((m) =>
+    ["recibida", "en_revision", "aprobada_para_reparto"].includes(m.status),
+  );
+  const nearDue = missionView.filter((m) =>
+    ["amarillo", "naranja", "rojo"].includes(m.semaphore?.color),
+  );
   const expired = missionView.filter((m) => m.semaphore?.color === "rojo");
 
   return {
@@ -648,7 +864,7 @@ export function buildDashboardData(missionView) {
       activeMissions: active.length,
       pendingAssignment: pending.length,
       nearDue: nearDue.length,
-      expired: expired.length
-    }
+      expired: expired.length,
+    },
   };
 }

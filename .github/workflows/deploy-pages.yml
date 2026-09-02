@@ -31,6 +31,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Instalar dependencias
         run: npm ci
+      - name: Verificar lint y formato
+        run: npm run lint && npm run format:check
       - name: Compilar frontend
         run: npm run build
         env:

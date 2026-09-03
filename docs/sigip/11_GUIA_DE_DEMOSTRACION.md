@@ -4,6 +4,15 @@
 
 Abra `http://localhost:5173`. Confirme que la franja superior diga **“Ambiente de demostración — datos no reales”**. Todas las identidades, solicitudes, víctimas y referencias visibles son sintéticas. Si una ejecución anterior dejó cambios, ingrese como **Alex Demo — Administrador** y use **Restablecer datos de demostración**.
 
+### Nuevo acceso por contexto
+
+1. Seleccione **Investigación** o **Víctimas** en las pestañas horizontales.
+2. Elija en **Rol de demostración** una de las identidades sintéticas filtradas para esa área.
+3. Pulse **Ingresar al portal**. El selector facilita el guion, pero la cuenta autenticada y el backend siguen determinando los permisos y módulos habilitados.
+4. Use **Cerrar sesión** en la cabecera para regresar y cambiar de perfil.
+
+No existe todavía un archivo local del logo institucional autorizado. La demo usa temporalmente la marca textual **Defensoría del Pueblo**; el activo oficial y su autorización de uso quedan pendientes.
+
 ## Recorrido sugerido (máximo 8 minutos)
 
 | Tiempo | Usuario / rol | Acción | Resultado esperado | Mensaje clave |

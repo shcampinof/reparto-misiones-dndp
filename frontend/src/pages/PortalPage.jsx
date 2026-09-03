@@ -103,7 +103,9 @@ export default function PortalPage() {
       <div className="demo-banner">{data.banner}</div>
       <header className="demo-header">
         <div className="demo-brand">
-          <span className="institutional-seal small">DP</span>
+          <span className="institutional-seal small" aria-hidden="true">
+            DP
+          </span>
           <div>
             <strong>SIGIP-DP</strong>
             <small>
@@ -111,34 +113,34 @@ export default function PortalPage() {
             </small>
           </div>
         </div>
+        <nav className="portal-area-tabs" aria-label="Módulos del portal">
+          {Object.entries(AREA_META).map(([id, meta]) => (
+            <button
+              type="button"
+              key={id}
+              className={area === id ? "active" : ""}
+              disabled={!canUseArea(id)}
+              aria-current={area === id ? "page" : undefined}
+              title={
+                canUseArea(id)
+                  ? `Abrir módulo de ${meta.label}`
+                  : `${meta.label}: no habilitada para esta cuenta`
+              }
+              onClick={() => setArea(id)}
+            >
+              {meta.label}
+            </button>
+          ))}
+        </nav>
         <div className="demo-profile">
           <span>{profile?.initials || "DE"}</span>
           <div>
             <strong>{profile?.fullName || "Usuario demo"}</strong>
             <small>{profile?.roleLabel || profile?.role}</small>
           </div>
-          <button onClick={logout}>Cambiar rol</button>
+          <button onClick={logout}>Cerrar sesión</button>
         </div>
       </header>
-
-      <nav className="portal-area-switch" aria-label="Selector de área">
-        {Object.entries(AREA_META).map(([id, meta]) => (
-          <button
-            key={id}
-            className={area === id ? "active" : ""}
-            disabled={!canUseArea(id)}
-            onClick={() => setArea(id)}
-          >
-            <span>{id === "INVESTIGACION" ? "01" : "02"}</span>
-            <div>
-              <strong>{meta.label}</strong>
-              <small>
-                {canUseArea(id) ? meta.subtitle : "No habilitada para este rol"}
-              </small>
-            </div>
-          </button>
-        ))}
-      </nav>
 
       <main className="demo-content">
         <section className="area-heading">
@@ -165,7 +167,11 @@ export default function PortalPage() {
         </section>
 
         {(message || error) && (
-          <div className={error ? "notice error" : "notice success"}>
+          <div
+            className={error ? "notice error" : "notice success"}
+            role={error ? "alert" : "status"}
+            aria-live="polite"
+          >
             {error || message}
           </div>
         )}
@@ -604,6 +610,7 @@ function ExecutorActions({ item, token, busy, run, area }) {
         <>
           <div className="inline-action">
             <input
+              aria-label="Porcentaje de avance"
               type="number"
               min="1"
               max="99"
@@ -611,6 +618,7 @@ function ExecutorActions({ item, token, busy, run, area }) {
               onChange={(event) => setProgress(event.target.value)}
             />
             <input
+              aria-label="Observación del avance"
               value={observation}
               onChange={(event) => setObservation(event.target.value)}
             />
@@ -633,6 +641,11 @@ function ExecutorActions({ item, token, busy, run, area }) {
           </div>
           <div className="inline-action">
             <input
+              aria-label={
+                area === "VICTIMAS"
+                  ? "Referencia del F-171"
+                  : "Referencia del informe"
+              }
               value={reference}
               onChange={(event) => setReference(event.target.value)}
             />

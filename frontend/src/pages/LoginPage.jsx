@@ -6,7 +6,6 @@ import { useAuth } from "../context/AuthContext";
 const AREA_LABELS = {
   INVESTIGACION: "Investigación",
   VICTIMAS: "Víctimas",
-  AMBAS: "Ambas áreas",
 };
 
 export default function LoginPage() {
@@ -14,8 +13,9 @@ export default function LoginPage() {
   const { token, loginDemo } = useAuth();
   const [area, setArea] = useState("INVESTIGACION");
   const [accounts, setAccounts] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (token) navigate("/portal", { replace: true });
@@ -35,91 +35,141 @@ export default function LoginPage() {
     [accounts, area],
   );
 
-  async function enter(userId) {
-    setBusy(userId);
+  useEffect(() => {
+    setSelectedUserId((current) =>
+      visible.some((account) => account.userId === current)
+        ? current
+        : visible[0]?.userId || "",
+    );
+  }, [visible]);
+
+  async function enter() {
+    if (!selectedUserId) return;
+    setBusy(true);
     setError("");
     try {
-      await loginDemo(userId);
+      await loginDemo(selectedUserId);
       navigate("/portal");
     } catch (requestError) {
       setError(requestError.message);
     } finally {
-      setBusy("");
+      setBusy(false);
     }
   }
 
+  function selectArea(nextArea) {
+    setArea(nextArea);
+    setError("");
+  }
+
   return (
-    <main className="demo-login-shell">
+    <div className="demo-login-shell">
       <div className="demo-banner">
         Ambiente de demostración — datos no reales
       </div>
-      <section className="institutional-hero">
-        <div className="institutional-seal" aria-hidden="true">
-          DP
-        </div>
-        <p>Defensoría del Pueblo de Colombia</p>
-        <h1>
-          SIGIP-DP — Sistema de Información para la Gestión Investigativa y
-          Pericial de la Defensoría del Pueblo
-        </h1>
-        <p className="hero-note">
-          Recorrido funcional con identidades, casos y documentos exclusivamente
-          sintéticos.
-        </p>
-      </section>
 
-      <section className="area-entry-card">
-        <div className="area-switch" aria-label="Selector de área">
-          <button
-            className={area === "INVESTIGACION" ? "active" : ""}
-            onClick={() => setArea("INVESTIGACION")}
-          >
-            <span>01</span> Investigación
-          </button>
-          <button
-            className={area === "VICTIMAS" ? "active" : ""}
-            onClick={() => setArea("VICTIMAS")}
-          >
-            <span>02</span> Víctimas
-          </button>
-        </div>
-
-        <div className="role-intro">
+      <header className="public-header">
+        <div
+          className="institutional-wordmark"
+          aria-label="Defensoría del Pueblo de Colombia"
+        >
+          <span aria-hidden="true">DP</span>
           <div>
-            <small>Área seleccionada</small>
-            <h3>{AREA_LABELS[area]}</h3>
+            <strong>Defensoría del Pueblo</strong>
+            <small>Colombia</small>
           </div>
-          <p>
-            Seleccione un rol precargado. No se solicitan ni almacenan
-            credenciales reales.
-          </p>
         </div>
+        <strong className="product-mark">SIGIP-DP</strong>
+      </header>
 
-        <div className="demo-account-grid">
-          {visible.map((account) => (
+      <main className="login-main">
+        <section className="login-card" aria-labelledby="login-title">
+          <div className="login-heading">
+            <p className="eyebrow">Sistema institucional</p>
+            <h1 id="login-title">Acceso a SIGIP-DP</h1>
+            <p>Gestión investigativa y pericial de la Defensoría del Pueblo</p>
+          </div>
+
+          <div
+            className="area-tabs"
+            role="tablist"
+            aria-label="Seleccione el área de trabajo"
+          >
             <button
-              key={account.userId}
-              className="demo-account"
-              onClick={() => enter(account.userId)}
-              disabled={Boolean(busy)}
+              type="button"
+              role="tab"
+              aria-selected={area === "INVESTIGACION"}
+              className={area === "INVESTIGACION" ? "active" : ""}
+              onClick={() => selectArea("INVESTIGACION")}
             >
-              <span className="avatar">
-                {account.fullName
-                  .split(" ")
-                  .map((part) => part[0])
-                  .slice(0, 2)
-                  .join("")}
-              </span>
-              <span>
-                <strong>{account.roleLabel}</strong>
-                <small>{account.fullName}</small>
-              </span>
-              <i>{busy === account.userId ? "Ingresando..." : "Entrar →"}</i>
+              Investigación
             </button>
-          ))}
-        </div>
-        {error && <p className="form-error">{error}</p>}
-      </section>
-    </main>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={area === "VICTIMAS"}
+              className={area === "VICTIMAS" ? "active" : ""}
+              onClick={() => selectArea("VICTIMAS")}
+            >
+              Víctimas
+            </button>
+          </div>
+
+          <form
+            className="demo-access-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              enter();
+            }}
+          >
+            <label htmlFor="demo-role">Rol de demostración</label>
+            <select
+              id="demo-role"
+              value={selectedUserId}
+              onChange={(event) => setSelectedUserId(event.target.value)}
+              disabled={!visible.length || busy}
+              required
+            >
+              {!visible.length && <option value="">Cargando roles...</option>}
+              {visible.map((account) => (
+                <option key={account.userId} value={account.userId}>
+                  {account.roleLabel} — {account.fullName}
+                </option>
+              ))}
+            </select>
+            <p className="field-help">
+              Perfiles sintéticos disponibles para {AREA_LABELS[area]}. El rol
+              autenticado y sus permisos son validados por el servidor.
+            </p>
+
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <button
+              className="primary-demo login-submit"
+              type="submit"
+              disabled={!selectedUserId || busy}
+            >
+              {busy ? "Ingresando..." : "Ingresar al portal"}
+            </button>
+          </form>
+
+          <aside className="demo-access-note">
+            <strong>Acceso para la reunión</strong>
+            <p>
+              No requiere contraseña y no contiene credenciales ni información
+              productiva.
+            </p>
+          </aside>
+        </section>
+      </main>
+
+      <footer className="public-footer">
+        Defensoría del Pueblo de Colombia · Entorno de demostración
+      </footer>
+    </div>
   );
 }

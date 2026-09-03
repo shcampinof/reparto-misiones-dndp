@@ -11,3 +11,9 @@ coverage/
 !.env.demo.example
 .space-package/
 Documentos Fuente/
+*.zip
+*.mp4
+*.m4a
+*.wav
+*.vtt
+*.srt

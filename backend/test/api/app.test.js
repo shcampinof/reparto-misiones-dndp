@@ -84,11 +84,28 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .get("/api/demo/bootstrap")
     .set(auth(investigator))
     .expect(200);
-  assert.equal(
-    before.body.requests.length,
-    0,
-    "el investigador no debe ver la misión ajena sembrada",
+  assert.deepEqual(
+    before.body.requests.map((entry) => entry.id),
+    ["INV-DEMO-0002"],
   );
+  assert.ok(
+    before.body.requests.every((entry) =>
+      entry.items.every((item) => item.assigneeId === "inv-demo-02"),
+    ),
+    "el investigador solo debe ver sus propios encargos",
+  );
+
+  await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send({
+      spoa: "110016000049202600090",
+      delito: "Intento de selección manual",
+      service: "INVESTIGACION_CAMPO",
+      region: "BOGOTA",
+      investigadorId: "inv-demo-01",
+    })
+    .expect(400);
 
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
@@ -128,7 +145,11 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .expect(200);
   assert.deepEqual(
     own.body.requests.map((entry) => entry.id),
-    [created.body.request.id],
+    [created.body.request.id, "INV-DEMO-0002"],
+  );
+  assert.ok(
+    own.body.requests.every((entry) => entry.id !== "INV-DEMO-0001"),
+    "la bandeja no debe incluir encargos de otro investigador",
   );
 
   await request(app)
@@ -245,11 +266,90 @@ test("restablecer demo recupera semillas reproducibles", async () => {
     .post("/api/demo/reset")
     .set(auth(admin))
     .expect(200);
-  assert.equal(reset.body.requests.length, 2);
+  assert.equal(reset.body.requests.length, 6);
   assert.deepEqual(reset.body.requests.map((entry) => entry.id).sort(), [
     "INV-DEMO-0001",
+    "INV-DEMO-0002",
+    "INV-DEMO-0003",
     "VIC-DEMO-0001",
+    "VIC-DEMO-0002",
+    "VIC-DEMO-0003",
   ]);
+  assert.equal(
+    reset.body.requests.filter((entry) => entry.area === "INVESTIGACION")
+      .length,
+    3,
+  );
+  assert.equal(
+    reset.body.requests.filter((entry) => entry.area === "VICTIMAS").length,
+    3,
+  );
+});
+
+test("PAG puede devolver informe de Investigación con motivo y conservar documento", async () => {
+  const app = testApp();
+  const pag = await login(app, "demo-pag-investigacion");
+
+  const missingReason = await request(app)
+    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/devolver-entrega")
+    .set(auth(pag))
+    .send({})
+    .expect(400);
+  assert.equal(missingReason.body.error.code, "DEMO_VALIDATION_ERROR");
+
+  const returned = await request(app)
+    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Aclarar la conclusión técnica" })
+    .expect(200);
+  const item = itemFrom(returned);
+  assert.equal(item.status, "EN_EJECUCION");
+  assert.equal(item.reportReference, "INF-DEMO-0002");
+  assert.equal(item.documents.length, 1);
+  assert.match(item.timeline.at(-1).message, /Aclarar la conclusión/i);
+});
+
+test("autorización separa roles, áreas y casos visibles", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const rjv = await login(app, "demo-rjv");
+  const investigator = await login(app, "demo-investigador");
+
+  const defenderView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(defender))
+    .expect(200);
+  assert.equal(defenderView.body.requests.length, 3);
+  assert.ok(
+    defenderView.body.requests.every(
+      (entry) =>
+        entry.area === "INVESTIGACION" && entry.ownerUserId === "demo-defensor",
+    ),
+  );
+
+  const victimsView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  assert.equal(victimsView.body.requests.length, 3);
+  assert.ok(
+    victimsView.body.requests.every(
+      (entry) => entry.area === "VICTIMAS" && entry.ownerUserId === "demo-rjv",
+    ),
+  );
+
+  await request(app)
+    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/aprobar-entrega")
+    .set(auth(defender))
+    .expect(403);
+  await request(app)
+    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0001/iniciar")
+    .set(auth(investigator))
+    .expect(403);
+  await request(app)
+    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0001/repartir")
+    .set(auth(rjv))
+    .expect(403);
 });
 
 test("rutas desconocidas y JSON inválido usan errores correlacionados", async () => {

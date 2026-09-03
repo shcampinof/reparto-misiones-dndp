@@ -34,6 +34,13 @@ const AREA_META = {
   },
 };
 
+const TRAYS = [
+  { id: "PENDIENTES", label: "Pendientes" },
+  { id: "EN_EJECUCION", label: "En ejecución" },
+  { id: "POR_REVISAR", label: "Por revisar" },
+  { id: "CERRADOS", label: "Cerrados" },
+];
+
 export default function PortalPage() {
   const { token, profile, logout } = useAuth();
   const [data, setData] = useState(null);
@@ -44,6 +51,8 @@ export default function PortalPage() {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [tray, setTray] = useState("");
+  const [detail, setDetail] = useState(null);
 
   const reload = useCallback(async () => {
     const response = await apiDemoBootstrap(token);
@@ -59,6 +68,20 @@ export default function PortalPage() {
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
   }, [reload]);
+
+  useEffect(() => {
+    setTray("");
+    setDetail(null);
+  }, [area]);
+
+  useEffect(() => {
+    if (!detail) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setDetail(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [detail]);
 
   async function run(key, action, successMessage) {
     setBusy(key);
@@ -87,6 +110,34 @@ export default function PortalPage() {
     );
 
   const requests = data.requests.filter((request) => request.area === area);
+  const trayCounts = Object.fromEntries(
+    TRAYS.map(({ id }) => [
+      id,
+      requests
+        .flatMap((request) => request.items)
+        .filter((item) => trayForStatus(item.status) === id).length,
+    ]),
+  );
+  const activeTray =
+    tray || TRAYS.find(({ id }) => trayCounts[id] > 0)?.id || "PENDIENTES";
+  const visibleRequests = requests
+    .map((request) => ({
+      ...request,
+      items: request.items.filter(
+        (item) => trayForStatus(item.status) === activeTray,
+      ),
+    }))
+    .filter((request) => request.items.length > 0);
+  const detailRequest = detail
+    ? requests.find((entry) => entry.id === detail.requestId)
+    : null;
+  const detailItem = detailRequest?.items.find(
+    (entry) => entry.id === detail?.itemId,
+  );
+  const detailRecord =
+    detailRequest && detailItem
+      ? { request: detailRequest, item: detailItem }
+      : null;
   const dashboard = data.dashboards[area] || {
     requests: 0,
     pending: 0,
@@ -196,19 +247,33 @@ export default function PortalPage() {
               <small>Bandeja del rol</small>
               <h2>Solicitudes y encargos</h2>
             </div>
-            <span>{requests.length} registro(s) visibles</span>
+            <span>{requests.length} caso(s) visibles</span>
           </div>
-          {requests.length === 0 ? (
+          <nav className="role-trays" aria-label="Bandejas del rol">
+            {TRAYS.map((entry) => (
+              <button
+                type="button"
+                key={entry.id}
+                className={activeTray === entry.id ? "active" : ""}
+                aria-pressed={activeTray === entry.id}
+                onClick={() => setTray(entry.id)}
+              >
+                <span>{entry.label}</span>
+                <strong>{trayCounts[entry.id]}</strong>
+              </button>
+            ))}
+          </nav>
+          {visibleRequests.length === 0 ? (
             <div className="presentable-empty">
-              <strong>Sin registros para este rol</strong>
+              <strong>Sin casos en esta bandeja</strong>
               <p>
-                Cambie a un rol del guion o cree una solicitud sintética para
-                continuar.
+                El rol no tiene registros en la etapa seleccionada. Puede
+                consultar otra bandeja sin cambiar sus permisos.
               </p>
             </div>
           ) : (
             <div className="request-grid">
-              {requests.map((request) => (
+              {visibleRequests.map((request) => (
                 <RequestCard
                   key={request.id}
                   request={request}
@@ -216,6 +281,9 @@ export default function PortalPage() {
                   token={token}
                   busy={busy}
                   run={run}
+                  onOpenDetail={(itemId) =>
+                    setDetail({ requestId: request.id, itemId })
+                  }
                 />
               ))}
             </div>
@@ -235,6 +303,13 @@ export default function PortalPage() {
           </span>
         </footer>
       </main>
+      {detailRecord && (
+        <CaseDetail
+          request={detailRecord.request}
+          item={detailRecord.item}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
 }
@@ -314,7 +389,7 @@ function InvestigationForm({ catalogs, token, run }) {
 
 function VictimsForm({ catalogs, token, run }) {
   const [form, setForm] = useState({
-    externalId: "RAD-DEMO-2026-002",
+    externalId: "RAD-DEMO-2026-004",
     law: "LEY_1448",
     service: "PSICOLOGICO",
     region: "BOGOTA",
@@ -396,7 +471,7 @@ function VictimsForm({ catalogs, token, run }) {
   );
 }
 
-function RequestCard({ request, profile, token, busy, run }) {
+function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
   return (
     <article className="request-card">
       <header>
@@ -431,15 +506,18 @@ function RequestCard({ request, profile, token, busy, run }) {
           token={token}
           busy={busy}
           run={run}
+          onOpenDetail={() => onOpenDetail(item.id)}
         />
       ))}
     </article>
   );
 }
 
-function ItemCard({ item, area, profile, token, busy, run }) {
+function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
   const role = profile?.role;
   const isBusy = busy === item.id;
+  const actionAvailable = canActOnItem(area, role, item.status);
+  const nextAction = nextActionFor(area, item.status);
   const selectedCandidate = item.assignment?.evaluated?.find(
     (candidate) => candidate.candidateId === item.assigneeId,
   );
@@ -456,6 +534,12 @@ function ItemCard({ item, area, profile, token, busy, run }) {
         <span className={`status-pill status-${item.status.toLowerCase()}`}>
           {STATUS_LABELS[item.status] || item.status}
         </span>
+      </div>
+      <ProcessStepper area={area} status={item.status} />
+      <div className="next-action">
+        <span>Siguiente acción</span>
+        <strong>{nextAction.action}</strong>
+        <small>{nextAction.role}</small>
       </div>
       <div className="item-facts">
         <span>
@@ -499,25 +583,13 @@ function ItemCard({ item, area, profile, token, busy, run }) {
                 )
               }
             >
-              Ejecutar reparto automático
+              Validar y ejecutar reparto
             </button>
           )}
         {area === "INVESTIGACION" &&
           role === "pag_investigacion" &&
           item.status === "INFORME_ENTREGADO" && (
-            <button
-              disabled={isBusy}
-              onClick={() =>
-                run(
-                  item.id,
-                  () =>
-                    apiInvestigationAction(token, item.id, "aprobar-entrega"),
-                  "Entrega aprobada y misión cerrada",
-                )
-              }
-            >
-              Aprobar entrega y cerrar
-            </button>
+            <ReviewActions item={item} token={token} busy={isBusy} run={run} />
           )}
         {area === "VICTIMAS" &&
           role === "pag_victimas" &&
@@ -553,7 +625,18 @@ function ItemCard({ item, area, profile, token, busy, run }) {
             area="VICTIMAS"
           />
         )}
+        <button className="detail-button" type="button" onClick={onOpenDetail}>
+          Ver detalle del caso
+        </button>
       </div>
+
+      {!actionAvailable && (
+        <p className="action-guidance">
+          {item.status === "CERRADA"
+            ? "El servicio está cerrado; solo se permite consultar su trazabilidad."
+            : `Esta cuenta puede consultar. La acción corresponde a ${nextAction.role.toLowerCase()}.`}
+        </p>
+      )}
 
       {item.assignment && (
         <AssignmentExplanation assignment={item.assignment} />
@@ -580,13 +663,193 @@ function ItemCard({ item, area, profile, token, busy, run }) {
   );
 }
 
+function ReviewActions({ item, token, busy, run }) {
+  const [observation, setObservation] = useState(
+    "Aclarar la conclusión técnica del informe",
+  );
+  return (
+    <div className="review-actions">
+      <label>
+        Observación para devolución
+        <input
+          value={observation}
+          onChange={(event) => setObservation(event.target.value)}
+        />
+      </label>
+      <div>
+        <button
+          disabled={busy || !observation.trim()}
+          onClick={() =>
+            run(
+              item.id,
+              () =>
+                apiInvestigationAction(token, item.id, "devolver-entrega", {
+                  observation,
+                }),
+              "Informe devuelto al investigador para corrección",
+            )
+          }
+        >
+          Devolver informe
+        </button>
+        <button
+          className="primary-demo"
+          disabled={busy}
+          onClick={() =>
+            run(
+              item.id,
+              () => apiInvestigationAction(token, item.id, "aprobar-entrega"),
+              "Entrega aprobada y misión cerrada",
+            )
+          }
+        >
+          Aprobar y cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProcessStepper({ area, status }) {
+  const process = processFor(area, status);
+  return (
+    <ol className="process-stepper" aria-label="Estado del proceso">
+      {process.steps.map((step, index) => {
+        const state =
+          process.complete || index < process.current
+            ? "complete"
+            : index === process.current
+              ? "current"
+              : "upcoming";
+        return (
+          <li
+            key={step}
+            className={state}
+            aria-current={state === "current" ? "step" : undefined}
+          >
+            <span>{index + 1}</span>
+            <small>{step}</small>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function CaseDetail({ request, item, onClose }) {
+  const semaphore = semaphoreFor(item);
+  const assignmentSummary = item.assignment
+    ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
+    : "El reparto todavía no se ha ejecutado.";
+  return (
+    <div className="detail-overlay" onMouseDown={onClose}>
+      <aside
+        className="case-detail"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="case-detail-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <small>Detalle de caso</small>
+            <h2 id="case-detail-title">{request.id}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar detalle">
+            Cerrar
+          </button>
+        </header>
+
+        <dl className="detail-facts">
+          <div>
+            <dt>Identificador externo</dt>
+            <dd>{request.externalId}</dd>
+          </div>
+          <div>
+            <dt>Área y servicio</dt>
+            <dd>
+              {AREA_META[request.area].label} · {item.serviceLabel}
+            </dd>
+          </div>
+          <div>
+            <dt>Solicitante</dt>
+            <dd>{request.requesterName}</dd>
+          </div>
+          <div>
+            <dt>Responsable asignado</dt>
+            <dd>{item.assigneeName || "Pendiente de reparto"}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{STATUS_LABELS[item.status] || item.status}</dd>
+          </div>
+          <div>
+            <dt>Plazo y semáforo</dt>
+            <dd>
+              {item.dueDate || "Sin plazo asignado"} · {semaphore.label}
+            </dd>
+          </div>
+          <div>
+            <dt>Especialidad</dt>
+            <dd>{item.serviceLabel}</dd>
+          </div>
+        </dl>
+
+        <p className="validation-pending">
+          Plazo y referencia de semáforo de demostración — pendiente de
+          validación funcional.
+        </p>
+
+        <section className="detail-section">
+          <h3>Explicación resumida de asignación</h3>
+          <p>{assignmentSummary}</p>
+        </section>
+
+        <section className="detail-section">
+          <h3>Documentos</h3>
+          {item.documents?.length ? (
+            <ul className="document-list">
+              {item.documents.map((document) => (
+                <li key={document.id}>
+                  <strong>{document.type}</strong>
+                  <span>
+                    {document.reference} · Versión {document.version}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Sin referencias documentales registradas en esta etapa.</p>
+          )}
+        </section>
+
+        <section className="detail-section">
+          <h3>Historial cronológico</h3>
+          <ol className="detail-timeline">
+            {item.timeline
+              .slice()
+              .reverse()
+              .map((event, index) => (
+                <li key={`${event.at}-${index}`}>
+                  <strong>{STATUS_LABELS[event.to] || event.to}</strong>
+                  <small>{new Date(event.at).toLocaleString("es-CO")}</small>
+                  <p>{event.message}</p>
+                </li>
+              ))}
+          </ol>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
 function ExecutorActions({ item, token, busy, run, area }) {
   const [progress, setProgress] = useState(70);
   const [observation, setObservation] = useState(
     "Avance sintético registrado durante la demostración",
   );
   const [reference, setReference] = useState(
-    area === "VICTIMAS" ? "F171-DEMO-2026-002" : "INF-DEMO-2026-002",
+    area === "VICTIMAS" ? "F171-DEMO-2026-004" : "INF-DEMO-2026-004",
   );
   const action =
     area === "VICTIMAS" ? apiVictimsAction : apiInvestigationAction;
@@ -685,7 +948,7 @@ function AssignmentExplanation({ assignment }) {
   const excluded =
     assignment.evaluated?.filter((candidate) => !candidate.eligible) || [];
   return (
-    <details className="assignment-explanation" open>
+    <details className="assignment-explanation">
       <summary>¿Por qué se seleccionó este responsable?</summary>
       <p>
         <strong>{assignment.selectedName || "Sin candidato"}</strong> ·{" "}
@@ -717,4 +980,138 @@ function AssignmentExplanation({ assignment }) {
       )}
     </details>
   );
+}
+
+function trayForStatus(status) {
+  if (status === "EN_EJECUCION") return "EN_EJECUCION";
+  if (status === "INFORME_ENTREGADO") return "POR_REVISAR";
+  if (status === "CERRADA") return "CERRADOS";
+  return "PENDIENTES";
+}
+
+function processFor(area, status) {
+  const steps =
+    area === "INVESTIGACION"
+      ? [
+          "Solicitud",
+          "Reparto",
+          "Ejecución",
+          "Entrega",
+          "Revisión PAG",
+          "Cierre",
+        ]
+      : [
+          "Solicitud",
+          "Aprobación previa",
+          "Reparto",
+          "Ejecución",
+          "F-171",
+          "Cierre",
+        ];
+  if (status === "CERRADA")
+    return { steps, current: steps.length, complete: true };
+
+  const currentByStatus =
+    area === "INVESTIGACION"
+      ? {
+          RADICADA: 1,
+          PENDIENTE_REASIGNACION: 1,
+          ASIGNADA: 2,
+          EN_EJECUCION: 2,
+          INFORME_ENTREGADO: 4,
+        }
+      : {
+          PENDIENTE_APROBACION_PAG: 1,
+          APROBADA_REPARTO: 2,
+          PENDIENTE_REASIGNACION: 2,
+          ASIGNADA: 3,
+          EN_EJECUCION: 3,
+        };
+  return { steps, current: currentByStatus[status] ?? 0, complete: false };
+}
+
+function nextActionFor(area, status) {
+  if (status === "CERRADA") {
+    return { action: "Proceso finalizado", role: "Consulta según permisos" };
+  }
+  if (area === "INVESTIGACION") {
+    const actions = {
+      RADICADA: {
+        action: "Validar datos y ejecutar reparto automático",
+        role: "Defensor/a solicitante",
+      },
+      PENDIENTE_REASIGNACION: {
+        action: "Reintentar reparto con datos elegibles",
+        role: "Defensor/a solicitante",
+      },
+      ASIGNADA: {
+        action: "Iniciar misión",
+        role: "Investigador/a asignado/a",
+      },
+      EN_EJECUCION: {
+        action: "Registrar avance o entregar informe",
+        role: "Investigador/a asignado/a",
+      },
+      INFORME_ENTREGADO: {
+        action: "Aprobar, devolver o cerrar",
+        role: "PAG Investigación",
+      },
+    };
+    return (
+      actions[status] || { action: "Consultar estado", role: "Rol autorizado" }
+    );
+  }
+  const actions = {
+    PENDIENTE_APROBACION_PAG: {
+      action: "Aprobar y ejecutar reparto automático",
+      role: "PAG / Supervisor Víctimas",
+    },
+    APROBADA_REPARTO: {
+      action: "Ejecutar reparto automático",
+      role: "Sistema",
+    },
+    PENDIENTE_REASIGNACION: {
+      action: "Gestionar excepción por falta de candidato",
+      role: "PAG / Supervisor Víctimas",
+    },
+    ASIGNADA: {
+      action: "Iniciar servicio pericial",
+      role: "Perito asignado/a",
+    },
+    EN_EJECUCION: {
+      action: "Registrar avance o finalizar con F-171",
+      role: "Perito asignado/a",
+    },
+  };
+  return (
+    actions[status] || { action: "Consultar estado", role: "Rol autorizado" }
+  );
+}
+
+function canActOnItem(area, role, status) {
+  if (area === "INVESTIGACION") {
+    return (
+      (role === "defensor" &&
+        ["RADICADA", "PENDIENTE_REASIGNACION"].includes(status)) ||
+      (role === "investigador" &&
+        ["ASIGNADA", "EN_EJECUCION"].includes(status)) ||
+      (role === "pag_investigacion" && status === "INFORME_ENTREGADO")
+    );
+  }
+  return (
+    (role === "pag_victimas" && status === "PENDIENTE_APROBACION_PAG") ||
+    (role === "perito" && ["ASIGNADA", "EN_EJECUCION"].includes(status))
+  );
+}
+
+function semaphoreFor(item) {
+  if (item.status === "CERRADA") return { label: "Cerrado" };
+  if (!item.dueDate) return { label: "Sin plazo asignado" };
+  const today = new Date();
+  const dueDate = new Date(`${item.dueDate}T23:59:59Z`);
+  if (dueDate < today) return { label: "Vencido" };
+  if (dueDate.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
+    return { label: "Vence hoy" };
+  }
+  return { label: "En plazo" };
 }

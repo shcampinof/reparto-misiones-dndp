@@ -54,6 +54,15 @@ export function createDemoRouter({ authMiddleware, demoService }) {
       ),
     }),
   );
+  router.post("/investigacion/items/:id/devolver-entrega", (req, res) =>
+    res.json({
+      request: demoService.returnInvestigationDelivery(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
 
   router.post(
     "/victimas/solicitudes",

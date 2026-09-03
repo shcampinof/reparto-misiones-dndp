@@ -33,10 +33,19 @@ jobs:
         run: npm ci
       - name: Verificar lint y formato
         run: npm run lint && npm run format:check
+      - name: Validar backend público
+        run: |
+          if [[ -z "$VITE_API_URL" || "$VITE_API_URL" != https://* ]]; then
+            echo "Configure la variable VITE_API_URL con la base HTTPS de la API pública, incluida la ruta /api."
+            exit 1
+          fi
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - name: Compilar frontend
         run: npm run build
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Cargar sitio compilado

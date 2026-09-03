@@ -58,6 +58,7 @@ export function createDemoService({
 
   function createInvestigation(auth, payload) {
     assertRole(auth, ["defensor", "administrador"]);
+    rejectClientAssignee(payload);
     const spoa = text(payload.spoa);
     const delito = text(payload.delito);
     const service = text(payload.service);
@@ -219,6 +220,26 @@ export function createDemoService({
         "CERRADA",
         auth.sub,
         "Entrega aprobada por PAG Investigación",
+        clock(),
+      );
+      return presentRequest(state, request);
+    });
+  }
+
+  function returnInvestigationDelivery(auth, itemId, payload) {
+    assertRole(auth, ["pag_investigacion", "administrador"]);
+    const observation = text(payload.observation);
+    if (!observation) {
+      throw businessError("La observación de devolución es obligatoria");
+    }
+    return repository.transaction((state) => {
+      const { request, item } = findItem(state, itemId, "INVESTIGACION");
+      assertState(item, ["INFORME_ENTREGADO"]);
+      transition(
+        item,
+        "EN_EJECUCION",
+        auth.sub,
+        `Informe devuelto para corrección · ${observation}`,
         clock(),
       );
       return presentRequest(state, request);
@@ -412,6 +433,7 @@ export function createDemoService({
     progressInvestigation,
     deliverInvestigation,
     approveInvestigationDelivery,
+    returnInvestigationDelivery,
     createVictims,
     approveVictimsAndAssign,
     startVictims,
@@ -483,14 +505,29 @@ function presentRequest(state, request) {
   const professionals = new Map(
     state.professionals.map((professional) => [professional.id, professional]),
   );
+  const users = new Map(state.users.map((user) => [user.id, user.fullName]));
   return {
     ...structuredClone(request),
+    requesterName: users.get(request.ownerUserId) || "Solicitante demo",
     items: request.items.map((item) => ({
       ...structuredClone(item),
       assigneeName: professionals.get(item.assigneeId)?.displayName || null,
       serviceLabel: serviceLabel(item.service),
       regionLabel: catalogLabel(CATALOGS.regions, item.region),
       lawLabel: item.law ? catalogLabel(CATALOGS.laws, item.law) : null,
+      documents: item.reportReference
+        ? [
+            {
+              id: `doc-${item.id}-v1`,
+              type:
+                request.area === "VICTIMAS"
+                  ? "F-171 de demostración"
+                  : "Informe de investigación de demostración",
+              reference: item.reportReference,
+              version: 1,
+            },
+          ]
+        : [],
     })),
   };
 }
@@ -569,9 +606,14 @@ function assertRole(auth, allowed) {
 }
 
 function rejectClientAssignee(payload) {
-  if (payload.assigneeId || payload.peritoId || payload.funcionarioId) {
+  if (
+    payload.assigneeId ||
+    payload.investigadorId ||
+    payload.peritoId ||
+    payload.funcionarioId
+  ) {
     throw businessError(
-      "El RJV no puede escoger perito; el backend ejecuta el reparto",
+      "El cliente no puede escoger investigador o perito; el backend ejecuta el reparto",
     );
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   apiAssignInvestigation,
   apiCreateInvestigation,
@@ -25,12 +25,12 @@ const AREA_META = {
   INVESTIGACION: {
     label: "Investigación",
     subtitle: "Misiones de trabajo para la defensa",
-    accent: "#174b8a",
+    accent: "#074794",
   },
   VICTIMAS: {
     label: "Víctimas",
     subtitle: "Asignación de actividades periciales",
-    accent: "#7b2f6f",
+    accent: "#2f64ad",
   },
 };
 
@@ -53,6 +53,22 @@ export default function PortalPage() {
   const [error, setError] = useState("");
   const [tray, setTray] = useState("");
   const [detail, setDetail] = useState(null);
+  const detailOpenerRef = useRef(null);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    const opener = detailOpenerRef.current;
+    setDetail(null);
+    window.setTimeout(() => opener?.focus({ preventScroll: true }), 0);
+  }, []);
+
+  function openDetail(requestId, itemId, opener) {
+    detailOpenerRef.current = opener;
+    setDetail({ requestId, itemId });
+  }
 
   const reload = useCallback(async () => {
     const response = await apiDemoBootstrap(token);
@@ -77,13 +93,14 @@ export default function PortalPage() {
   useEffect(() => {
     if (!detail) return undefined;
     const closeOnEscape = (event) => {
-      if (event.key === "Escape") setDetail(null);
+      if (event.key === "Escape") closeDetail();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [detail]);
+  }, [detail, closeDetail]);
 
   async function run(key, action, successMessage) {
+    if (busy) return;
     setBusy(key);
     setMessage("");
     setError("");
@@ -154,11 +171,9 @@ export default function PortalPage() {
       <div className="demo-banner">{data.banner}</div>
       <header className="demo-header">
         <div className="demo-brand">
-          <span className="institutional-seal small" aria-hidden="true">
-            DP
-          </span>
           <div>
-            <strong>SIGIP-DP</strong>
+            <strong>Defensoría del Pueblo</strong>
+            <span>SIGIP-DP</span>
             <small>
               Sistema de Información para la Gestión Investigativa y Pericial
             </small>
@@ -204,13 +219,19 @@ export default function PortalPage() {
             <button
               className="reset-demo"
               disabled={Boolean(busy)}
-              onClick={() =>
-                run(
-                  "reset",
-                  () => apiResetDemo(token),
-                  "Datos sintéticos restablecidos",
-                )
-              }
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "¿Restablecer los datos sintéticos de la demostración? Se descartarán los cambios temporales.",
+                  )
+                ) {
+                  run(
+                    "reset",
+                    () => apiResetDemo(token),
+                    "Datos sintéticos restablecidos correctamente",
+                  );
+                }
+              }}
             >
               Restablecer datos de demostración
             </button>
@@ -235,10 +256,20 @@ export default function PortalPage() {
         </section>
 
         {area === "INVESTIGACION" && profile?.role === "defensor" && (
-          <InvestigationForm catalogs={data.catalogs} token={token} run={run} />
+          <InvestigationForm
+            catalogs={data.catalogs}
+            token={token}
+            run={run}
+            busy={Boolean(busy)}
+          />
         )}
         {area === "VICTIMAS" && profile?.role === "rjv" && (
-          <VictimsForm catalogs={data.catalogs} token={token} run={run} />
+          <VictimsForm
+            catalogs={data.catalogs}
+            token={token}
+            run={run}
+            busy={Boolean(busy)}
+          />
         )}
 
         <section className="request-section">
@@ -281,8 +312,8 @@ export default function PortalPage() {
                   token={token}
                   busy={busy}
                   run={run}
-                  onOpenDetail={(itemId) =>
-                    setDetail({ requestId: request.id, itemId })
+                  onOpenDetail={(itemId, opener) =>
+                    openDetail(request.id, itemId, opener)
                   }
                 />
               ))}
@@ -307,7 +338,7 @@ export default function PortalPage() {
         <CaseDetail
           request={detailRecord.request}
           item={detailRecord.item}
-          onClose={() => setDetail(null)}
+          onClose={closeDetail}
         />
       )}
     </div>
@@ -324,7 +355,7 @@ function Kpi({ label, value, tone }) {
   );
 }
 
-function InvestigationForm({ catalogs, token, run }) {
+function InvestigationForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
     spoa: "110016000049202600099",
     delito: "Delito sintético para demostración",
@@ -381,13 +412,15 @@ function InvestigationForm({ catalogs, token, run }) {
             ))}
           </select>
         </label>
-        <button className="primary-demo">Radicar solicitud</button>
+        <button className="primary-demo" disabled={busy}>
+          {busy ? "Procesando..." : "Radicar solicitud"}
+        </button>
       </form>
     </section>
   );
 }
 
-function VictimsForm({ catalogs, token, run }) {
+function VictimsForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
     externalId: "RAD-DEMO-2026-004",
     law: "LEY_1448",
@@ -465,7 +498,9 @@ function VictimsForm({ catalogs, token, run }) {
             onChange={update("victimCount")}
           />
         </label>
-        <button className="primary-demo">Enviar a aprobación previa</button>
+        <button className="primary-demo" disabled={busy}>
+          {busy ? "Procesando..." : "Enviar a aprobación previa"}
+        </button>
       </form>
     </section>
   );
@@ -506,7 +541,7 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
           token={token}
           busy={busy}
           run={run}
-          onOpenDetail={() => onOpenDetail(item.id)}
+          onOpenDetail={(opener) => onOpenDetail(item.id, opener)}
         />
       ))}
     </article>
@@ -625,7 +660,11 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
             area="VICTIMAS"
           />
         )}
-        <button className="detail-button" type="button" onClick={onOpenDetail}>
+        <button
+          className="detail-button"
+          type="button"
+          onClick={(event) => onOpenDetail(event.currentTarget)}
+        >
           Ver detalle del caso
         </button>
       </div>
@@ -737,10 +776,32 @@ function ProcessStepper({ area, status }) {
 }
 
 function CaseDetail({ request, item, onClose }) {
+  const closeButtonRef = useRef(null);
   const semaphore = semaphoreFor(item);
   const assignmentSummary = item.assignment
     ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
     : "El reparto todavía no se ha ejecutado.";
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  function keepFocusInside(event) {
+    if (event.key !== "Tab") return;
+    const focusable = event.currentTarget.querySelectorAll(
+      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary",
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="detail-overlay" onMouseDown={onClose}>
       <aside
@@ -749,13 +810,19 @@ function CaseDetail({ request, item, onClose }) {
         aria-modal="true"
         aria-labelledby="case-detail-title"
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={keepFocusInside}
       >
         <header>
           <div>
             <small>Detalle de caso</small>
             <h2 id="case-detail-title">{request.id}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar detalle">
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar detalle"
+          >
             Cerrar
           </button>
         </header>

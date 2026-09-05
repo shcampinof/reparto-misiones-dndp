@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiDemoAccounts } from "../api";
+import logoDefensoria from "../assets/logo-defensoria.png";
 import { useAuth } from "../context/AuthContext";
 
 const AREA_LABELS = {
@@ -73,19 +74,18 @@ export default function LoginPage() {
           className="institutional-wordmark"
           aria-label="Defensoría del Pueblo de Colombia"
         >
-          <span aria-hidden="true">DP</span>
-          <div>
-            <strong>Defensoría del Pueblo</strong>
-            <small>Colombia</small>
-          </div>
+          <img src={logoDefensoria} alt="Defensoría del Pueblo de Colombia" />
         </div>
-        <strong className="product-mark">SIGIP-DP</strong>
+        <div className="public-system-mark">
+          <small>Sistema institucional</small>
+          <strong className="product-mark">SIGIP-DP</strong>
+        </div>
       </header>
 
       <main className="login-main">
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-heading">
-            <p className="eyebrow">Sistema institucional</p>
+            <p className="eyebrow">Acceso institucional</p>
             <h1 id="login-title">Acceso a SIGIP-DP</h1>
             <p>Gestión investigativa y pericial de la Defensoría del Pueblo</p>
           </div>

@@ -1,23 +1,20 @@
 ---
-title: SIGIP-DP Demo
-emoji: 🛡️
-colorFrom: blue
-colorTo: purple
+title: SIGIP-DP
 sdk: docker
 app_port: 7860
 pinned: false
 ---
 
-# SIGIP-DP Demo
+# SIGIP-DP
 
-Demostración funcional con datos exclusivamente sintéticos del Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo.
+Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo.
 
-> **Ambiente de demostración — datos no reales.** No es un ambiente productivo ni contiene información institucional, expedientes, víctimas, documentos o credenciales reales.
+El acceso está restringido a perfiles autorizados para la presentación institucional. La información inicial está preparada exclusivamente para recorrer las funciones habilitadas.
 
-Incluye recorridos separados para Investigación y Víctimas. El reparto se calcula en el backend y conserva una explicación resumida de candidatos, exclusiones, carga y motivo de selección.
+Incluye recorridos separados para Investigación y Víctimas. La asignación se calcula en el servidor y conserva una explicación resumida de candidatos, exclusiones, carga y motivo de selección.
 
 ## Configuración del Space
 
 El repositorio debe permanecer **privado**. Requiere el Secret `JWT_SECRET`, configurado en los ajustes del Space y nunca almacenado en archivos. La aplicación escucha en el puerto `7860`.
 
-El almacenamiento es temporal: los datos sintéticos se reconstruyen automáticamente cuando inicia el contenedor y también pueden restablecerse desde la cuenta administrativa de demostración.
+La información inicial se reconstruye cuando inicia el contenedor y puede restablecerse desde el perfil **Administrador del sistema**.

@@ -30,7 +30,7 @@ def main() -> int:
         repo_type="space",
         path_in_repo=".",
         delete_patterns="*",
-        commit_message="Deploy SIGIP-DP demo",
+        commit_message="Deploy SIGIP-DP institutional presentation",
     )
     print(f"Commit remoto: {commit.oid}")
 

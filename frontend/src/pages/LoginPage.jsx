@@ -65,10 +65,6 @@ export default function LoginPage() {
 
   return (
     <div className="demo-login-shell">
-      <div className="demo-banner">
-        Ambiente de demostración — datos no reales
-      </div>
-
       <header className="public-header">
         <div
           className="institutional-wordmark"
@@ -122,7 +118,7 @@ export default function LoginPage() {
               enter();
             }}
           >
-            <label htmlFor="demo-role">Rol de demostración</label>
+            <label htmlFor="demo-role">Perfil de acceso</label>
             <select
               id="demo-role"
               value={selectedUserId}
@@ -138,8 +134,8 @@ export default function LoginPage() {
               ))}
             </select>
             <p className="field-help">
-              Perfiles sintéticos disponibles para {AREA_LABELS[area]}. El rol
-              autenticado y sus permisos son validados por el servidor.
+              Seleccione el perfil con el que desea ingresar a{" "}
+              {AREA_LABELS[area]}.
             </p>
 
             {error && (
@@ -158,17 +154,17 @@ export default function LoginPage() {
           </form>
 
           <aside className="demo-access-note">
-            <strong>Acceso para la reunión</strong>
+            <strong>Acceso al sistema</strong>
             <p>
-              No requiere contraseña y no contiene credenciales ni información
-              productiva.
+              El perfil autenticado determina los módulos, bandejas y acciones
+              disponibles.
             </p>
           </aside>
         </section>
       </main>
 
       <footer className="public-footer">
-        Defensoría del Pueblo de Colombia · Entorno de demostración
+        Defensoría del Pueblo de Colombia · SIGIP-DP
       </footer>
     </div>
   );

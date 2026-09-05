@@ -22,12 +22,12 @@ const CATALOGS = Object.freeze({
     },
   ],
   regions: [
-    { id: "BOGOTA", label: "Bogotá (cobertura demo)" },
-    { id: "CUNDINAMARCA", label: "Cundinamarca (cobertura demo)" },
+    { id: "BOGOTA", label: "Bogotá" },
+    { id: "CUNDINAMARCA", label: "Cundinamarca" },
   ],
   laws: [
-    { id: "LEY_1448", label: "Ley 1448 (demo)" },
-    { id: "LEY_975", label: "Ley 975 (demo)" },
+    { id: "LEY_1448", label: "Ley 1448" },
+    { id: "LEY_975", label: "Ley 975" },
   ],
 });
 
@@ -42,7 +42,6 @@ export function createDemoService({
     );
     return {
       demo: true,
-      banner: "Ambiente de demostración — datos no reales",
       productName:
         "SIGIP-DP — Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo",
       allowedAreas: allowedAreas(auth.role),
@@ -64,13 +63,13 @@ export function createDemoService({
     const service = text(payload.service);
     const region = text(payload.region);
     if (!/^\d{21}$/.test(spoa))
-      throw businessError("SPOA debe contener 21 dígitos sintéticos");
+      throw businessError("SPOA debe contener 21 dígitos");
     requireCatalog(
       service,
       CATALOGS.investigationServices,
-      "Especialidad demo no válida",
+      "Especialidad no válida",
     );
-    requireCatalog(region, CATALOGS.regions, "Cobertura demo no válida");
+    requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
     if (!delito) throw businessError("Delito es obligatorio");
 
     return repository.transaction((state) => {
@@ -78,7 +77,7 @@ export function createDemoService({
       const number = String(sequence).padStart(4, "0");
       const at = clock();
       const request = {
-        id: `INV-DEMO-${number}`,
+        id: `INV-2026-${number}`,
         area: "INVESTIGACION",
         ownerUserId: auth.sub,
         externalId: spoa,
@@ -86,7 +85,7 @@ export function createDemoService({
         createdAt: at,
         items: [
           {
-            id: `INV-ITEM-DEMO-${number}`,
+            id: `MT-2026-${number}`,
             service,
             region,
             law: null,
@@ -102,7 +101,7 @@ export function createDemoService({
                 null,
                 "RADICADA",
                 auth.sub,
-                "Solicitud sintética radicada",
+                "Solicitud de misión radicada",
               ),
             ],
           },
@@ -133,7 +132,7 @@ export function createDemoService({
           item,
           "PENDIENTE_REASIGNACION",
           auth.sub,
-          "Sin candidato elegible en la demo",
+          "No se encontró un candidato elegible",
           at,
         );
       } else {
@@ -166,7 +165,7 @@ export function createDemoService({
           item,
           "EN_EJECUCION",
           auth.sub,
-          "Misión iniciada por investigador demo",
+          "Misión iniciada por el profesional asignado",
           at,
         );
       },
@@ -194,16 +193,14 @@ export function createDemoService({
       (item, at) => {
         const reference = text(payload.reference);
         if (!reference)
-          throw businessError(
-            "La referencia ficticia del informe es obligatoria",
-          );
+          throw businessError("La referencia del informe es obligatoria");
         item.reportReference = reference;
         item.progress = 100;
         transition(
           item,
           "INFORME_ENTREGADO",
           auth.sub,
-          "Informe demo entregado; pendiente aprobación PAG",
+          "Informe entregado; pendiente de aprobación PAG",
           at,
         );
       },
@@ -254,18 +251,16 @@ export function createDemoService({
     const service = text(payload.service);
     const region = text(payload.region);
     const victimCount = Number(payload.victimCount);
-    if (!/^RAD-DEMO-\d{4}-\d{3}$/.test(externalId)) {
+    if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
       throw businessError(
-        "Use un radicado sintético con formato RAD-DEMO-AAAA-NNN",
+        "Use un número de radicado con formato RAD-AAAA-NNNN",
       );
     }
-    requireCatalog(law, CATALOGS.laws, "Ley/programa demo no válido");
-    requireCatalog(service, CATALOGS.victimServices, "Peritaje demo no válido");
-    requireCatalog(region, CATALOGS.regions, "Cobertura demo no válida");
+    requireCatalog(law, CATALOGS.laws, "Ley o programa no válido");
+    requireCatalog(service, CATALOGS.victimServices, "Peritaje no válido");
+    requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
     if (!Number.isInteger(victimCount) || victimCount < 1 || victimCount > 5) {
-      throw businessError(
-        "La demo permite registrar entre 1 y 5 víctimas sintéticas",
-      );
+      throw businessError("Registre entre 1 y 5 personas vinculadas");
     }
 
     return repository.transaction((state) => {
@@ -273,14 +268,14 @@ export function createDemoService({
       const number = String(sequence).padStart(4, "0");
       const at = clock();
       const request = {
-        id: `VIC-DEMO-${number}`,
+        id: `SVP-2026-${number}`,
         area: "VICTIMAS",
         ownerUserId: auth.sub,
         externalId,
         summary: `${service} · ${law}`,
         createdAt: at,
         persons: Array.from({ length: victimCount }, (_, index) => ({
-          alias: `Víctima sintética ${String(index + 1).padStart(3, "0")}`,
+          alias: `Persona vinculada ${String(index + 1).padStart(3, "0")}`,
           type: index === 0 ? "DIRECTA" : "INDIRECTA",
         })),
         items: [
@@ -301,7 +296,7 @@ export function createDemoService({
                 null,
                 "PENDIENTE_APROBACION_PAG",
                 auth.sub,
-                "Solicitud pericial sintética enviada a aprobación previa",
+                "Solicitud pericial enviada a aprobación previa",
               ),
             ],
           },
@@ -389,10 +384,8 @@ export function createDemoService({
       ["EN_EJECUCION"],
       (item, at) => {
         const reference = text(payload.f171Reference);
-        if (!/^F171-DEMO-[A-Z0-9-]+$/.test(reference)) {
-          throw businessError(
-            "Use una referencia ficticia con prefijo F171-DEMO-",
-          );
+        if (!/^F171-\d{4}-[A-Z0-9-]+$/.test(reference)) {
+          throw businessError("Use una referencia con formato F171-AAAA-NNNN");
         }
         item.reportReference = reference;
         item.progress = 100;
@@ -400,7 +393,7 @@ export function createDemoService({
           item,
           "CERRADA",
           auth.sub,
-          "F-171 ficticio registrado; cierre directo sin aprobación final ordinaria PAG",
+          "F-171 registrado; cierre directo sin aprobación final ordinaria PAG",
           at,
         );
       },
@@ -508,7 +501,7 @@ function presentRequest(state, request) {
   const users = new Map(state.users.map((user) => [user.id, user.fullName]));
   return {
     ...structuredClone(request),
-    requesterName: users.get(request.ownerUserId) || "Solicitante demo",
+    requesterName: users.get(request.ownerUserId) || "Solicitante",
     items: request.items.map((item) => ({
       ...structuredClone(item),
       assigneeName: professionals.get(item.assigneeId)?.displayName || null,
@@ -521,8 +514,8 @@ function presentRequest(state, request) {
               id: `doc-${item.id}-v1`,
               type:
                 request.area === "VICTIMAS"
-                  ? "F-171 de demostración"
-                  : "Informe de investigación de demostración",
+                  ? "F-171"
+                  : "Informe de investigación",
               reference: item.reportReference,
               version: 1,
             },
@@ -557,11 +550,7 @@ function findItem(state, itemId, area) {
     const item = request.items.find((candidate) => candidate.id === itemId);
     if (item && request.area === area) return { request, item };
   }
-  throw new AppError(
-    404,
-    "DEMO_ITEM_NOT_FOUND",
-    "Ítem de demostración no encontrado",
-  );
+  throw new AppError(404, "DEMO_ITEM_NOT_FOUND", "Ítem no encontrado");
 }
 
 function transition(item, to, actor, message, at) {
@@ -574,7 +563,7 @@ function applyProgress(item, payload, actor, at) {
   const progress = Number(payload.progress);
   const observation = text(payload.observation);
   if (!Number.isInteger(progress) || progress < 1 || progress > 99) {
-    throw businessError("El avance demo debe estar entre 1 y 99");
+    throw businessError("El avance debe estar entre 1 y 99");
   }
   if (!observation)
     throw businessError("La observación de avance es obligatoria");
@@ -613,7 +602,7 @@ function rejectClientAssignee(payload) {
     payload.funcionarioId
   ) {
     throw businessError(
-      "El cliente no puede escoger investigador o perito; el backend ejecuta el reparto",
+      "El responsable no puede seleccionarse manualmente; la asignación es automática",
     );
   }
 }
@@ -656,6 +645,6 @@ function forbidden() {
   return new AppError(
     403,
     "DEMO_FORBIDDEN",
-    "No tiene permisos para esta acción de demostración",
+    "No tiene permisos para esta acción",
   );
 }

@@ -86,7 +86,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .expect(200);
   assert.deepEqual(
     before.body.requests.map((entry) => entry.id),
-    ["INV-DEMO-0002"],
+    ["INV-2026-0002"],
   );
   assert.ok(
     before.body.requests.every((entry) =>
@@ -145,10 +145,10 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .expect(200);
   assert.deepEqual(
     own.body.requests.map((entry) => entry.id),
-    [created.body.request.id, "INV-DEMO-0002"],
+    [created.body.request.id, "INV-2026-0002"],
   );
   assert.ok(
-    own.body.requests.every((entry) => entry.id !== "INV-DEMO-0001"),
+    own.body.requests.every((entry) => entry.id !== "INV-2026-0001"),
     "la bandeja no debe incluir encargos de otro investigador",
   );
 
@@ -164,7 +164,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
   const delivered = await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/entregar`)
     .set(auth(investigator))
-    .send({ reference: "INF-DEMO-002" })
+    .send({ reference: "INF-2026-0004" })
     .expect(200);
   assert.equal(itemFrom(delivered).status, "INFORME_ENTREGADO");
 
@@ -185,7 +185,7 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   const pag = await login(app, "demo-pag-victimas");
   const expert = await login(app, "demo-perito-psicologia");
   const payload = {
-    externalId: "RAD-DEMO-2026-002",
+    externalId: "RAD-2026-0099",
     law: "LEY_1448",
     service: "PSICOLOGICO",
     region: "BOGOTA",
@@ -234,7 +234,7 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   const finished = await request(app)
     .post(`/api/demo/victimas/items/${item.id}/finalizar`)
     .set(auth(expert))
-    .send({ f171Reference: "F171-DEMO-PSI-002" })
+    .send({ f171Reference: "F171-2026-0099" })
     .expect(200);
   item = itemFrom(finished);
   assert.equal(item.status, "CERRADA");
@@ -268,12 +268,12 @@ test("restablecer demo recupera semillas reproducibles", async () => {
     .expect(200);
   assert.equal(reset.body.requests.length, 6);
   assert.deepEqual(reset.body.requests.map((entry) => entry.id).sort(), [
-    "INV-DEMO-0001",
-    "INV-DEMO-0002",
-    "INV-DEMO-0003",
-    "VIC-DEMO-0001",
-    "VIC-DEMO-0002",
-    "VIC-DEMO-0003",
+    "INV-2026-0001",
+    "INV-2026-0002",
+    "INV-2026-0003",
+    "SVP-2026-0001",
+    "SVP-2026-0002",
+    "SVP-2026-0003",
   ]);
   assert.equal(
     reset.body.requests.filter((entry) => entry.area === "INVESTIGACION")
@@ -291,20 +291,20 @@ test("PAG puede devolver informe de Investigación con motivo y conservar docume
   const pag = await login(app, "demo-pag-investigacion");
 
   const missingReason = await request(app)
-    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/devolver-entrega")
+    .post("/api/demo/investigacion/items/MT-2026-0002/devolver-entrega")
     .set(auth(pag))
     .send({})
     .expect(400);
   assert.equal(missingReason.body.error.code, "DEMO_VALIDATION_ERROR");
 
   const returned = await request(app)
-    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/devolver-entrega")
+    .post("/api/demo/investigacion/items/MT-2026-0002/devolver-entrega")
     .set(auth(pag))
     .send({ observation: "Aclarar la conclusión técnica" })
     .expect(200);
   const item = itemFrom(returned);
   assert.equal(item.status, "EN_EJECUCION");
-  assert.equal(item.reportReference, "INF-DEMO-0002");
+  assert.equal(item.reportReference, "INF-2026-0002");
   assert.equal(item.documents.length, 1);
   assert.match(item.timeline.at(-1).message, /Aclarar la conclusión/i);
 });
@@ -339,15 +339,15 @@ test("autorización separa roles, áreas y casos visibles", async () => {
   );
 
   await request(app)
-    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0002/aprobar-entrega")
+    .post("/api/demo/investigacion/items/MT-2026-0002/aprobar-entrega")
     .set(auth(defender))
     .expect(403);
   await request(app)
-    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0001/iniciar")
+    .post("/api/demo/investigacion/items/MT-2026-0001/iniciar")
     .set(auth(investigator))
     .expect(403);
   await request(app)
-    .post("/api/demo/investigacion/items/INV-ITEM-DEMO-0001/repartir")
+    .post("/api/demo/investigacion/items/MT-2026-0001/repartir")
     .set(auth(rjv))
     .expect(403);
 });

@@ -78,11 +78,13 @@ En cada actualización:
 5. suba el directorio saneado;
 6. espere el estado `RUNNING` y repita los smoke tests autenticados.
 
-La validación remota del despliegue comprobó `/api/health`, `/api/ready`, la SPA, el refresco de `/portal`, login demo, el recorrido completo de Investigación, el recorrido completo de Víctimas y el restablecimiento a dos solicitudes semilla.
+La validación remota del despliegue comprobó `/api/health`, `/api/ready`, la SPA, el refresco de `/portal`, acceso por perfil, el recorrido completo de Investigación, el recorrido completo de Víctimas y el restablecimiento a seis casos iniciales.
+
+Para un Space privado, el smoke acepta `-HfToken` y envía la autenticación de Hugging Face separada del JWT de SIGIP. El valor debe obtenerse del almacén local seguro y nunca escribirse en archivos ni imprimirse en la consola.
 
 ## Restablecimiento de la demo
 
-- Desde la interfaz: entrar como **Alex Demo — Administrador** y seleccionar **Restablecer datos de demostración**.
+- Desde la interfaz: entrar como **Administrador del sistema** y seleccionar **Restablecer información inicial**.
 - Desde infraestructura: reiniciar el Space. `DEMO_RESET_ON_START=true` reconstruye las semillas sintéticas al iniciar cada contenedor.
 
 ## Limitaciones de almacenamiento
@@ -93,7 +95,7 @@ El repositorio de demostración está en memoria. Los cambios sobreviven mientra
 
 1. Abra la página privada del Space con una cuenta autorizada.
 2. Confirme que el estado sea `RUNNING` y que `/api/ready` responda `ready`.
-3. restablezca la demo con Alex Demo;
+3. restablezca la información inicial con **Administrador del sistema**;
 4. compruebe el banner permanente **“Ambiente de demostración — datos no reales”**;
 5. recorra una radicación de Investigación y una solicitud pericial de Víctimas;
 6. mantenga abierta la pantalla inicial unos minutos antes de presentar para evitar esperas por reanudación del Space.

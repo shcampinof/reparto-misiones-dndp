@@ -2,45 +2,45 @@
 
 ## Preparación
 
-Abra `http://localhost:5173`. Confirme que la franja superior diga **“Ambiente de demostración — datos no reales”**. Todas las identidades, solicitudes, víctimas y referencias visibles son sintéticas. Si una ejecución anterior dejó cambios, ingrese como **Alex Demo — Administrador** y use **Restablecer datos de demostración**.
+Abra `http://localhost:5173` o la URL privada vigente del Space. Confirme que se muestren el logo oficial, las pestañas **Investigación / Víctimas** y el selector **Perfil de acceso**. Si una ejecución anterior dejó cambios, ingrese como **Administrador del sistema** y use **Restablecer información inicial**.
 
 ### Nuevo acceso por contexto
 
 1. Seleccione **Investigación** o **Víctimas** en las pestañas horizontales.
-2. Elija en **Rol de demostración** una de las identidades sintéticas filtradas para esa área.
+2. Elija en **Perfil de acceso** uno de los perfiles filtrados para esa área.
 3. Pulse **Ingresar al portal**. El selector facilita el guion, pero la cuenta autenticada y el backend siguen determinando los permisos y módulos habilitados.
 4. Use **Cerrar sesión** en la cabecera para regresar y cambiar de perfil.
 
-No existe todavía un archivo local del logo institucional autorizado. La demo usa temporalmente la marca textual **Defensoría del Pueblo**; el activo oficial y su autorización de uso quedan pendientes.
+La interfaz usa el logo PNG oficial suministrado. Continúan pendientes una variante horizontal o vectorial autorizada y los archivos web licenciados de Geomanist.
 
 ## Recorrido sugerido (máximo 8 minutos)
 
 | Tiempo | Usuario / rol | Acción | Resultado esperado | Mensaje clave |
 |---:|---|---|---|---|
 | 0:00–0:30 | Pantalla inicial | Alternar **Investigación** / **Víctimas** y mostrar el selector de rol. | Los perfiles cambian por área y el aviso de datos no reales permanece visible. | Una plataforma común conserva autorización y procesos separados. |
-| 0:30–1:25 | Diana Demo / Defensor/a | Entrar en Investigación, radicar el SPOA precargado y pulsar **Validar y ejecutar reparto**. | La validación y el reparto ocurren en backend; el caso pasa de `RADICADA` a `ASIGNADA`. | El cliente no selecciona investigador. El servidor conserva candidatos, exclusiones, carga y desempate. |
-| 1:25–2:20 | Iván Demo / Investigador/a | Abrir **Pendientes**, iniciar la misión recién asignada, registrar avance y entregar `INF-DEMO-...`. | El stepper avanza hasta `INFORME_ENTREGADO`; solo se ven encargos propios y acciones válidas. | Cada acción modifica el repositorio temporal y queda en el historial. |
-| 2:20–3:05 | Paula Demo / PAG Investigación | Abrir **Por revisar**, entrar al detalle y mostrar **Devolver informe** / **Aprobar y cerrar**. Aprobar la entrega del recorrido. | La misión queda `CERRADA`; la devolución, si se demuestra, exige observación y regresa a ejecución sin borrar la referencia entregada. | Investigación requiere revisión técnica final del PAG. |
-| 3:05–4:00 | Renata Demo / Representante judicial de víctimas | Elegir Víctimas y crear el peritaje psicológico con dos alias sintéticos. | Queda `PENDIENTE_APROBACION_PAG`; no existe selector de perito. | Víctimas aprueba antes del reparto y minimiza datos personales en la demo. |
-| 4:00–4:55 | Samuel Demo / PAG-Supervisor Víctimas | Abrir **Pendientes** y pulsar **Aprobar y repartir**. | Se registran aprobación previa y asignación automática, con explicación de elegibilidad separada para Víctimas. | No se heredan filtros ni límites fijos de Investigación. |
-| 4:55–5:55 | Pilar Demo / Perito psicología | Abrir **Pendientes**, iniciar, registrar avance y finalizar con `F171-DEMO-...`. | El servicio pasa a `CERRADA` y la referencia del F-171 aparece en detalle. | La entrega ordinaria de Víctimas cierra sin aprobación final PAG. |
-| 5:55–7:15 | Alex Demo / Administración demo | Alternar áreas y bandejas; abrir el panel lateral para mostrar solicitante, responsable, plazo, semáforo, documentos e historial. | Se observan hasta tres casos por área en etapas diferentes. | Plazos y semáforo están marcados como pendientes de validación funcional. |
-| 7:15–8:00 | Alex Demo / Administración demo | Pulsar **Restablecer datos de demostración** y cerrar con las limitaciones. | Regresan seis casos sintéticos reproducibles, tres por área. | Es una demo funcional temporal, no una implementación productiva. |
+| 0:30–1:25 | Defensor/a solicitante | Entrar en Investigación, radicar el SPOA precargado y pulsar **Validar y ejecutar reparto**. | La validación y el reparto ocurren en el servidor; el caso pasa de `RADICADA` a `ASIGNADA`. | El usuario no selecciona investigador. El servidor conserva candidatos, exclusiones, carga y desempate. |
+| 1:25–2:20 | Investigador/a de campo 01 | Abrir **Pendientes**, iniciar la misión recién asignada, registrar avance y entregar `INF-2026-...`. | El stepper avanza hasta `INFORME_ENTREGADO`; solo se ven encargos propios y acciones válidas. | Cada acción se registra en el servidor y queda en el historial. |
+| 2:20–3:05 | PAG Investigación | Abrir **Por revisar**, entrar al detalle y mostrar **Devolver informe** / **Aprobar y cerrar**. Aprobar la entrega del recorrido. | La misión queda `CERRADA`; la devolución, si se presenta, exige observación y regresa a ejecución sin borrar la referencia entregada. | Investigación requiere revisión técnica final del PAG. |
+| 3:05–4:00 | Representante judicial de víctimas | Elegir Víctimas y crear el peritaje psicológico con dos personas vinculadas. | Queda `PENDIENTE_APROBACION_PAG`; no existe selector de perito. | Víctimas aprueba antes del reparto y minimiza los datos personales presentados. |
+| 4:00–4:55 | PAG Víctimas | Abrir **Pendientes** y pulsar **Aprobar y repartir**. | Se registran aprobación previa y asignación automática, con explicación de elegibilidad separada para Víctimas. | No se heredan filtros ni límites fijos de Investigación. |
+| 4:55–5:55 | Perito Psicología 01 | Abrir **Pendientes**, iniciar, registrar avance y finalizar con `F171-2026-...`. | El servicio pasa a `CERRADA` y la referencia del F-171 aparece en detalle. | La entrega ordinaria de Víctimas cierra sin aprobación final PAG. |
+| 5:55–7:15 | Administrador del sistema | Alternar áreas y bandejas; abrir el panel lateral para mostrar solicitante, responsable, fecha estimada, semáforo, documentos e historial. | Se observan hasta tres casos por área en etapas diferentes. | Fechas estimadas y semáforo están marcados como pendientes de validación funcional. |
+| 7:15–8:00 | Administrador del sistema | Pulsar **Restablecer información inicial** y cerrar con las limitaciones. | Regresan seis casos reproducibles, tres por área. | Es una presentación funcional; no corresponde a una implementación productiva. |
 
 ## Cuentas precargadas
 
 No usan contraseña; se seleccionan desde la pantalla inicial.
 
-| Área | Identidad sintética | Rol |
+| Área | Perfil de acceso | Rol |
 |---|---|---|
-| Ambas | Alex Demo | Administrador |
-| Investigación | Diana Demo | Defensor/a |
-| Investigación | Iván Demo | Investigador/a |
-| Investigación | Paula Demo | PAG Investigación |
-| Víctimas | Renata Demo | Representante judicial de víctimas (RJV) |
-| Víctimas | Samuel Demo | PAG / Supervisor Víctimas |
-| Víctimas | Pilar Demo | Perito psicología |
-| Víctimas | Fabio Demo | Perito administrativo/financiero |
+| Ambas | Administrador del sistema | Administrador |
+| Investigación | Defensor/a solicitante | Defensor/a |
+| Investigación | Investigador/a de campo 01 | Investigador/a |
+| Investigación | PAG Investigación | PAG Investigación |
+| Víctimas | Representante judicial de víctimas | RJV |
+| Víctimas | PAG Víctimas | PAG / Supervisor Víctimas |
+| Víctimas | Perito Psicología 01 | Perito psicología |
+| Víctimas | Perito Financiero 01 | Perito administrativo/financiero |
 
 ## Limitaciones que deben explicarse
 

@@ -27,7 +27,7 @@ npm run dev
 - API: `http://localhost:4000`
 - Salud: `http://localhost:4000/api/health`
 
-La pantalla inicial ofrece acceso directo, sin contraseñas, a cuentas exclusivamente sintéticas. Investigación incluye Defensor, Investigador y PAG; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. La cuenta `Alex Demo` habilita el restablecimiento administrativo.
+La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Defensor, Investigador y PAG; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. El perfil `Administrador del sistema` habilita el restablecimiento administrativo.
 
 El modo demo se habilita de forma explícita con `ENABLE_DEMO_ACCOUNTS=true` y está prohibido por configuración en producción. No se requieren ni se publican credenciales.
 
@@ -46,6 +46,11 @@ npm run build
 ```
 
 Las pruebas API recorren ambos flujos completos, autorización por asignación, reparto exclusivo del backend, diferencias de aprobación y restablecimiento reproducible.
+
+## Despliegue vigente
+
+- La versión funcional se publica como un Space Docker privado en Hugging Face: `https://shcampinof-paloma-bot.hf.space`.
+- GitHub Pages queda como alternativa manual para el frontend. Requiere configurar `VITE_API_URL` con una API pública HTTPS operativa; no se activa automáticamente al actualizar `main`.
 
 ## Arquitectura de la demo
 

@@ -11,7 +11,9 @@ async function request(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(
-      data?.message || data?.error?.message || "Error en la demostración",
+      data?.message ||
+        data?.error?.message ||
+        "No fue posible completar la solicitud",
     );
   }
   return data;

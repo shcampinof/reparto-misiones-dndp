@@ -116,13 +116,11 @@ export default function PortalPage() {
   }
 
   if (loading)
-    return (
-      <div className="screen-loader">Cargando ambiente de demostración...</div>
-    );
+    return <div className="screen-loader">Cargando el sistema...</div>;
   if (!data)
     return (
       <div className="screen-loader">
-        {error || "No fue posible iniciar la demostración"}
+        {error || "No fue posible iniciar el sistema"}
       </div>
     );
 
@@ -168,7 +166,6 @@ export default function PortalPage() {
       className="demo-portal"
       style={{ "--area-accent": AREA_META[area].accent }}
     >
-      <div className="demo-banner">{data.banner}</div>
       <header className="demo-header">
         <div className="demo-brand">
           <div>
@@ -201,7 +198,7 @@ export default function PortalPage() {
         <div className="demo-profile">
           <span>{profile?.initials || "DE"}</span>
           <div>
-            <strong>{profile?.fullName || "Usuario demo"}</strong>
+            <strong>{profile?.fullName || "Usuario"}</strong>
             <small>{profile?.roleLabel || profile?.role}</small>
           </div>
           <button onClick={logout}>Cerrar sesión</button>
@@ -222,18 +219,18 @@ export default function PortalPage() {
               onClick={() => {
                 if (
                   window.confirm(
-                    "¿Restablecer los datos sintéticos de la demostración? Se descartarán los cambios temporales.",
+                    "¿Restablecer la información inicial? Se descartarán los cambios realizados en esta sesión.",
                   )
                 ) {
                   run(
                     "reset",
                     () => apiResetDemo(token),
-                    "Datos sintéticos restablecidos correctamente",
+                    "Información inicial restablecida correctamente",
                   );
                 }
               }}
             >
-              Restablecer datos de demostración
+              Restablecer información inicial
             </button>
           )}
         </section>
@@ -322,16 +319,8 @@ export default function PortalPage() {
         </section>
 
         <footer className="demo-disclaimer">
-          <strong>{data.parameters.label}</strong>
-          <span>
-            Política {data.parameters.version} · Plazos de calendario demo:
-            Investigación {data.parameters.investigationTermDays} días /
-            Víctimas {data.parameters.victimsTermDays} días.
-          </span>
-          <span>
-            Persistencia temporal reiniciable. Sin Oracle, identidad
-            institucional, documentos o integraciones reales.
-          </span>
+          Defensoría del Pueblo de Colombia · Sistema de Información para la
+          Gestión Investigativa y Pericial
         </footer>
       </main>
       {detailRecord && (
@@ -358,7 +347,7 @@ function Kpi({ label, value, tone }) {
 function InvestigationForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
     spoa: "110016000049202600099",
-    delito: "Delito sintético para demostración",
+    delito: "Investigación de hechos asociados al caso",
     service: "INVESTIGACION_CAMPO",
     region: "BOGOTA",
   });
@@ -368,10 +357,10 @@ function InvestigationForm({ catalogs, token, run, busy }) {
     <section className="creation-panel">
       <div className="panel-copy">
         <small>Paso 1</small>
-        <h2>Radicar solicitud investigativa sintética</h2>
+        <h2>Radicar solicitud de investigación</h2>
         <p>
-          El reparto se ejecutará después en el backend; el formulario no envía
-          investigador.
+          La asignación del responsable se realiza automáticamente según los
+          criterios aplicables.
         </p>
       </div>
       <form
@@ -385,7 +374,7 @@ function InvestigationForm({ catalogs, token, run, busy }) {
         }}
       >
         <label>
-          SPOA sintético
+          Número SPOA
           <input value={form.spoa} onChange={update("spoa")} maxLength="21" />
         </label>
         <label>
@@ -422,7 +411,7 @@ function InvestigationForm({ catalogs, token, run, busy }) {
 
 function VictimsForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
-    externalId: "RAD-DEMO-2026-004",
+    externalId: "RAD-2026-0004",
     law: "LEY_1448",
     service: "PSICOLOGICO",
     region: "BOGOTA",
@@ -434,10 +423,10 @@ function VictimsForm({ catalogs, token, run, busy }) {
     <section className="creation-panel victims">
       <div className="panel-copy">
         <small>Paso 1</small>
-        <h2>Crear solicitud pericial sintética</h2>
+        <h2>Crear solicitud de servicio pericial</h2>
         <p>
-          Las víctimas se generan como alias; no se capturan nombres ni
-          documentos personales.
+          Registre el contexto del servicio para remitirlo a la aprobación
+          previa correspondiente.
         </p>
       </div>
       <form
@@ -455,7 +444,7 @@ function VictimsForm({ catalogs, token, run, busy }) {
         }}
       >
         <label>
-          Radicado sintético
+          Número de radicado
           <input value={form.externalId} onChange={update("externalId")} />
         </label>
         <label>
@@ -489,7 +478,7 @@ function VictimsForm({ catalogs, token, run, busy }) {
           </select>
         </label>
         <label>
-          Víctimas sintéticas
+          Número de víctimas
           <input
             type="number"
             min="1"
@@ -520,10 +509,10 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
         </div>
         <span className="external-id">{request.externalId}</span>
       </header>
-      <p className="request-summary">{request.summary || "Caso sintético"}</p>
+      <p className="request-summary">{request.summary || "Caso registrado"}</p>
       {request.persons?.length > 0 && (
         <div className="synthetic-persons">
-          <strong>{request.persons.length} víctima(s) sintética(s)</strong>
+          <strong>{request.persons.length} persona(s) vinculada(s)</strong>
           {request.persons.map((person) => (
             <span key={person.alias}>
               {person.alias} ·{" "}
@@ -592,7 +581,7 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
           </strong>
         </span>
         <span>
-          <small>Plazo demo</small>
+          <small>Fecha estimada</small>
           <strong>{item.dueDate || "Por calcular"}</strong>
         </span>
         <span>
@@ -614,7 +603,7 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
                 run(
                   item.id,
                   () => apiAssignInvestigation(token, item.id),
-                  "Reparto backend de Investigación completado",
+                  "Asignación automática de Investigación completada",
                 )
               }
             >
@@ -635,7 +624,7 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
                 run(
                   item.id,
                   () => apiVictimsAction(token, item.id, "aprobar-y-repartir"),
-                  "Aprobación previa y reparto backend completados",
+                  "Aprobación previa y asignación automática completadas",
                 )
               }
             >
@@ -863,8 +852,8 @@ function CaseDetail({ request, item, onClose }) {
         </dl>
 
         <p className="validation-pending">
-          Plazo y referencia de semáforo de demostración — pendiente de
-          validación funcional.
+          Fecha estimada y referencia de semáforo pendientes de validación
+          funcional.
         </p>
 
         <section className="detail-section">
@@ -913,10 +902,10 @@ function CaseDetail({ request, item, onClose }) {
 function ExecutorActions({ item, token, busy, run, area }) {
   const [progress, setProgress] = useState(70);
   const [observation, setObservation] = useState(
-    "Avance sintético registrado durante la demostración",
+    "Avance de actividades registrado",
   );
   const [reference, setReference] = useState(
-    area === "VICTIMAS" ? "F171-DEMO-2026-004" : "INF-DEMO-2026-004",
+    area === "VICTIMAS" ? "F171-2026-0004" : "INF-2026-0004",
   );
   const action =
     area === "VICTIMAS" ? apiVictimsAction : apiInvestigationAction;
@@ -962,7 +951,7 @@ function ExecutorActions({ item, token, busy, run, area }) {
                       progress: Number(progress),
                       observation,
                     }),
-                  "Avance persistido en backend",
+                  "Avance registrado correctamente",
                 )
               }
             >
@@ -995,7 +984,7 @@ function ExecutorActions({ item, token, busy, run, area }) {
                         : { reference },
                     ),
                   area === "VICTIMAS"
-                    ? "F-171 ficticio registrado; peritaje cerrado directamente"
+                    ? "F-171 registrado; servicio pericial cerrado"
                     : "Informe entregado; pendiente aprobación PAG",
                 )
               }
@@ -1021,10 +1010,6 @@ function AssignmentExplanation({ assignment }) {
         <strong>{assignment.selectedName || "Sin candidato"}</strong> ·{" "}
         {assignment.selectedReason}
       </p>
-      <div className="assignment-meta">
-        <span>Política {assignment.policyVersion}</span>
-        <span>{assignment.strategy || "SEMILLA_DEMO"}</span>
-      </div>
       {assignment.evaluated?.length > 0 && (
         <div className="candidate-columns">
           <div>

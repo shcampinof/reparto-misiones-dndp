@@ -6,7 +6,7 @@ import PortalPage from "./pages/PortalPage";
 function ProtectedPortal() {
   const { token, loadingProfile } = useAuth();
   if (loadingProfile)
-    return <div className="screen-loader">Preparando demostración...</div>;
+    return <div className="screen-loader">Preparando el sistema...</div>;
   return token ? <PortalPage /> : <Navigate to="/" replace />;
 }
 

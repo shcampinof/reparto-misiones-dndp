@@ -22,3 +22,5 @@ La tipografía Geomanist se sustituye temporalmente por la pila de sistema indic
 ## Activos oficiales pendientes
 
 Se incorporó el PNG vertical suministrado, conservando proporción, transparencia y área libre. Para una futura cabecera compacta queda pendiente recibir de la Oficina de Comunicaciones una versión horizontal oficial, preferiblemente vectorial, y los archivos web licenciados de Geomanist.
+
+La revisión final de los activos disponibles no encontró una variante horizontal o vectorial autorizada ni archivos web de Geomanist; estos insumos continúan pendientes y no se sustituyeron con recursos externos.

@@ -2,6 +2,13 @@ import { expect, test } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
+const BRAND = {
+  shortName: "SIGIP-DP",
+  mediumName: "SIGIP-DP — Gestión investigativa y pericial",
+  fullName:
+    "SIGIP-DP — Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo",
+};
+
 async function chooseProfile(page, { area = "INVESTIGACION", userId }) {
   await page.goto("/");
   if (area === "VICTIMAS") {
@@ -174,7 +181,20 @@ test("Investigación completa reparto, ejecución y aprobación PAG", async ({
 test("el administrador conserva consulta y restablecimiento sin acciones operativas", async ({
   page,
 }) => {
+  await expect(page).toHaveTitle(BRAND.mediumName);
+  await expect(page.locator(".login-heading .brand-name-full")).toHaveText(
+    BRAND.fullName,
+  );
+  await expect(page.locator(".login-heading .brand-name-full")).toBeVisible();
   await chooseProfile(page, { userId: "demo-admin" });
+  await expect(page.locator(".demo-brand > div > span")).toHaveText(
+    BRAND.shortName,
+  );
+  await expect(page.locator(".demo-brand small")).toHaveText(BRAND.fullName);
+  await expect(page.locator(".demo-brand small")).toBeVisible();
+  await expect(page.locator(".demo-disclaimer .brand-name-full")).toHaveText(
+    BRAND.fullName,
+  );
   await expect(
     page.getByRole("button", { name: "Restablecer información inicial" }),
   ).toBeVisible();
@@ -197,6 +217,37 @@ test("el administrador conserva consulta y restablecimiento sin acciones operati
   await expect(
     page.getByText("Solicitud pericial", { exact: true }).first(),
   ).toBeVisible();
+  await expect(page.locator(".request-grid")).not.toContainText(BRAND.fullName);
+
+  await logout(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".login-heading .brand-name-full")).toBeHidden();
+  await expect(page.locator(".login-heading .brand-name-medium")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
+
+  await chooseProfile(page, { userId: "demo-admin" });
+  await expect(page.locator(".demo-brand small")).toBeHidden();
+  await expect(page.locator(".demo-brand > div > span")).toHaveText(
+    BRAND.shortName,
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
+
+  await logout(page);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator(".login-heading .brand-name-medium")).toBeHidden();
+  await expect(page.locator(".login-heading .brand-name-short")).toBeVisible();
 });
 
 test("sin candidato muestra la cola pendiente y su explicación", async ({

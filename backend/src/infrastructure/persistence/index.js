@@ -1,5 +1,3 @@
-import { OracleDomainRepository } from "./oracle/domain-repository.js";
-import { createOraclePool, oracleHealth } from "./oracle/pool.js";
 import { SqliteDomainRepository } from "./sqlite/domain-repository.js";
 import {
   applySqliteMigrations,
@@ -31,6 +29,11 @@ export async function createPersistence({ config }) {
     }
   }
 
+  const [{ OracleDomainRepository }, { createOraclePool, oracleHealth }] =
+    await Promise.all([
+      import("./oracle/domain-repository.js"),
+      import("./oracle/pool.js"),
+    ]);
   const pool = await createOraclePool(config.persistence.oracle);
   const domainRepository = new OracleDomainRepository(pool);
   return {

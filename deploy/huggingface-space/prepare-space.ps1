@@ -30,6 +30,22 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot "README.md") -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "backend\package.json") -Destination (Join-Path $target "backend")
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "backend\package-lock.json") -Destination (Join-Path $target "backend")
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "backend\src") -Destination (Join-Path $target "backend") -Recurse
+$oracleAdapter = Join-Path $target "backend\src\infrastructure\persistence\oracle"
+if (Test-Path -LiteralPath $oracleAdapter) {
+  Remove-Item -LiteralPath $oracleAdapter -Recurse -Force
+}
+New-Item -ItemType Directory -Path (Join-Path $target "backend\migrations") | Out-Null
+Copy-Item -LiteralPath (Join-Path $repositoryRoot "backend\migrations\sqlite") -Destination (Join-Path $target "backend\migrations") -Recurse
+
+Push-Location (Join-Path $target "backend")
+try {
+  & npm pkg delete dependencies.oracledb
+  if ($LASTEXITCODE -ne 0) { throw "No fue posible retirar oracledb del paquete de presentación." }
+  & npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { throw "No fue posible sanear el lockfile del paquete de presentación." }
+} finally {
+  Pop-Location
+}
 
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "frontend\package.json") -Destination (Join-Path $target "frontend")
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "frontend\package-lock.json") -Destination (Join-Path $target "frontend")
@@ -41,8 +57,14 @@ $publishedFiles = Get-ChildItem -LiteralPath $target -Recurse -File | ForEach-Ob
   $_.FullName.Substring($target.Length + 1).Replace('\', '/')
 }
 
-if ($publishedFiles | Where-Object { $_ -match '(^|/)(docs|\.git|node_modules)(/|$)|\.(zip|mp4|mov|webm|pdf)$' }) {
+if ($publishedFiles | Where-Object { $_ -match '(^|/)(docs|\.git|node_modules|oracle)(/|$)|\.(zip|mp4|mov|webm|pdf)$' }) {
   throw "El paquete contiene un archivo o directorio no permitido."
+}
+
+$packageManifest = Get-Content -LiteralPath (Join-Path $target "backend\package.json") -Raw
+$packageLock = Get-Content -LiteralPath (Join-Path $target "backend\package-lock.json") -Raw
+if ($packageManifest -match 'oracledb' -or $packageLock -match 'oracledb') {
+  throw "El paquete de presentación conserva una dependencia Oracle."
 }
 
 Write-Output "Paquete saneado preparado: $target"

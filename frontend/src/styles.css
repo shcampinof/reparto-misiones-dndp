@@ -127,6 +127,10 @@ summary:focus-visible {
   font-size: 18px;
   letter-spacing: 0.04em;
 }
+.brand-name-medium,
+.brand-name-short {
+  display: none;
+}
 .login-main {
   display: grid;
   place-items: center;
@@ -157,6 +161,7 @@ summary:focus-visible {
   color: var(--navy);
   font-size: 26px;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 .login-heading > p:last-child {
   margin: 8px 0 0;
@@ -1169,6 +1174,12 @@ summary:focus-visible {
   .demo-brand small {
     display: none;
   }
+  .brand-name-full {
+    display: none;
+  }
+  .brand-name-medium {
+    display: inline;
+  }
   .portal-area-tabs button {
     min-width: 0;
     padding-inline: 5px;
@@ -1237,5 +1248,13 @@ summary:focus-visible {
   .inline-action,
   .inline-action:last-child {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 380px) {
+  .brand-name-medium {
+    display: none;
+  }
+  .brand-name-short {
+    display: inline;
   }
 }

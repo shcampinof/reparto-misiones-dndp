@@ -1,4 +1,4 @@
-# SIGIP-DP
+# SIGIP-DP — Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo
 
 Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo. Mantiene un monolito modular React + Express, flujos separados de Investigación y Víctimas y una sola base de código con persistencia intercambiable.
 

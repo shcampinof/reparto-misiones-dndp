@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiDemoAccounts } from "../api";
 import logoDefensoria from "../assets/logo-defensoria.png";
+import { brand } from "../config/brand";
 import { useAuth } from "../context/AuthContext";
 
 const AREA_LABELS = {
@@ -74,7 +75,7 @@ export default function LoginPage() {
         </div>
         <div className="public-system-mark">
           <small>Sistema institucional</small>
-          <strong className="product-mark">SIGIP-DP</strong>
+          <strong className="product-mark">{brand.shortName}</strong>
         </div>
       </header>
 
@@ -82,8 +83,12 @@ export default function LoginPage() {
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-heading">
             <p className="eyebrow">Acceso institucional</p>
-            <h1 id="login-title">Acceso a SIGIP-DP</h1>
-            <p>Gestión investigativa y pericial de la Defensoría del Pueblo</p>
+            <h1 id="login-title">
+              <span className="brand-name-full">{brand.fullName}</span>
+              <span className="brand-name-medium">{brand.mediumName}</span>
+              <span className="brand-name-short">{brand.shortName}</span>
+            </h1>
+            <p>Acceso institucional por área y perfil autorizado</p>
           </div>
 
           <div
@@ -164,7 +169,9 @@ export default function LoginPage() {
       </main>
 
       <footer className="public-footer">
-        Defensoría del Pueblo de Colombia · SIGIP-DP
+        <span className="brand-name-full">{brand.fullName}</span>
+        <span className="brand-name-medium">{brand.mediumName}</span>
+        <span className="brand-name-short">{brand.shortName}</span>
       </footer>
     </div>
   );

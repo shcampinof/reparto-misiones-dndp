@@ -8,6 +8,7 @@ import {
   apiResetDemo,
   apiVictimsAction,
 } from "../api";
+import { brand } from "../config/brand";
 import { useAuth } from "../context/AuthContext";
 
 const STATUS_LABELS = {
@@ -171,10 +172,8 @@ export default function PortalPage() {
         <div className="demo-brand">
           <div>
             <strong>Defensoría del Pueblo</strong>
-            <span>SIGIP-DP</span>
-            <small>
-              Sistema de Información para la Gestión Investigativa y Pericial
-            </small>
+            <span>{brand.shortName}</span>
+            <small>{brand.fullName}</small>
           </div>
         </div>
         <nav className="portal-area-tabs" aria-label="Módulos del portal">
@@ -320,8 +319,9 @@ export default function PortalPage() {
         </section>
 
         <footer className="demo-disclaimer">
-          Defensoría del Pueblo de Colombia · Sistema de Información para la
-          Gestión Investigativa y Pericial
+          <span className="brand-name-full">{brand.fullName}</span>
+          <span className="brand-name-medium">{brand.mediumName}</span>
+          <span className="brand-name-short">{brand.shortName}</span>
         </footer>
       </main>
       {detailRecord && (

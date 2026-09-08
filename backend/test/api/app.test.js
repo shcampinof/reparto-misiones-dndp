@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import jwt from "jsonwebtoken";
 import request from "supertest";
 import { createApp } from "../../src/app/create-app.js";
 import { createConfig } from "../../src/config/index.js";
 import { createSilentLogger } from "../../src/shared/logger.js";
 
+const TEST_SECRET = "test-secret-with-at-least-thirty-two-characters";
+
 function testApp(overrides = {}) {
   const config = createConfig({
     NODE_ENV: "test",
-    JWT_SECRET: "test-secret-with-at-least-thirty-two-characters",
+    JWT_SECRET: TEST_SECRET,
     ENABLE_DEMO_ACCOUNTS: "true",
     ...overrides,
   });
   return createApp({ config, logger: createSilentLogger() });
+}
+
+function tokenFor(claims) {
+  return jwt.sign(claims, TEST_SECRET, { expiresIn: "1h" });
 }
 
 async function login(app, userId) {
@@ -245,6 +252,205 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
     .post(`/api/demo/investigacion/items/${item.id}/aprobar-entrega`)
     .set(auth(pag))
     .expect(403);
+});
+
+test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conservando versiones", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send({
+      externalId: "RAD-2026-0088",
+      law: "LEY_1448",
+      service: "PSICOLOGICO",
+      region: "BOGOTA",
+      victimCount: 2,
+    })
+    .expect(201);
+  const itemId = itemFrom(created).id;
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/devolver-solicitud`)
+    .set(auth(pag))
+    .send({})
+    .expect(400);
+
+  const returned = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/devolver-solicitud`)
+    .set(auth(pag))
+    .send({ observation: "Adjuntar soporte de parentesco" })
+    .expect(200);
+  assert.equal(itemFrom(returned).status, "DEVUELTA");
+  assert.equal(returned.body.request.versions.length, 1);
+  assert.deepEqual(returned.body.request.versions[0].data.persons, [
+    { alias: "Persona vinculada 001", type: "DIRECTA" },
+    { alias: "Persona vinculada 002", type: "INDIRECTA" },
+  ]);
+  assert.equal(
+    returned.body.request.versions[0].review.observation,
+    "Adjuntar soporte de parentesco",
+  );
+  assert.match(itemFrom(returned).timeline.at(-1).message, /devuelta al RJV/i);
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({})
+    .expect(400);
+
+  const resent = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({
+      correctionSummary: "Soporte incorporado y grupo familiar actualizado",
+      victimCount: 7,
+    })
+    .expect(200);
+  assert.equal(itemFrom(resent).status, "PENDIENTE_APROBACION_PAG");
+  assert.equal(resent.body.request.persons.length, 7);
+  assert.equal(resent.body.request.versions.length, 2);
+  assert.equal(resent.body.request.versions[0].data.persons.length, 2);
+  assert.equal(resent.body.request.versions[1].data.persons.length, 7);
+  assert.match(
+    itemFrom(resent).timeline.at(-1).message,
+    /corregida y reenviada/i,
+  );
+
+  const approved = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  assert.equal(itemFrom(approved).status, "ASIGNADA");
+});
+
+test("el administrador técnico no puede adoptar decisiones operativas", async () => {
+  const app = testApp();
+  const admin = await login(app, "demo-admin");
+  const attempts = [
+    request(app)
+      .post("/api/demo/investigacion/solicitudes")
+      .set(auth(admin))
+      .send({
+        spoa: "110016000049202600087",
+        delito: "Caso de control de autorización",
+        service: "BALISTICA",
+        region: "BOGOTA",
+      }),
+    request(app)
+      .post("/api/demo/investigacion/items/MT-2026-0001/repartir")
+      .set(auth(admin)),
+    request(app)
+      .post("/api/demo/investigacion/items/MT-2026-0002/aprobar-entrega")
+      .set(auth(admin)),
+    request(app)
+      .post("/api/demo/investigacion/items/MT-2026-0002/devolver-entrega")
+      .set(auth(admin))
+      .send({ observation: "No autorizada" }),
+    request(app).post("/api/demo/victimas/solicitudes").set(auth(admin)).send({
+      externalId: "RAD-2026-0087",
+      law: "LEY_1448",
+      service: "PSICOLOGICO",
+      region: "BOGOTA",
+      victimCount: 1,
+    }),
+    request(app)
+      .post("/api/demo/victimas/items/VIC-ITEM-DEMO-0002/aprobar-y-repartir")
+      .set(auth(admin)),
+    request(app)
+      .post("/api/demo/victimas/items/VIC-ITEM-DEMO-0002/devolver-solicitud")
+      .set(auth(admin))
+      .send({ observation: "No autorizada" }),
+    request(app)
+      .post("/api/demo/victimas/items/VIC-ITEM-DEMO-0003/finalizar")
+      .set(auth(admin))
+      .send({ f171Reference: "F171-2026-ADMIN" }),
+  ];
+
+  for (const attempt of attempts) {
+    const response = await attempt;
+    assert.equal(response.status, 403);
+    assert.equal(response.body.error.code, "DEMO_FORBIDDEN");
+  }
+
+  const globalView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(admin))
+    .expect(200);
+  assert.ok(
+    globalView.body.requests.some((entry) => entry.area === "VICTIMAS"),
+  );
+  assert.ok(
+    globalView.body.requests.some((entry) => entry.area === "INVESTIGACION"),
+  );
+  await request(app).post("/api/demo/reset").set(auth(admin)).expect(200);
+});
+
+test("la titularidad y el área protegen la corrección de solicitudes devueltas", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const otherRjv = tokenFor({
+    sub: "rjv-sin-titularidad",
+    role: "rjv",
+    area: "VICTIMAS",
+  });
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send({
+      externalId: "RAD-2026-0086",
+      law: "LEY_975",
+      service: "PSICOLOGICO",
+      region: "BOGOTA",
+      victimCount: 1,
+    })
+    .expect(201);
+  const itemId = itemFrom(created).id;
+  await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/devolver-solicitud`)
+    .set(auth(pag))
+    .send({ observation: "Completar anexos" })
+    .expect(200);
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(otherRjv))
+    .send({ correctionSummary: "Intento de tercero" })
+    .expect(403);
+  await request(app)
+    .post(`/api/demo/investigacion/items/${itemId}/repartir`)
+    .set(auth(rjv))
+    .expect(403);
+});
+
+test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const created = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send({
+      spoa: "110016000049202600085",
+      delito: "Caso sin cobertura disponible",
+      service: "BALISTICA",
+      region: "CUNDINAMARCA",
+    })
+    .expect(201);
+  const assigned = await request(app)
+    .post(`/api/demo/investigacion/items/${itemFrom(created).id}/repartir`)
+    .set(auth(defender))
+    .expect(200);
+  const item = itemFrom(assigned);
+  assert.equal(item.status, "PENDIENTE_REASIGNACION");
+  assert.equal(item.assigneeId, null);
+  assert.match(item.assignment.selectedReason, /todos fueron excluidos/i);
+  assert.ok(item.assignment.evaluated.length >= 3);
+  assert.ok(
+    item.assignment.evaluated.every((candidate) => !candidate.eligible),
+  );
+  assert.equal(item.timeline.at(-1).message, item.assignment.selectedReason);
 });
 
 test("restablecer demo recupera semillas reproducibles", async () => {

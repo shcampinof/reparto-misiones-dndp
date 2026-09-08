@@ -13,6 +13,7 @@ import { useAuth } from "../context/AuthContext";
 const STATUS_LABELS = {
   RADICADA: "Radicada",
   PENDIENTE_APROBACION_PAG: "Pendiente aprobación PAG",
+  DEVUELTA: "Devuelta para corrección",
   APROBADA_REPARTO: "Aprobada para reparto",
   PENDIENTE_REASIGNACION: "Sin candidato / pendiente",
   ASIGNADA: "Asignada",
@@ -482,7 +483,6 @@ function VictimsForm({ catalogs, token, run, busy }) {
           <input
             type="number"
             min="1"
-            max="5"
             value={form.victimCount}
             onChange={update("victimCount")}
           />
@@ -618,18 +618,22 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
         {area === "VICTIMAS" &&
           role === "pag_victimas" &&
           item.status === "PENDIENTE_APROBACION_PAG" && (
-            <button
-              disabled={isBusy}
-              onClick={() =>
-                run(
-                  item.id,
-                  () => apiVictimsAction(token, item.id, "aprobar-y-repartir"),
-                  "Aprobación previa y asignación automática completadas",
-                )
-              }
-            >
-              Aprobar y repartir
-            </button>
+            <VictimsApprovalActions
+              item={item}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
+          )}
+        {area === "VICTIMAS" &&
+          role === "rjv" &&
+          item.status === "DEVUELTA" && (
+            <VictimsCorrectionAction
+              item={item}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
           )}
         {area === "INVESTIGACION" && role === "investigador" && (
           <ExecutorActions
@@ -688,6 +692,86 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
         </ol>
       </details>
     </section>
+  );
+}
+
+function VictimsApprovalActions({ item, token, busy, run }) {
+  const [observation, setObservation] = useState("");
+  return (
+    <div className="review-actions">
+      <label>
+        Observación para devolución
+        <input
+          value={observation}
+          onChange={(event) => setObservation(event.target.value)}
+          placeholder="Indique la corrección requerida"
+        />
+      </label>
+      <div>
+        <button
+          disabled={busy || !observation.trim()}
+          onClick={() =>
+            run(
+              item.id,
+              () =>
+                apiVictimsAction(token, item.id, "devolver-solicitud", {
+                  observation,
+                }),
+              "Solicitud devuelta al RJV para corrección",
+            )
+          }
+        >
+          Devolver solicitud
+        </button>
+        <button
+          className="primary-demo"
+          disabled={busy}
+          onClick={() =>
+            run(
+              item.id,
+              () => apiVictimsAction(token, item.id, "aprobar-y-repartir"),
+              "Aprobación previa y asignación automática completadas",
+            )
+          }
+        >
+          Aprobar y repartir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VictimsCorrectionAction({ item, token, busy, run }) {
+  const [correctionSummary, setCorrectionSummary] = useState("");
+  return (
+    <div className="review-actions correction-actions">
+      <label>
+        Corrección realizada
+        <input
+          value={correctionSummary}
+          onChange={(event) => setCorrectionSummary(event.target.value)}
+          placeholder="Describa el ajuste antes de reenviar"
+        />
+      </label>
+      <div>
+        <button
+          className="primary-demo"
+          disabled={busy || !correctionSummary.trim()}
+          onClick={() =>
+            run(
+              item.id,
+              () =>
+                apiVictimsAction(token, item.id, "corregir-reenviar", {
+                  correctionSummary,
+                }),
+              "Solicitud corregida y reenviada al PAG",
+            )
+          }
+        >
+          Corregir y reenviar
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -878,6 +962,31 @@ function CaseDetail({ request, item, onClose }) {
             <p>Sin referencias documentales registradas en esta etapa.</p>
           )}
         </section>
+
+        {request.versions?.length > 0 && (
+          <section className="detail-section">
+            <h3>Versiones de la solicitud</h3>
+            <ol className="detail-timeline">
+              {request.versions
+                .slice()
+                .reverse()
+                .map((version) => (
+                  <li key={version.version}>
+                    <strong>Versión {version.version}</strong>
+                    <small>
+                      {new Date(version.submittedAt).toLocaleString("es-CO")}
+                    </small>
+                    <p>
+                      {version.correctionSummary || "Radicación inicial"}
+                      {version.review?.observation
+                        ? ` · Devuelta: ${version.review.observation}`
+                        : ""}
+                    </p>
+                  </li>
+                ))}
+            </ol>
+          </section>
+        )}
 
         <section className="detail-section">
           <h3>Historial cronológico</h3>
@@ -1073,6 +1182,7 @@ function processFor(area, status) {
           INFORME_ENTREGADO: 4,
         }
       : {
+          DEVUELTA: 0,
           PENDIENTE_APROBACION_PAG: 1,
           APROBADA_REPARTO: 2,
           PENDIENTE_REASIGNACION: 2,
@@ -1114,6 +1224,10 @@ function nextActionFor(area, status) {
     );
   }
   const actions = {
+    DEVUELTA: {
+      action: "Corregir y reenviar la solicitud",
+      role: "Representante judicial de víctimas",
+    },
     PENDIENTE_APROBACION_PAG: {
       action: "Aprobar y ejecutar reparto automático",
       role: "PAG / Supervisor Víctimas",
@@ -1151,6 +1265,7 @@ function canActOnItem(area, role, status) {
     );
   }
   return (
+    (role === "rjv" && status === "DEVUELTA") ||
     (role === "pag_victimas" && status === "PENDIENTE_APROBACION_PAG") ||
     (role === "perito" && ["ASIGNADA", "EN_EJECUCION"].includes(status))
   );

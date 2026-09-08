@@ -100,7 +100,7 @@ export function createAuthService({ config, users }) {
       throw new AppError(
         404,
         "DEMO_DISABLED",
-        "El modo demostración no está habilitado",
+        "El perfil de presentación no está habilitado",
       );
     }
     const user = users.find(
@@ -114,7 +114,7 @@ export function createAuthService({ config, users }) {
       throw new AppError(
         404,
         "DEMO_ACCOUNT_NOT_FOUND",
-        "Cuenta demo no encontrada",
+        "Perfil de presentación no encontrado",
       );
     }
     return {

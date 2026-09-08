@@ -25,7 +25,7 @@ export function assignVictims(context) {
           !candidate.laws.includes(context.law),
         ),
       (candidate) =>
-        exclusion("No disponible por novedad demo", !candidate.available),
+        exclusion("No disponible por novedad vigente", !candidate.available),
     ],
   });
 }

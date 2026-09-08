@@ -64,19 +64,15 @@ export function createConfig(env = process.env) {
 
   const roleFlags = {
     administrador: booleanValue(env.ENABLE_ROLE_ADMINISTRADOR, true),
-    coordinador: booleanValue(env.ENABLE_ROLE_COORDINADOR, true),
-    pag: booleanValue(env.ENABLE_ROLE_PAG, true),
-    administrativo_delegado: booleanValue(
-      env.ENABLE_ROLE_ADMINISTRATIVO_DELEGADO,
-      true,
-    ),
     defensor: booleanValue(env.ENABLE_ROLE_DEFENSOR, true),
     investigador: booleanValue(env.ENABLE_ROLE_INVESTIGADOR, true),
-    defensor_regional: booleanValue(env.ENABLE_ROLE_DEFENSOR_REGIONAL, true),
-    pag_unidad_operativa: booleanValue(
-      env.ENABLE_ROLE_PAG_UNIDAD_OPERATIVA,
-      true,
-    ),
+    pag_investigacion: booleanValue(env.ENABLE_ROLE_PAG_INVESTIGACION, true),
+    rjv: booleanValue(env.ENABLE_ROLE_RJV, true),
+    pag_victimas: booleanValue(env.ENABLE_ROLE_PAG_VICTIMAS, true),
+    perito: booleanValue(env.ENABLE_ROLE_PERITO, true),
+    pag_central: false,
+    administrador_regional: false,
+    defensor_regional: false,
   };
 
   const config = {

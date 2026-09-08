@@ -2,7 +2,7 @@
 
 ## 1. Objetivo
 
-Transformar el repositorio `mesa-atencion-investigativa` en una versión funcional de SIGIP-DP, conservando React + Express como punto de partida, separando los flujos de Investigación y Víctimas y sustituyendo datos en memoria por persistencia transaccional.
+Transformar el repositorio `reparto-misiones-dndp` en una versión funcional de SIGIP-DP, conservando React + Express como punto de partida, separando los flujos de Investigación y Víctimas y sustituyendo datos en memoria por persistencia transaccional.
 
 Este plan no autoriza despliegue productivo hasta cerrar identidad, infraestructura, datos personales y aceptación funcional.
 

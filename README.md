@@ -2,6 +2,10 @@
 
 Demostración funcional del **Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo**. Conserva estrategias y estados separados para Investigación y Víctimas sobre un monolito modular React + Express.
 
+- Repositorio canónico: `https://github.com/shcampinof/reparto-misiones-dndp`
+- Space canónico: `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`
+- Aplicación desplegada: `https://shcampinof-reparto-misiones-dndp.hf.space`
+
 > Ambiente de demostración: utiliza únicamente personas, solicitudes, referencias y documentos sintéticos. El almacén temporal en memoria no es la persistencia productiva prevista.
 
 ## Ejecución local
@@ -27,7 +31,7 @@ npm run dev
 - API: `http://localhost:4000`
 - Salud: `http://localhost:4000/api/health`
 
-La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Defensor, Investigador y PAG; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. El perfil `Administrador del sistema` habilita el restablecimiento administrativo.
+La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Administrador, Defensor, Investigador y PAG Investigación; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. El perfil `Administrador del sistema` conserva consulta global, gestión técnica y restablecimiento, pero no adopta decisiones operativas.
 
 El modo demo se habilita de forma explícita con `ENABLE_DEMO_ACCOUNTS=true` y está prohibido por configuración en producción. No se requieren ni se publican credenciales.
 
@@ -43,13 +47,14 @@ cd ..\frontend
 npm run lint
 npm run format:check
 npm run build
+npm run test:browser
 ```
 
-Las pruebas API recorren ambos flujos completos, autorización por asignación, reparto exclusivo del backend, diferencias de aprobación y restablecimiento reproducible.
+Las pruebas API y de navegador recorren ambos flujos completos, devolución/corrección/reenvío en Víctimas, autorización por área y titularidad, reparto exclusivo del backend, restricción operativa del administrador y restablecimiento reproducible.
 
 ## Despliegue vigente
 
-- La versión funcional se publica como un Space Docker privado en Hugging Face: `https://shcampinof-paloma-bot.hf.space`.
+- La versión funcional se publica en el Space Docker canónico: `https://shcampinof-reparto-misiones-dndp.hf.space`.
 - GitHub Pages queda como alternativa manual para el frontend. Requiere configurar `VITE_API_URL` con una API pública HTTPS operativa; no se activa automáticamente al actualizar `main`.
 
 ## Arquitectura de la demo
@@ -75,4 +80,4 @@ Las decisiones pendientes usan parámetros rotulados como `Valores de demostraci
 - Oracle, SharePoint, AD/Entra ID, correo, migración histórica y datos institucionales no están habilitados.
 - No debe exponerse esta configuración como ambiente productivo.
 
-Consulte [la guía de demostración](docs/sigip/11_GUIA_DE_DEMOSTRACION.md), [la línea base técnica](docs/sigip/08_LINEA_BASE_TECNICA.md) y [la base de ingeniería](docs/sigip/08A_BASE_INGENIERIA_IMPLEMENTADA.md).
+Consulte [la guía de demostración](docs/sigip/11_GUIA_DE_DEMOSTRACION.md), [la línea base técnica](docs/sigip/08_LINEA_BASE_TECNICA.md), [la base de ingeniería](docs/sigip/08A_BASE_INGENIERIA_IMPLEMENTADA.md) y [las brechas funcionales/RACI](docs/sigip/14_BRECHAS_FUNCIONALES_Y_RACI.md).

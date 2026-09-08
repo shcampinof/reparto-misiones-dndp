@@ -1,7 +1,7 @@
 # Línea base técnica de SIGIP-DP
 
 **Fecha de corte:** 1 de septiembre de 2026  
-**Repositorio evaluado:** `mesa-atencion-investigativa`  
+**Repositorio evaluado:** `reparto-misiones-dndp`  
 **Commit base:** `c815850d6d9b80c7158e7fa16682f3cc038d9101` (`main`)  
 **Alcance:** diagnóstico técnico de PROMPT 0; no incorpora funcionalidades ni decisiones de negocio nuevas.
 

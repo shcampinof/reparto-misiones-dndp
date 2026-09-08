@@ -43,7 +43,7 @@ export function rankAndExplain({
     selectedName: selected?.candidateName || null,
     selectedReason: selected
       ? `Elegible con menor carga (${selected.metrics.load}); desempate: ${DEMO_PARAMETERS.tieBreak}.`
-      : "No existe candidato elegible en los datos de demostración.",
+      : "No existe candidato elegible: todos fueron excluidos por especialidad, cobertura, habilitación o disponibilidad.",
     evaluated,
     createdAt: now,
   };

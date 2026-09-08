@@ -6,7 +6,7 @@ export function createAuthRouter({ authService, authMiddleware }) {
 
   router.get("/demo-accounts", (_req, res) => {
     res.json({
-      banner: "Ambiente de demostración — datos no reales",
+      banner: "Entorno de presentación — información no institucional",
       accounts: authService.listDemoAccounts(),
     });
   });

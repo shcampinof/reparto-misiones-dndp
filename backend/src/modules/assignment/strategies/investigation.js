@@ -20,7 +20,7 @@ export function assignInvestigation(context) {
           !candidate.coverages.includes(context.region),
         ),
       (candidate) =>
-        exclusion("No disponible por novedad demo", !candidate.available),
+        exclusion("No disponible por novedad vigente", !candidate.available),
     ],
   });
 }

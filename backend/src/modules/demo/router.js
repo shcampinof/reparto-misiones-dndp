@@ -77,6 +77,24 @@ export function createDemoRouter({ authMiddleware, demoService }) {
       request: demoService.approveVictimsAndAssign(req.auth, req.params.id),
     }),
   );
+  router.post("/victimas/items/:id/devolver-solicitud", (req, res) =>
+    res.json({
+      request: demoService.returnVictimsRequest(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
+  router.post("/victimas/items/:id/corregir-reenviar", (req, res) =>
+    res.json({
+      request: demoService.correctAndResubmitVictims(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
   router.post("/victimas/items/:id/iniciar", (req, res) =>
     res.json({ request: demoService.startVictims(req.auth, req.params.id) }),
   );

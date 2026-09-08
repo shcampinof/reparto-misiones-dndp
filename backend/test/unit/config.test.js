@@ -53,3 +53,18 @@ test("produccion permite exclusivamente el modo demo explícito para el Space", 
   assert.equal(config.staticDir, "/app/public");
   assert.deepEqual(config.corsOrigins, []);
 });
+
+test("los roles propuestos permanecen inactivos hasta contar con RACI", () => {
+  const config = createConfig({
+    NODE_ENV: "development",
+    ENABLE_ROLE_PAG_CENTRAL: "true",
+    ENABLE_ROLE_ADMINISTRADOR_REGIONAL: "true",
+    ENABLE_ROLE_DEFENSOR_REGIONAL: "true",
+  });
+  assert.equal(config.auth.roleFlags.pag_central, false);
+  assert.equal(config.auth.roleFlags.administrador_regional, false);
+  assert.equal(config.auth.roleFlags.defensor_regional, false);
+  assert.equal(config.auth.roleFlags.coordinador, undefined);
+  assert.equal(config.auth.roleFlags.administrativo_delegado, undefined);
+  assert.equal(config.auth.roleFlags.pag_unidad_operativa, undefined);
+});

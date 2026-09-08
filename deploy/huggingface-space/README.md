@@ -9,6 +9,9 @@ pinned: false
 
 Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo.
 
+Space canónico: `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`  
+Aplicación: `https://shcampinof-reparto-misiones-dndp.hf.space`
+
 El acceso está restringido a perfiles autorizados para la presentación institucional. La información inicial está preparada exclusivamente para recorrer las funciones habilitadas.
 
 Incluye recorridos separados para Investigación y Víctimas. La asignación se calcula en el servidor y conserva una explicación resumida de candidatos, exclusiones, carga y motivo de selección.

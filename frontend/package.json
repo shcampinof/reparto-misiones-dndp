@@ -1,5 +1,5 @@
 {
-  "name": "mesa-atencion-frontend",
+  "name": "reparto-misiones-dndp-frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run format:check && npm run build"
+    "test:browser": "playwright test",
+    "check": "npm run lint && npm run format:check && npm run build && npm run test:browser"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -18,6 +19,7 @@
     "react-router-dom": "^6.30.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.5",

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from huggingface_hub import HfApi
 
+CANONICAL_SPACE_ID = "shcampinof/reparto-misiones-dndp"
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Publica el paquete saneado en un Docker Space existente.")
@@ -13,14 +15,15 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=900, help="Espera máxima del build en segundos")
     args = parser.parse_args()
 
+    if args.space_id != CANONICAL_SPACE_ID:
+        raise RuntimeError(f"La publicación solo está permitida en {CANONICAL_SPACE_ID}")
+
     package = Path(args.package).resolve()
     if not package.is_dir():
         parser.error(f"No existe el paquete: {package}")
 
     api = HfApi()
     info = api.repo_info(args.space_id, repo_type="space")
-    if not info.private:
-        raise RuntimeError("El Space debe ser privado antes de publicar")
     if info.sdk != "docker":
         raise RuntimeError("El Space existente no usa el SDK Docker")
 

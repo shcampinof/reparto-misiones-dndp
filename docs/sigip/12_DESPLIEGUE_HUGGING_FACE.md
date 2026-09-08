@@ -1,21 +1,19 @@
-# Despliegue de la demo SIGIP-DP en Hugging Face Spaces
+# Despliegue de SIGIP-DP en Hugging Face Spaces
 
-## Estado y destino
+## Estado y destino canónico
 
-- **Space:** `shcampinof/paloma-bot`, reutilizado con autorización explícita.
-- **Página privada:** `https://huggingface.co/spaces/shcampinof/paloma-bot`.
-- **Servicio autenticado:** `https://shcampinof-paloma-bot.hf.space`.
-- **Visibilidad verificada:** privada.
+- **Space:** `shcampinof/reparto-misiones-dndp`.
+- **Página:** `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`.
+- **Servicio:** `https://shcampinof-reparto-misiones-dndp.hf.space`.
 - **SDK:** Docker.
 - **Puerto:** `7860`.
-- **Commit remoto validado:** `fa97cabdee3e4a69c20cd4a26fb7bff1ed6e7af6`.
-- **Build remoto:** `RUNNING` en `cpu-basic`; dominio en estado `READY`.
+- **Verificación del 8-sep-2026:** la API pública de Hugging Face informó `RUNNING`, `sdk=docker` y el host anterior; `/api/health` respondió HTTP 200.
 
-El despliegue usa un repositorio de Hugging Face independiente. No se hace push del código al repositorio GitHub principal ni se publica la documentación funcional interna.
+El despliegue usa el repositorio independiente del Space y no publica `docs/sigip/`, fuentes de levantamiento, pruebas ni archivos locales. Los scripts se niegan a subir a cualquier identificador distinto del Space canónico.
 
 ## Configuración requerida
 
-Variables incluidas en el entorno del contenedor:
+Variables del contenedor:
 
 - `NODE_ENV=production`;
 - `PORT=7860`;
@@ -28,6 +26,8 @@ Secret obligatorio del Space, sin registrar su valor en archivos, historial o lo
 
 - `JWT_SECRET`: cadena aleatoria robusta de al menos 32 caracteres.
 
+Los nombres técnicos de las variables se conservan por compatibilidad interna. La interfaz presenta el sistema sin expresiones propias del perfil de presentación.
+
 ## Paquete de publicación saneado
 
 Desde la raíz del repositorio:
@@ -36,13 +36,13 @@ Desde la raíz del repositorio:
 .\deploy\huggingface-space\prepare-space.ps1
 ```
 
-El comando reconstruye `.space-package/` usando una lista permitida: Dockerfile, metadatos públicos mínimos y código ejecutable de frontend/backend. Excluye `docs/sigip/`, Git, pruebas, archivos `.env`, ZIP, videos, transcripciones, documentos fuente, dependencias locales y artefactos de compilación.
+El comando reconstruye `.space-package/` mediante una lista permitida: Dockerfile, metadatos públicos mínimos y código ejecutable de frontend/backend. Excluye documentación interna, Git, pruebas, `.env`, ZIP, videos, transcripciones, documentos fuente, dependencias locales y artefactos de compilación.
 
 ## Construcción y prueba local
 
 ```powershell
-docker build --no-cache -t sigip-dp-demo:local .space-package
-docker run --rm --name sigip-dp-demo -p 7860:7860 --env JWT_SECRET sigip-dp-demo:local
+docker build --no-cache -t sigip-dp-presentation:local .space-package
+docker run --rm --name sigip-dp-presentation -p 7860:7860 --env JWT_SECRET sigip-dp-presentation:local
 ```
 
 `JWT_SECRET` debe existir previamente en el entorno local; el comando transmite la variable sin escribir ni mostrar su valor.
@@ -57,56 +57,40 @@ Invoke-WebRequest http://127.0.0.1:7860/portal -UseBasicParsing
 .\deploy\huggingface-space\smoke-test.ps1 -BaseUrl http://127.0.0.1:7860
 ```
 
-## Actualización del Space existente
+## Publicación
 
-La cuenta actual no puede crear nuevos Docker Spaces sin PRO. El despliegue reutiliza el Docker Space existente y privado, sin intentar crearlo nuevamente. Con `huggingface_hub` instalado y autenticación local:
+Con `huggingface_hub` instalado y una sesión local ya autenticada:
 
 ```powershell
 .\deploy\huggingface-space\publish-space.ps1 `
-  -SpaceId shcampinof/paloma-bot `
+  -SpaceId shcampinof/reparto-misiones-dndp `
   -Package .space-package
 ```
 
-El script se niega a publicar si el Space no es privado o no usa Docker. Sincroniza exclusivamente el paquete saneado sobre el repositorio separado del Space y espera el resultado del build. `JWT_SECRET` debe permanecer configurado como Secret en **Space → Settings → Variables and secrets**.
+El script valida el destino exacto y el SDK Docker, sincroniza únicamente el paquete saneado y espera el resultado del build. No solicita ni imprime tokens. `JWT_SECRET` debe permanecer configurado como Secret en **Space → Settings → Variables and secrets**.
 
 En cada actualización:
 
-1. ejecute lint, pruebas y build;
+1. ejecute lint, formato, pruebas API y de navegador, build y smoke local;
 2. regenere `.space-package/`;
 3. revise su inventario y busque secretos o datos reales;
-4. construya y pruebe la imagen desde cero;
-5. suba el directorio saneado;
-6. espere el estado `RUNNING` y repita los smoke tests autenticados.
+4. construya y pruebe la imagen desde cero cuando Docker esté disponible;
+5. publique exclusivamente en `shcampinof/reparto-misiones-dndp`;
+6. espere `RUNNING` y repita el smoke remoto.
 
-La validación remota del despliegue comprobó `/api/health`, `/api/ready`, la SPA, el refresco de `/portal`, acceso por perfil, el recorrido completo de Investigación, el recorrido completo de Víctimas y el restablecimiento a seis casos iniciales.
-
-Para un Space privado, el smoke acepta `-HfToken` y envía la autenticación de Hugging Face separada del JWT de SIGIP. El valor debe obtenerse del almacén local seguro y nunca escribirse en archivos ni imprimirse en la consola.
-
-## Restablecimiento de la demo
+## Restablecimiento de la información inicial
 
 - Desde la interfaz: entrar como **Administrador del sistema** y seleccionar **Restablecer información inicial**.
-- Desde infraestructura: reiniciar el Space. `DEMO_RESET_ON_START=true` reconstruye las semillas sintéticas al iniciar cada contenedor.
+- Desde infraestructura: reiniciar el Space. `DEMO_RESET_ON_START=true` reconstruye internamente el perfil de presentación al iniciar cada contenedor.
 
-## Limitaciones de almacenamiento
+El administrador conserva esta función técnica y consulta global. No puede aprobar, repartir, devolver informes o cerrar solicitudes por su rol.
 
-El repositorio de demostración está en memoria. Los cambios sobreviven mientras vive el proceso, pero pueden perderse cuando Hugging Face reinicia, suspende o reconstruye el contenedor. Esto es deliberado para la presentación y no constituye persistencia productiva.
+## Limitaciones
 
-## Preparación antes de una reunión
+El repositorio de presentación está en memoria. Los cambios sobreviven mientras vive el proceso, pero pueden perderse cuando Hugging Face reinicia, suspende o reconstruye el contenedor. Esto no constituye persistencia productiva.
 
-1. Abra la página privada del Space con una cuenta autorizada.
-2. Confirme que el estado sea `RUNNING` y que `/api/ready` responda `ready`.
-3. restablezca la información inicial con **Administrador del sistema**;
-4. compruebe el banner permanente **“Ambiente de demostración — datos no reales”**;
-5. recorra una radicación de Investigación y una solicitud pericial de Víctimas;
-6. mantenga abierta la pantalla inicial unos minutos antes de presentar para evitar esperas por reanudación del Space.
+No hay Oracle, SharePoint, AD/Entra ID, correo real, migración histórica ni interoperabilidad institucional. Los valores de plazo, cobertura y desempate pendientes continúan identificados internamente como no aprobados.
 
 ## Reversa
 
-El contenido anterior de Paloma Bot quedó respaldado fuera del repositorio SIGIP-DP en `C:\Users\Pc\Desktop\HF_SPACE_BACKUPS\paloma-bot-b9b011b5c78e`, correspondiente a la revisión `b9b011b5c78ed6c30e5330d7ad0c28c963637063`. Ese respaldo puede contener información del sistema anterior y no debe copiarse, publicarse ni incorporarse a SIGIP-DP.
-
-1. mantenga el Space privado;
-2. cargue el respaldo como un commit de reversa o restaure la revisión anterior desde **Files and versions**;
-3. espere la reconstrucción y valide el comportamiento de la aplicación restaurada;
-4. para fallos exclusivamente relacionados con los datos temporales de SIGIP-DP, reinicie o restablezca la demo en lugar de revertir código.
-
-La reversa no modifica el repositorio GitHub principal ni despliega componentes institucionales.
+La reversa permitida se limita a una revisión anterior del mismo Space canónico, desde **Files and versions**, seguida por validación de build y smoke. No se copia contenido ni se publica en repositorios o Spaces ajenos al destino canónico.

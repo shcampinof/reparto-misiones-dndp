@@ -8,7 +8,7 @@
 4. No envíe el siguiente prompt hasta que las pruebas del paso actual estén verdes y Codex haya informado los pendientes.
 5. Codex puede crear commits locales, pero no debe hacer `push`, desplegar ni usar credenciales reales sin autorización expresa.
 
-Los prompts asumen el repositorio `mesa-atencion-investigativa`, actualmente basado en React y Express. Si el repositorio cambia, Codex debe actualizar el diagnóstico antes de implementar.
+Los prompts asumen el repositorio canónico `reparto-misiones-dndp`, actualmente basado en React y Express. Si el repositorio cambia, Codex debe actualizar el diagnóstico antes de implementar.
 
 ---
 

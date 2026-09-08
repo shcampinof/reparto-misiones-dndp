@@ -60,16 +60,26 @@ export function createDemoService({
     rejectClientAssignee(payload);
     const spoa = text(payload.spoa);
     const delito = text(payload.delito);
-    const service = text(payload.service);
-    const region = text(payload.region);
+    const requestedItems = Array.isArray(payload.items)
+      ? payload.items
+      : [{ service: payload.service, region: payload.region }];
     if (!/^\d{21}$/.test(spoa))
       throw businessError("SPOA debe contener 21 dígitos");
-    requireCatalog(
-      service,
-      CATALOGS.investigationServices,
-      "Especialidad no válida",
-    );
-    requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
+    if (requestedItems.length < 1) {
+      throw businessError("Registre al menos una especialidad");
+    }
+    const itemSpecs = requestedItems.map((requested) => {
+      rejectClientAssignee(requested);
+      const service = text(requested.service);
+      const region = text(requested.region);
+      requireCatalog(
+        service,
+        CATALOGS.investigationServices,
+        "Especialidad no válida",
+      );
+      requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
+      return { service, region };
+    });
     if (!delito) throw businessError("Delito es obligatorio");
 
     return repository.transaction((state) => {
@@ -83,29 +93,30 @@ export function createDemoService({
         externalId: spoa,
         summary: delito,
         createdAt: at,
-        items: [
-          {
-            id: `MT-2026-${number}`,
-            service,
-            region,
-            law: null,
-            status: "RADICADA",
-            assigneeId: null,
-            dueDate: null,
-            progress: 0,
-            reportReference: null,
-            assignment: null,
-            timeline: [
-              timelineEvent(
-                at,
-                null,
-                "RADICADA",
-                auth.sub,
-                "Solicitud de misión radicada",
-              ),
-            ],
-          },
-        ],
+        items: itemSpecs.map((spec, index) => ({
+          id:
+            itemSpecs.length === 1
+              ? `MT-2026-${number}`
+              : `MT-2026-${number}-${String(index + 1).padStart(2, "0")}`,
+          service: spec.service,
+          region: spec.region,
+          law: null,
+          status: "RADICADA",
+          assigneeId: null,
+          dueDate: null,
+          progress: 0,
+          reportReference: null,
+          assignment: null,
+          timeline: [
+            timelineEvent(
+              at,
+              null,
+              "RADICADA",
+              auth.sub,
+              "Solicitud de misión radicada",
+            ),
+          ],
+        })),
       };
       state.requests.unshift(request);
       return presentRequest(state, request);
@@ -247,18 +258,34 @@ export function createDemoService({
     assertRole(auth, ["rjv"]);
     rejectClientAssignee(payload);
     const externalId = text(payload.externalId);
-    const law = text(payload.law);
-    const service = text(payload.service);
-    const region = text(payload.region);
+    const requestedItems = Array.isArray(payload.items)
+      ? payload.items
+      : [
+          {
+            law: payload.law,
+            service: payload.service,
+            region: payload.region,
+          },
+        ];
     const victimCount = Number(payload.victimCount);
     if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
       throw businessError(
         "Use un número de radicado con formato RAD-AAAA-NNNN",
       );
     }
-    requireCatalog(law, CATALOGS.laws, "Ley o programa no válido");
-    requireCatalog(service, CATALOGS.victimServices, "Peritaje no válido");
-    requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
+    if (requestedItems.length < 1) {
+      throw businessError("Registre al menos un ítem pericial");
+    }
+    const itemSpecs = requestedItems.map((requested) => {
+      rejectClientAssignee(requested);
+      const law = text(requested.law ?? payload.law);
+      const service = text(requested.service);
+      const region = text(requested.region ?? payload.region);
+      requireCatalog(law, CATALOGS.laws, "Ley o programa no válido");
+      requireCatalog(service, CATALOGS.victimServices, "Peritaje no válido");
+      requireCatalog(region, CATALOGS.regions, "Cobertura no válida");
+      return { law, service, region };
+    });
     if (!Number.isInteger(victimCount) || victimCount < 1) {
       throw businessError("Registre al menos una persona vinculada");
     }
@@ -272,35 +299,38 @@ export function createDemoService({
         area: "VICTIMAS",
         ownerUserId: auth.sub,
         externalId,
-        summary: `${service} · ${law}`,
+        summary: itemSpecs
+          .map((spec) => `${spec.service} · ${spec.law}`)
+          .join(" / "),
         createdAt: at,
         persons: Array.from({ length: victimCount }, (_, index) => ({
           alias: `Persona vinculada ${String(index + 1).padStart(3, "0")}`,
           type: index === 0 ? "DIRECTA" : "INDIRECTA",
         })),
-        items: [
-          {
-            id: `VIC-ITEM-DEMO-${number}`,
-            service,
-            region,
-            law,
-            status: "PENDIENTE_APROBACION_PAG",
-            assigneeId: null,
-            dueDate: null,
-            progress: 0,
-            reportReference: null,
-            assignment: null,
-            timeline: [
-              timelineEvent(
-                at,
-                null,
-                "PENDIENTE_APROBACION_PAG",
-                auth.sub,
-                "Solicitud pericial enviada a aprobación previa",
-              ),
-            ],
-          },
-        ],
+        items: itemSpecs.map((spec, index) => ({
+          id:
+            itemSpecs.length === 1
+              ? `VIC-ITEM-DEMO-${number}`
+              : `VIC-ITEM-DEMO-${number}-${String(index + 1).padStart(2, "0")}`,
+          service: spec.service,
+          region: spec.region,
+          law: spec.law,
+          status: "PENDIENTE_APROBACION_PAG",
+          assigneeId: null,
+          dueDate: null,
+          progress: 0,
+          reportReference: null,
+          assignment: null,
+          timeline: [
+            timelineEvent(
+              at,
+              null,
+              "PENDIENTE_APROBACION_PAG",
+              auth.sub,
+              "Solicitud pericial enviada a aprobación previa",
+            ),
+          ],
+        })),
       };
       request.versions = [
         victimsSubmissionVersion({
@@ -652,6 +682,12 @@ function victimsSubmissionVersion({
       service: item.service,
       region: item.region,
       law: item.law,
+      items: request.items.map((requestItem) => ({
+        id: requestItem.id,
+        service: requestItem.service,
+        region: requestItem.region,
+        law: requestItem.law,
+      })),
     },
   };
 }
@@ -744,6 +780,7 @@ function assertRole(auth, allowed) {
 }
 
 function rejectClientAssignee(payload) {
+  if (!payload || typeof payload !== "object") return;
   if (
     payload.assigneeId ||
     payload.investigadorId ||

@@ -45,8 +45,8 @@ No usan contraseña; se seleccionan desde la pantalla inicial.
 ## Limitaciones que deben explicarse
 
 - Es una demo de reunión, no el MVP productivo ni un ambiente institucional.
-- El repositorio temporal vive en memoria durante la ejecución. Al reiniciar la API o restablecer la demo se recuperan semillas reproducibles.
+- El perfil de presentación usa SQLite local. El Space puede perder su disco al reiniciar; al iniciar o restablecer se recupera información ficticia reproducible.
 - Plazos, catálogos, coberturas y desempates pendientes están identificados como **valores de demostración**; deben validarse antes de producción.
 - No hay Oracle, SharePoint, AD/Entra ID, correo real, migración histórica ni interoperabilidad institucional.
 - No se incluyen datos reales, credenciales reales ni archivos documentales.
-- La futura persistencia Oracle debe sustituir la interfaz de repositorio sin trasladar lógica de negocio al frontend.
+- El adaptador Oracle comparte los contratos del repositorio y permanece desconectado en esta presentación; no traslada lógica de negocio al frontend.

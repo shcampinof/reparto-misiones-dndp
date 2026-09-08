@@ -8,7 +8,7 @@ import { createSilentLogger } from "../../src/shared/logger.js";
 
 const TEST_SECRET = "test-secret-with-at-least-thirty-two-characters";
 
-function testApp(overrides = {}) {
+async function testApp(overrides = {}) {
   const config = createConfig({
     NODE_ENV: "test",
     JWT_SECRET: TEST_SECRET,
@@ -39,7 +39,7 @@ function itemFrom(response) {
 }
 
 test("salud, cuentas sintéticas y protección de rutas", async () => {
-  const app = testApp();
+  const app = await testApp();
   const health = await request(app)
     .get("/api/health")
     .set("x-request-id", "demo-correlation-1")
@@ -48,7 +48,8 @@ test("salud, cuentas sintéticas y protección de rutas", async () => {
   assert.equal(health.headers["x-request-id"], "demo-correlation-1");
 
   const ready = await request(app).get("/api/health/ready").expect(200);
-  assert.equal(ready.body.checks.persistence, "demo-memory-resettable");
+  assert.equal(ready.body.checks.persistence.driver, "sqlite");
+  assert.equal(ready.body.checks.persistence.status, "ready");
   const spaceReady = await request(app).get("/api/ready").expect(200);
   assert.equal(spaceReady.body.status, "ready");
 
@@ -72,7 +73,7 @@ test("salud, cuentas sintéticas y protección de rutas", async () => {
 });
 
 test("sirve la SPA en rutas internas sin interceptar endpoints API", async () => {
-  const app = testApp({ STATIC_DIR: "test/fixtures/public" });
+  const app = await testApp({ STATIC_DIR: "test/fixtures/public" });
   const portal = await request(app).get("/portal").expect(200);
   assert.match(portal.text, /SIGIP-DP fixture/);
   assert.match(portal.headers["content-type"], /text\/html/);
@@ -82,7 +83,7 @@ test("sirve la SPA en rutas internas sin interceptar endpoints API", async () =>
 });
 
 test("recorrido completo de Investigación exige aprobación final PAG", async () => {
-  const app = testApp();
+  const app = await testApp();
   const defender = await login(app, "demo-defensor");
   const investigator = await login(app, "demo-investigador");
   const pag = await login(app, "demo-pag-investigacion");
@@ -187,7 +188,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
 });
 
 test("recorrido completo de Víctimas tiene aprobación previa y cierre directo F-171", async () => {
-  const app = testApp();
+  const app = await testApp();
   const rjv = await login(app, "demo-rjv");
   const pag = await login(app, "demo-pag-victimas");
   const expert = await login(app, "demo-perito-psicologia");
@@ -255,7 +256,7 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
 });
 
 test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conservando versiones", async () => {
-  const app = testApp();
+  const app = await testApp();
   const rjv = await login(app, "demo-rjv");
   const pag = await login(app, "demo-pag-victimas");
   const created = await request(app)
@@ -326,7 +327,7 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
 });
 
 test("el administrador técnico no puede adoptar decisiones operativas", async () => {
-  const app = testApp();
+  const app = await testApp();
   const admin = await login(app, "demo-admin");
   const attempts = [
     request(app)
@@ -388,7 +389,7 @@ test("el administrador técnico no puede adoptar decisiones operativas", async (
 });
 
 test("la titularidad y el área protegen la corrección de solicitudes devueltas", async () => {
-  const app = testApp();
+  const app = await testApp();
   const rjv = await login(app, "demo-rjv");
   const pag = await login(app, "demo-pag-victimas");
   const otherRjv = tokenFor({
@@ -426,7 +427,7 @@ test("la titularidad y el área protegen la corrección de solicitudes devueltas
 });
 
 test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable", async () => {
-  const app = testApp();
+  const app = await testApp();
   const defender = await login(app, "demo-defensor");
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
@@ -454,7 +455,7 @@ test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable
 });
 
 test("restablecer demo recupera semillas reproducibles", async () => {
-  const app = testApp();
+  const app = await testApp();
   const defender = await login(app, "demo-defensor");
   const admin = await login(app, "demo-admin");
   await request(app)
@@ -493,7 +494,7 @@ test("restablecer demo recupera semillas reproducibles", async () => {
 });
 
 test("PAG puede devolver informe de Investigación con motivo y conservar documento", async () => {
-  const app = testApp();
+  const app = await testApp();
   const pag = await login(app, "demo-pag-investigacion");
 
   const missingReason = await request(app)
@@ -516,7 +517,7 @@ test("PAG puede devolver informe de Investigación con motivo y conservar docume
 });
 
 test("autorización separa roles, áreas y casos visibles", async () => {
-  const app = testApp();
+  const app = await testApp();
   const defender = await login(app, "demo-defensor");
   const rjv = await login(app, "demo-rjv");
   const investigator = await login(app, "demo-investigador");
@@ -558,8 +559,92 @@ test("autorización separa roles, áreas y casos visibles", async () => {
     .expect(403);
 });
 
+test("una solicitud conserva varios ítems con reparto independiente", async () => {
+  const app = await testApp();
+  const defender = await login(app, "demo-defensor");
+  const rjv = await login(app, "demo-rjv");
+  const pagVictims = await login(app, "demo-pag-victimas");
+
+  const investigation = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send({
+      spoa: "110016000049202600077",
+      delito: "Solicitud con dos especialidades",
+      items: [
+        { service: "INVESTIGACION_CAMPO", region: "BOGOTA" },
+        { service: "BALISTICA", region: "BOGOTA" },
+      ],
+    })
+    .expect(201);
+  assert.equal(investigation.body.request.items.length, 2);
+  const [firstInvestigation, secondInvestigation] =
+    investigation.body.request.items;
+  const assignedInvestigation = await request(app)
+    .post(`/api/demo/investigacion/items/${firstInvestigation.id}/repartir`)
+    .set(auth(defender))
+    .expect(200);
+  assert.equal(assignedInvestigation.body.request.items[0].status, "ASIGNADA");
+  assert.equal(
+    assignedInvestigation.body.request.items.find(
+      (item) => item.id === secondInvestigation.id,
+    ).status,
+    "RADICADA",
+  );
+
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send({
+      externalId: "RAD-2026-0077",
+      victimCount: 3,
+      items: [
+        {
+          law: "LEY_1448",
+          service: "PSICOLOGICO",
+          region: "BOGOTA",
+          peritoId: "per-demo-psi-01",
+        },
+      ],
+    })
+    .expect(400);
+
+  const victims = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send({
+      externalId: "RAD-2026-0078",
+      victimCount: 3,
+      items: [
+        {
+          law: "LEY_1448",
+          service: "PSICOLOGICO",
+          region: "BOGOTA",
+        },
+        {
+          law: "LEY_1448",
+          service: "ADMINISTRATIVO_FINANCIERO",
+          region: "BOGOTA",
+        },
+      ],
+    })
+    .expect(201);
+  assert.equal(victims.body.request.items.length, 2);
+  assert.equal(victims.body.request.versions[0].data.items.length, 2);
+  const firstVictims = victims.body.request.items[0];
+  const approvedVictims = await request(app)
+    .post(`/api/demo/victimas/items/${firstVictims.id}/aprobar-y-repartir`)
+    .set(auth(pagVictims))
+    .expect(200);
+  assert.equal(approvedVictims.body.request.items[0].status, "ASIGNADA");
+  assert.equal(
+    approvedVictims.body.request.items[1].status,
+    "PENDIENTE_APROBACION_PAG",
+  );
+});
+
 test("rutas desconocidas y JSON inválido usan errores correlacionados", async () => {
-  const app = testApp();
+  const app = await testApp();
   const missing = await request(app).get("/api/no-existe").expect(404);
   assert.equal(missing.body.error.code, "ROUTE_NOT_FOUND");
   const invalid = await request(app)

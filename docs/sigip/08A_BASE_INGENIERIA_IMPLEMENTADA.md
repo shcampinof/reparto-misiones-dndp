@@ -1,5 +1,7 @@
 # Base de ingeniería implementada — SIGIP-DP
 
+> Nota de evolución (8-sep-2026): este documento conserva la fotografía de la fase anterior. `15_MAPEO_MODELO_ORACLE.md` y la rama de persistencia dual sustituyen las afirmaciones vigentes sobre memoria y versión de Node.
+
 **Fase:** PROMPT 1  
 **Rama:** `refactor/sigip-mvp`  
 **Alcance funcional:** ninguno nuevo; reorganización técnica compatible con el prototipo.

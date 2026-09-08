@@ -7,7 +7,55 @@ test("desarrollo genera un secreto efimero cuando no se configura JWT", () => {
   assert.equal(config.environment, "development");
   assert.equal(config.auth.ephemeralJwtSecret, true);
   assert.equal(config.auth.demoEnabled, false);
+  assert.equal(config.appProfile, "presentation");
+  assert.equal(config.persistence.driver, "sqlite");
   assert.ok(config.auth.jwtSecret.length >= 32);
+});
+
+test("perfil institucional exige Oracle, secretos externos y cuenta dedicada", () => {
+  assert.throws(
+    () =>
+      createConfig({
+        NODE_ENV: "development",
+        APP_PROFILE: "institutional",
+        PERSISTENCE_DRIVER: "oracle",
+      }),
+    (error) =>
+      error instanceof ConfigurationError &&
+      error.issues.includes("ORACLE_USER es obligatorio") &&
+      error.issues.includes("ORACLE_PASSWORD es obligatorio") &&
+      error.issues.includes("ORACLE_CONNECT_STRING es obligatorio"),
+  );
+  assert.throws(
+    () =>
+      createConfig({
+        NODE_ENV: "development",
+        APP_PROFILE: "institutional",
+        PERSISTENCE_DRIVER: "oracle",
+        ORACLE_USER: "SYSTEM",
+        ORACLE_PASSWORD: "external-secret",
+        ORACLE_CONNECT_STRING: "db.example.invalid/service",
+      }),
+    (error) =>
+      error instanceof ConfigurationError &&
+      error.issues.includes("ORACLE_USER no puede ser SYS ni SYSTEM"),
+  );
+});
+
+test("no admite combinaciones de perfil y driver que dispersen lógica", () => {
+  assert.throws(
+    () =>
+      createConfig({
+        NODE_ENV: "test",
+        APP_PROFILE: "presentation",
+        PERSISTENCE_DRIVER: "oracle",
+      }),
+    (error) =>
+      error instanceof ConfigurationError &&
+      error.issues.includes(
+        "APP_PROFILE=presentation requiere PERSISTENCE_DRIVER=sqlite",
+      ),
+  );
 });
 
 test("produccion exige un secreto robusto", () => {

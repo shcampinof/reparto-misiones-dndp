@@ -12,12 +12,20 @@
     "test": "node --test",
     "test:unit": "node --test test/unit/config.test.js test/unit/logger.test.js",
     "test:api": "node --test test/api/app.test.js",
+    "test:persistence": "node --test test/contracts/sqlite-domain-repository.contract.test.js test/contracts/oracle-live.contract.test.js test/migrations/migrations.test.js test/persistence/sqlite-persistence.test.js",
+    "test:oracle-contract": "node --test test/contracts/oracle-live.contract.test.js",
+    "migrate:sqlite": "node scripts/migrate-sqlite.js",
+    "migrate:oracle": "node scripts/migrate-oracle.js",
     "check": "npm run lint && npm run format:check && npm test"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "oracledb": "^7.0.1"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

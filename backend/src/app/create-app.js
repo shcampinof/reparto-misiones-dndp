@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
-import { InMemoryDemoRepository } from "../infrastructure/demo/demo-repository.js";
 import { buildDemoUsers } from "../infrastructure/demo/demo-users.js";
+import { createPersistence } from "../infrastructure/persistence/index.js";
 import { assignmentModule } from "../modules/assignment/index.js";
 import { createAuthMiddleware } from "../modules/core/auth/middleware.js";
 import { createAuthRouter } from "../modules/core/auth/router.js";
@@ -17,7 +17,7 @@ import { integrationsModule } from "../modules/integrations/index.js";
 import { investigationModule } from "../modules/investigacion/index.js";
 import { reportingModule } from "../modules/reporting/index.js";
 import { victimsModule } from "../modules/victimas/index.js";
-import { AppError } from "../shared/errors.js";
+import { AppError, asyncHandler } from "../shared/errors.js";
 import {
   errorHandler,
   notFoundHandler,
@@ -25,17 +25,23 @@ import {
 import { requestContext } from "../shared/middleware/request-context.js";
 import { requestLogger } from "../shared/middleware/request-logger.js";
 
-export function createApp({ config, logger }) {
+export async function createApp({ config, logger, persistence = null }) {
   const app = express();
+  const activePersistence =
+    persistence || (await createPersistence({ config, logger }));
   const users = buildDemoUsers(config);
   const authService = createAuthService({ config, users });
   const authMiddleware = createAuthMiddleware(config);
-  const demoRepository = new InMemoryDemoRepository();
-  const demoService = createDemoService({ repository: demoRepository });
+  const demoRepository = activePersistence.presentationRepository;
+  const demoService = demoRepository
+    ? createDemoService({ repository: demoRepository })
+    : null;
 
   app.disable("x-powered-by");
   app.locals.config = config;
   app.locals.demoRepository = demoRepository;
+  app.locals.domainRepository = activePersistence.domainRepository;
+  app.locals.persistence = activePersistence;
   app.locals.modules = [
     coreModule,
     investigationModule,
@@ -68,10 +74,22 @@ export function createApp({ config, logger }) {
   }
   app.use(express.json({ limit: "5mb" }));
 
-  app.use("/api/health", createHealthRouter({ config }));
-  app.get("/api/ready", (req, res) => res.json(readinessPayload(req)));
+  app.use(
+    "/api/health",
+    createHealthRouter({ config, persistence: activePersistence }),
+  );
+  app.get(
+    "/api/ready",
+    asyncHandler(async (req, res) => {
+      const payload = await readinessPayload(req, activePersistence);
+      res.status(payload.ok ? 200 : 503).json(payload);
+    }),
+  );
   app.use("/api/auth", createAuthRouter({ authService, authMiddleware }));
   if (config.auth.demoEnabled) {
+    if (!demoService) {
+      throw new Error("El perfil activo no admite información de presentación");
+    }
     app.use("/api/demo", createDemoRouter({ authMiddleware, demoService }));
   }
 

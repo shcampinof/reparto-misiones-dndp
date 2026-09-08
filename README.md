@@ -1,20 +1,29 @@
 # SIGIP-DP
 
-Demostración funcional del **Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo**. Conserva estrategias y estados separados para Investigación y Víctimas sobre un monolito modular React + Express.
+Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo. Mantiene un monolito modular React + Express, flujos separados de Investigación y Víctimas y una sola base de código con persistencia intercambiable.
 
 - Repositorio canónico: `https://github.com/shcampinof/reparto-misiones-dndp`
 - Space canónico: `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`
-- Aplicación desplegada: `https://shcampinof-reparto-misiones-dndp.hf.space`
+- Aplicación de presentación: `https://shcampinof-reparto-misiones-dndp.hf.space`
 
-> Ambiente de demostración: utiliza únicamente personas, solicitudes, referencias y documentos sintéticos. El almacén temporal en memoria no es la persistencia productiva prevista.
+> El perfil de presentación usa únicamente identidades, solicitudes y referencias ficticias. No contiene datos, documentos ni credenciales institucionales.
+
+## Perfiles de ejecución
+
+| Perfil | Driver | Uso |
+|---|---|---|
+| `APP_PROFILE=presentation` | `PERSISTENCE_DRIVER=sqlite` | Base local migrada, información reproducible y experiencia visible actual. El disco del Space puede reiniciarse. |
+| `APP_PROFILE=institutional` | `PERSISTENCE_DRIVER=oracle` | Pool `node-oracledb` Thin, transacciones y health/readiness reales. Requiere secretos y esquema dedicado. |
+
+La configuración rechaza combinaciones cruzadas. Los módulos consumen contratos de repositorio; la lógica de negocio no decide qué base se usa.
 
 ## Ejecución local
 
-Requiere Node.js 20 LTS recomendado (mínimo 18) y npm.
+Requiere Node.js 24 o posterior y npm.
 
 ```powershell
 Copy-Item .env.demo.example .env
-cd backend
+Set-Location backend
 npm ci
 npm start
 ```
@@ -22,7 +31,7 @@ npm start
 En otra terminal:
 
 ```powershell
-cd frontend
+Set-Location frontend
 npm ci
 npm run dev
 ```
@@ -30,54 +39,64 @@ npm run dev
 - Aplicación: `http://localhost:5173`
 - API: `http://localhost:4000`
 - Salud: `http://localhost:4000/api/health`
+- Readiness: `http://localhost:4000/api/ready`
 
-La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Administrador, Defensor, Investigador y PAG Investigación; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. El perfil `Administrador del sistema` conserva consulta global, gestión técnica y restablecimiento, pero no adopta decisiones operativas.
-
-El modo demo se habilita de forma explícita con `ENABLE_DEMO_ACCOUNTS=true` y está prohibido por configuración en producción. No se requieren ni se publican credenciales.
+SQLite aplica automáticamente las migraciones de `backend/migrations/sqlite`. Con `DEMO_RESET_ON_START=false`, la información local sobrevive reinicios; el administrador técnico puede restablecer el contenido de presentación sin adquirir permisos operativos.
 
 ## Verificación
 
 ```powershell
-cd backend
+Set-Location backend
 npm run lint
 npm run format:check
 npm test
+npm run test:persistence
 
-cd ..\frontend
+Set-Location ..\frontend
 npm run lint
 npm run format:check
 npm run build
 npm run test:browser
 ```
 
-Las pruebas API y de navegador recorren ambos flujos completos, devolución/corrección/reenvío en Víctimas, autorización por área y titularidad, reparto exclusivo del backend, restricción operativa del administrador y restablecimiento reproducible.
+Las pruebas cubren los recorridos completos de ambas áreas, devolución/corrección/reenvío en Víctimas, permisos, titularidad, reparto calculado por el backend, multiítem, migraciones, rollback, control optimista, doble asignación, historial y auditoría. El contrato Oracle se omite si no se configura explícitamente un esquema no productivo; nunca se simula una conexión exitosa.
 
-## Despliegue vigente
+## Migraciones
 
-- La versión funcional se publica en el Space Docker canónico: `https://shcampinof-reparto-misiones-dndp.hf.space`.
-- GitHub Pages queda como alternativa manual para el frontend. Requiere configurar `VITE_API_URL` con una API pública HTTPS operativa; no se activa automáticamente al actualizar `main`.
+```powershell
+Set-Location backend
+npm run migrate:sqlite
+```
 
-## Arquitectura de la demo
+Oracle está bloqueado de forma predeterminada. Solo una ventana aprobada en un esquema no productivo debe establecer `ALLOW_ORACLE_MIGRATION=true`. No use `SYS`, `SYSTEM` ni un propietario compartido.
+
+Consulte [el mapeo Oracle](docs/sigip/15_MAPEO_MODELO_ORACLE.md) y [la guía de servidor](docs/sigip/16_DESPLIEGUE_SERVIDOR_DEFENSORIA.md) antes de probar la conexión institucional.
+
+## Modelo de esta fase
 
 ```text
 backend/src/
-  app/                         composición HTTP
-  infrastructure/demo/         semillas y repositorio temporal sustituible
-  modules/core/                 identidad, autorización y salud
-  modules/investigacion/        frontera del flujo investigativo
-  modules/victimas/             frontera del flujo pericial
-  modules/assignment/strategies estrategias separadas de reparto
-  modules/demo/                 caso de uso integrado para la presentación
-frontend/src/                   acceso por roles, tableros, acciones y trazabilidad
+  app/                              composición HTTP
+  domain/                           invariantes compartidos
+  infrastructure/persistence/
+    sqlite/                         migrador y repositorios locales
+    oracle/                         pool Thin, migrador y adaptador Oracle
+  modules/core/                     identidad, autorización, salud y auditoría
+  modules/investigacion/            frontera del flujo investigativo
+  modules/victimas/                 frontera del flujo pericial
+  modules/assignment/               decisión, candidatos, exclusiones y reparto
+backend/migrations/{sqlite,oracle}/ esquemas equivalentes versionados
+frontend/src/                       interfaz en español y recorridos vigentes
 ```
 
-Las decisiones pendientes usan parámetros rotulados como `Valores de demostración` y una versión de política. Cada reparto registra candidatos, exclusiones, métricas y motivo. El cliente nunca envía el funcionario seleccionado.
+El esquema separa caso, solicitud, varios ítems, personas y relaciones, decisiones de reparto, asignaciones/reasignaciones, transiciones, documentos/versiones, productos, parámetros, novedades, auditoría y outbox. No fija cantidades de regionales, plazos, semáforos, cargas o ampliaciones pendientes de decisión.
 
-## Límites
+## Límites actuales
 
-- El almacén vive durante la ejecución, se repone al reiniciar y puede restablecerse desde la interfaz.
-- Los plazos usan días calendario exclusivamente para la demostración; no representan una regla aprobada.
-- Oracle, SharePoint, AD/Entra ID, correo, migración histórica y datos institucionales no están habilitados.
-- No debe exponerse esta configuración como ambiente productivo.
+- El perfil institucional todavía no integra SSO, IRIS, repositorio documental ni correo.
+- No se ejecutó DDL ni migración sobre Oracle real.
+- El perfil de presentación conserva parámetros internos no aprobados para hacer reproducible el recorrido.
+- PAG Central, Administrador Regional y Defensor Regional continúan pendientes de RACI y deshabilitados.
+- No se inventa una revisión previa de Investigación ni un override manual de requisitos de elegibilidad.
 
-Consulte [la guía de demostración](docs/sigip/11_GUIA_DE_DEMOSTRACION.md), [la línea base técnica](docs/sigip/08_LINEA_BASE_TECNICA.md), [la base de ingeniería](docs/sigip/08A_BASE_INGENIERIA_IMPLEMENTADA.md) y [las brechas funcionales/RACI](docs/sigip/14_BRECHAS_FUNCIONALES_Y_RACI.md).
+Consulte además [las brechas funcionales/RACI](docs/sigip/14_BRECHAS_FUNCIONALES_Y_RACI.md), [las reglas consolidadas](docs/sigip/02_REGLAS_DE_NEGOCIO_SIGIP_DP.md) y [la guía de demostración](docs/sigip/11_GUIA_DE_DEMOSTRACION.md).

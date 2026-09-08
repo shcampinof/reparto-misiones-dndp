@@ -20,4 +20,4 @@ Incluye recorridos separados para Investigación y Víctimas. La asignación se 
 
 El repositorio debe permanecer **privado**. Requiere el Secret `JWT_SECRET`, configurado en los ajustes del Space y nunca almacenado en archivos. La aplicación escucha en el puerto `7860`.
 
-La información inicial se reconstruye cuando inicia el contenedor y puede restablecerse desde el perfil **Administrador del sistema**.
+El perfil usa SQLite local con migraciones y contenido ficticio reproducible. El disco del Space puede reiniciarse; la información inicial se reconstruye al iniciar el contenedor y puede restablecerse desde el perfil **Administrador del sistema**.

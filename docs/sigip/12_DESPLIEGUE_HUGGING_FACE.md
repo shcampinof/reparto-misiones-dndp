@@ -87,7 +87,7 @@ El administrador conserva esta función técnica y consulta global. No puede apr
 
 ## Limitaciones
 
-El repositorio de presentación está en memoria. Los cambios sobreviven mientras vive el proceso, pero pueden perderse cuando Hugging Face reinicia, suspende o reconstruye el contenedor. Esto no constituye persistencia productiva.
+El perfil de presentación usa SQLite migrado en el disco local del contenedor. Los cambios sobreviven mientras se conserve esa instancia, pero pueden perderse cuando Hugging Face reinicia, suspende o reconstruye el contenedor. La información ficticia se reconstruye de forma reproducible; esto no constituye persistencia institucional.
 
 No hay Oracle, SharePoint, AD/Entra ID, correo real, migración histórica ni interoperabilidad institucional. Los valores de plazo, cobertura y desempate pendientes continúan identificados internamente como no aprobados.
 

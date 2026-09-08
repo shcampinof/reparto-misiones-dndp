@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 
 const ENVIRONMENTS = new Set(["development", "test", "production"]);
 const LOG_LEVELS = new Set(["debug", "info", "warn", "error", "silent"]);
+const APP_PROFILES = new Set(["presentation", "institutional"]);
+const PERSISTENCE_DRIVERS = new Set(["sqlite", "oracle"]);
 
 export class ConfigurationError extends Error {
   constructor(issues) {
@@ -25,6 +27,15 @@ function integerValue(value, fallback, name, issues) {
   return parsed;
 }
 
+function boundedInteger(value, fallback, name, issues, { minimum = 0 } = {}) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < minimum) {
+    issues.push(`${name} debe ser un entero mayor o igual a ${minimum}`);
+    return fallback;
+  }
+  return parsed;
+}
+
 function listValue(value, fallback = []) {
   if (!value) return fallback;
   return String(value)
@@ -41,11 +52,29 @@ export function createConfig(env = process.env) {
   const logLevel = env.LOG_LEVEL || "info";
   if (!LOG_LEVELS.has(logLevel)) issues.push("LOG_LEVEL no es valido");
 
+  const appProfile = env.APP_PROFILE || "presentation";
+  if (!APP_PROFILES.has(appProfile)) issues.push("APP_PROFILE no es valido");
+  const expectedDriver = appProfile === "institutional" ? "oracle" : "sqlite";
+  const persistenceDriver = env.PERSISTENCE_DRIVER || expectedDriver;
+  if (!PERSISTENCE_DRIVERS.has(persistenceDriver)) {
+    issues.push("PERSISTENCE_DRIVER no es valido");
+  }
+  if (persistenceDriver !== expectedDriver) {
+    issues.push(
+      `APP_PROFILE=${appProfile} requiere PERSISTENCE_DRIVER=${expectedDriver}`,
+    );
+  }
+
   const productionDemoMode = booleanValue(env.DEMO_MODE, false);
   const demoEnabled =
     productionDemoMode || booleanValue(env.ENABLE_DEMO_ACCOUNTS, false);
   if (demoEnabled && environment === "production" && !productionDemoMode) {
     issues.push("ENABLE_DEMO_ACCOUNTS no puede habilitarse en produccion");
+  }
+  if (demoEnabled && appProfile === "institutional") {
+    issues.push(
+      "Las cuentas de presentación no pueden habilitarse en el perfil institucional",
+    );
   }
 
   let jwtSecret = String(env.JWT_SECRET || "").trim();
@@ -75,7 +104,65 @@ export function createConfig(env = process.env) {
     defensor_regional: false,
   };
 
+  const oracle = {
+    user: String(env.ORACLE_USER || "").trim(),
+    password: String(env.ORACLE_PASSWORD || ""),
+    connectString: String(env.ORACLE_CONNECT_STRING || "").trim(),
+    poolMin: boundedInteger(env.ORACLE_POOL_MIN, 1, "ORACLE_POOL_MIN", issues),
+    poolMax: boundedInteger(env.ORACLE_POOL_MAX, 8, "ORACLE_POOL_MAX", issues, {
+      minimum: 1,
+    }),
+    poolIncrement: boundedInteger(
+      env.ORACLE_POOL_INCREMENT,
+      1,
+      "ORACLE_POOL_INCREMENT",
+      issues,
+      { minimum: 1 },
+    ),
+    poolTimeout: boundedInteger(
+      env.ORACLE_POOL_TIMEOUT,
+      60,
+      "ORACLE_POOL_TIMEOUT",
+      issues,
+    ),
+    queueTimeout: boundedInteger(
+      env.ORACLE_QUEUE_TIMEOUT,
+      15000,
+      "ORACLE_QUEUE_TIMEOUT",
+      issues,
+    ),
+    statementCacheSize: boundedInteger(
+      env.ORACLE_STATEMENT_CACHE_SIZE,
+      30,
+      "ORACLE_STATEMENT_CACHE_SIZE",
+      issues,
+    ),
+    allowMigration: booleanValue(env.ALLOW_ORACLE_MIGRATION, false),
+  };
+  if (appProfile === "institutional") {
+    if (!oracle.user) issues.push("ORACLE_USER es obligatorio");
+    if (!oracle.password) issues.push("ORACLE_PASSWORD es obligatorio");
+    if (!oracle.connectString)
+      issues.push("ORACLE_CONNECT_STRING es obligatorio");
+    if (["SYS", "SYSTEM"].includes(oracle.user.toUpperCase())) {
+      issues.push("ORACLE_USER no puede ser SYS ni SYSTEM");
+    }
+    if (oracle.poolMin > oracle.poolMax) {
+      issues.push("ORACLE_POOL_MIN no puede superar ORACLE_POOL_MAX");
+    }
+  }
+
   const config = {
+    appProfile,
+    persistence: {
+      driver: persistenceDriver,
+      sqlitePath:
+        String(env.SQLITE_PATH || "").trim() ||
+        (environment === "test"
+          ? ":memory:"
+          : "data/sigip-presentation.sqlite"),
+      oracle,
+    },
     environment,
     host: env.HOST || "0.0.0.0",
     port: integerValue(

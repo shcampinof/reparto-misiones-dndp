@@ -4,7 +4,7 @@ export function assignVictims(context) {
   return rankAndExplain({
     professionals: context.professionals,
     context,
-    strategyName: "VICTIMAS_DEMO_V1",
+    strategyName: "VICTIMAS_PRE_ORACLE_V1",
     now: context.now,
     exclusionRules: [
       (candidate) =>
@@ -12,7 +12,9 @@ export function assignVictims(context) {
       (candidate) =>
         exclusion(
           "Disciplina no habilitada",
-          !candidate.specialties.includes(context.service),
+          !context.specialtyIds.some((specialtyId) =>
+            candidate.specialties.includes(specialtyId),
+          ),
         ),
       (candidate) =>
         exclusion(

@@ -26,6 +26,27 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 | RN-ALC-006 | El área de una solicitud será obligatoria e inmutable después de radicar. Una corrección de área exigirá anulación y nueva solicitud. | D |
 | RN-ALC-007 | Los registros no se eliminarán físicamente por operación funcional; se anularán o inactivarán con motivo y trazabilidad. | D |
 
+### 2.1 Glosario operativo pre-Oracle
+
+| Concepto | Definición vigente para el diseño |
+|---|---|
+| Caso | Contexto jurídico o de representación que puede originar varias solicitudes. |
+| Solicitud | Radicación del Defensor o RJV que agrupa datos comunes y uno o más ítems. |
+| Ítem de solicitud | Servicio específico con estado, plazo, asignación y producto propios. |
+| Servicio | Necesidad elegible del portafolio institucional. No equivale a una especialidad. |
+| Especialidad/disciplina | Conocimiento que determina qué ejecutores pueden atender un servicio. |
+| Asignación | Vinculación versionada de un ítem con un investigador o perito. |
+| Producto | Informe de Investigación, F-171 u otro entregable versionado. |
+| Actuación | Actividad objetiva registrada durante la ejecución; no es un porcentaje subjetivo. |
+| Ampliación | Nueva necesidad vinculada a un encargo cerrado; no borra su cierre original. |
+| Reasignación | Cambio del ejecutor de un ítem. |
+| Transferencia | Cambio del Defensor/RJV titular; no es reasignación. |
+| Novedad | Evento con vigencia que modifica disponibilidad o capacidad de recibir trabajo. |
+| Problema/incidente | Situación reportada sin cambio silencioso del estado principal. |
+| Catálogo de Servicios | Portafolio versionado que describe oferta, alcance, requisitos, exclusiones y producto. |
+| Dato maestro | Clasificación o parámetro con responsable, vigencia e historial. |
+| Oportunidad | Resultado objetivo de comparar eventos y plazo vigente; es distinto del estado y del semáforo. |
+
 ## 3. Reglas comunes
 
 ### 3.1 Identidad, roles y visibilidad
@@ -137,7 +158,7 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 
 | ID | Regla | Estado |
 |---|---|---|
-| RN-INV-010 | El portafolio inicial contiene 17 especialidades, incluida Ingeniería ambiental, sujeto al catálogo oficial vigente. | C/B |
+| RN-INV-010 | La fuente enumera 17 especialidades iniciales, incluida Ingeniería ambiental. Son datos semilla ampliables, no un límite ni 17 servicios institucionales. | B |
 | RN-INV-011 | Investigación de campo tiene una referencia de 25 días; debe confirmarse si son hábiles —HU-07— o calendario —reglas anteriores—. | P |
 | RN-INV-012 | Labores periciales tienen una referencia de 45 días; debe confirmarse si son hábiles —HU-07— o calendario —reglas anteriores—. | P |
 | RN-INV-013 | Investigación de campo bajo utilidad pública/Ley 2292 tiene como línea base 15 días calendario. | B |
@@ -329,3 +350,18 @@ Destinatarios y contenido se parametrizarán por evento y área.
 | Número de regionales | HU-10: 15; diccionario posterior: 34. | Catálogo institucional oficial y fuente maestra. |
 | Validación previa | HU-17 asigna aprobación/devolución al Administrador Regional para ambas áreas; HU-24 y reunión de Víctimas la ubican en PAG/supervisor. | RACI y secuencia exacta por área. |
 | Override manual | HU-26 permite ignorar regional y grado; reglas de elegibilidad requieren control de excepciones. | Restricciones no omitibles, autorizador y evidencia. |
+
+## 10. Contrato implementado en el cierre pre-Oracle
+
+El incremento `feat/cierre-funcional-pre-oracle` materializa, sin convertir pendientes en reglas aprobadas:
+
+- autorización de servidor por capacidad, área, titularidad/asignación y vigencia;
+- siete perfiles activos y perfiles adicionales propuestos pero deshabilitados;
+- servicios separados de especialidades o disciplinas, con versión, vigencia e historial;
+- uno o varios ítems por solicitud, con estado y reparto independientes;
+- actuaciones auditables sin porcentaje subjetivo;
+- estado, días restantes, semáforo y oportunidad como conceptos distintos;
+- reporte de problema persistido sin alterar el estado principal;
+- ampliación, prórroga, reasignación, transferencia, novedad y excepción bloqueadas mediante códigos de decisión.
+
+El detalle contractual y la evidencia esperada están en `17_CONTRATO_FUNCIONAL_PRE_ORACLE.md`; las decisiones abiertas se centralizan en `docs/decisions/README.md`.

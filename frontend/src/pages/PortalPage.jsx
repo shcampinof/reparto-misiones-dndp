@@ -20,6 +20,9 @@ const STATUS_LABELS = {
   EN_EJECUCION: "En ejecución",
   INFORME_ENTREGADO: "Informe entregado",
   CERRADA: "Cerrada",
+  EN_TRAMITE: "En trámite",
+  PARCIALMENTE_CERRADA: "Parcialmente cerrada",
+  SIN_ITEMS: "Sin ítems",
 };
 
 const AREA_META = {
@@ -41,6 +44,18 @@ const TRAYS = [
   { id: "POR_REVISAR", label: "Por revisar" },
   { id: "CERRADOS", label: "Cerrados" },
 ];
+
+const CAPABILITIES = {
+  RESET: "RESTABLECER_PRESENTACION",
+  CREATE_INVESTIGATION: "CREAR_SOLICITUD_INVESTIGACION",
+  ASSIGN_INVESTIGATION: "EJECUTAR_REPARTO_INVESTIGACION",
+  EXECUTE_INVESTIGATION: "EJECUTAR_ITEM_INVESTIGACION",
+  APPROVE_INVESTIGATION: "APROBAR_INFORME_INVESTIGACION",
+  CREATE_VICTIMS: "CREAR_SOLICITUD_VICTIMAS",
+  APPROVE_VICTIMS: "AVALAR_SOLICITUD_VICTIMAS",
+  CORRECT_VICTIMS: "CORREGIR_SOLICITUD_VICTIMAS",
+  EXECUTE_VICTIMS: "EJECUTAR_ITEM_VICTIMAS",
+};
 
 export default function PortalPage() {
   const { token, profile, logout } = useAuth();
@@ -155,10 +170,10 @@ export default function PortalPage() {
       ? { request: detailRequest, item: detailItem }
       : null;
   const dashboard = data.dashboards[area] || {
-    requests: 0,
-    pending: 0,
-    active: 0,
-    closed: 0,
+    requestCount: 0,
+    pendingItemCount: 0,
+    activeItemCount: 0,
+    closedItemCount: 0,
   };
   const canUseArea = (target) => data.allowedAreas.includes(target);
 
@@ -173,7 +188,7 @@ export default function PortalPage() {
             <strong>Defensoría del Pueblo</strong>
             <span>SIGIP-DP</span>
             <small>
-              Sistema de Información para la Gestión Investigativa y Pericial
+              Gestión investigativa y pericial de la Defensoría del Pueblo
             </small>
           </div>
         </div>
@@ -213,7 +228,7 @@ export default function PortalPage() {
             <h1>{AREA_META[area].label}</h1>
             <p>{AREA_META[area].subtitle}</p>
           </div>
-          {profile?.role === "administrador" && (
+          {profileHas(profile, CAPABILITIES.RESET, area) && (
             <button
               className="reset-demo"
               disabled={Boolean(busy)}
@@ -247,28 +262,52 @@ export default function PortalPage() {
         )}
 
         <section className="demo-kpis">
-          <Kpi label="Solicitudes" value={dashboard.requests} tone="blue" />
-          <Kpi label="Pendientes" value={dashboard.pending} tone="amber" />
-          <Kpi label="En gestión" value={dashboard.active} tone="purple" />
-          <Kpi label="Cerradas" value={dashboard.closed} tone="green" />
+          <Kpi
+            label="Solicitudes visibles"
+            value={dashboard.requestCount}
+            tone="blue"
+          />
+          <Kpi
+            label="Ítems pendientes"
+            value={dashboard.pendingItemCount}
+            tone="amber"
+          />
+          <Kpi
+            label="Ítems en gestión"
+            value={dashboard.activeItemCount}
+            tone="purple"
+          />
+          <Kpi
+            label="Ítems cerrados"
+            value={dashboard.closedItemCount}
+            tone="green"
+          />
         </section>
 
-        {area === "INVESTIGACION" && profile?.role === "defensor" && (
-          <InvestigationForm
-            catalogs={data.catalogs}
-            token={token}
-            run={run}
-            busy={Boolean(busy)}
-          />
-        )}
-        {area === "VICTIMAS" && profile?.role === "rjv" && (
-          <VictimsForm
-            catalogs={data.catalogs}
-            token={token}
-            run={run}
-            busy={Boolean(busy)}
-          />
-        )}
+        {area === "INVESTIGACION" &&
+          profileHas(profile, CAPABILITIES.CREATE_INVESTIGATION, area) && (
+            <InvestigationForm
+              catalogs={data.catalogs}
+              token={token}
+              run={run}
+              busy={Boolean(busy)}
+            />
+          )}
+        {area === "VICTIMAS" &&
+          profileHas(profile, CAPABILITIES.CREATE_VICTIMS, area) && (
+            <VictimsForm
+              catalogs={data.catalogs}
+              token={token}
+              run={run}
+              busy={Boolean(busy)}
+            />
+          )}
+
+        <ServiceCatalog
+          area={area}
+          services={data.serviceCatalog?.services || []}
+          specialties={data.serviceCatalog?.specialties || []}
+        />
 
         <section className="request-section">
           <div className="section-title">
@@ -320,8 +359,8 @@ export default function PortalPage() {
         </section>
 
         <footer className="demo-disclaimer">
-          Defensoría del Pueblo de Colombia · Sistema de Información para la
-          Gestión Investigativa y Pericial
+          SIGIP-DP — Gestión investigativa y pericial de la Defensoría del
+          Pueblo
         </footer>
       </main>
       {detailRecord && (
@@ -345,15 +384,99 @@ function Kpi({ label, value, tone }) {
   );
 }
 
+function ServiceCatalog({ area, services, specialties }) {
+  const areaServices = services.filter((service) => service.area === area);
+  const specialtyNames = new Map(
+    specialties.map((specialty) => [specialty.id, specialty.name]),
+  );
+  return (
+    <section className="service-catalog">
+      <div className="section-title">
+        <div>
+          <small>Catálogo publicado y vigente</small>
+          <h2>Servicios disponibles</h2>
+        </div>
+        <span>{areaServices.length} servicio(s)</span>
+      </div>
+      <details>
+        <summary>Consultar alcance, requisitos y producto</summary>
+        <div className="service-catalog-grid">
+          {areaServices.map((service) => (
+            <article key={service.id}>
+              <header>
+                <div>
+                  <small>
+                    Versión {service.version} · vigente desde{" "}
+                    {service.validFrom}
+                  </small>
+                  <h3>{service.name}</h3>
+                </div>
+                <span>{service.status}</span>
+              </header>
+              <p>{service.description}</p>
+              <dl>
+                <div>
+                  <dt>Especialidad o disciplina</dt>
+                  <dd>
+                    {service.specialtyIds
+                      .map((id) => specialtyNames.get(id) || id)
+                      .join(", ")}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Alcance</dt>
+                  <dd>{service.scope.join("; ")}</dd>
+                </div>
+                {service.activities?.length > 0 && (
+                  <div>
+                    <dt>Servicios o actividades incluidas</dt>
+                    <dd>{service.activities.join("; ")}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Exclusiones</dt>
+                  <dd>{service.exclusions.join("; ")}</dd>
+                </div>
+                <div>
+                  <dt>Requisitos</dt>
+                  <dd>{service.requirements.join("; ")}</dd>
+                </div>
+                <div>
+                  <dt>Producto esperado</dt>
+                  <dd>{service.product}</dd>
+                </div>
+                <div>
+                  <dt>Cobertura</dt>
+                  <dd>{service.coverage.label}</dd>
+                </div>
+                <div>
+                  <dt>Plazo</dt>
+                  <dd>{service.termPolicy.label}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function InvestigationForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
     spoa: "110016000049202600099",
     delito: "Investigación de hechos asociados al caso",
-    service: "INVESTIGACION_CAMPO",
     region: "BOGOTA",
   });
+  const [services, setServices] = useState(["SVC_INV_VERIFICACION_TERRENO"]);
   const update = (key) => (event) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
+  const toggleService = (serviceId) =>
+    setServices((current) =>
+      current.includes(serviceId)
+        ? current.filter((id) => id !== serviceId)
+        : [...current, serviceId],
+    );
   return (
     <section className="creation-panel">
       <div className="panel-copy">
@@ -369,7 +492,14 @@ function InvestigationForm({ catalogs, token, run, busy }) {
           event.preventDefault();
           run(
             "create-inv",
-            () => apiCreateInvestigation(token, form),
+            () =>
+              apiCreateInvestigation(token, {
+                ...form,
+                items: services.map((service) => ({
+                  service,
+                  region: form.region,
+                })),
+              }),
             "Solicitud de Investigación radicada",
           );
         }}
@@ -382,16 +512,22 @@ function InvestigationForm({ catalogs, token, run, busy }) {
           Delito
           <input value={form.delito} onChange={update("delito")} />
         </label>
-        <label>
-          Especialidad
-          <select value={form.service} onChange={update("service")}>
+        <fieldset className="service-selector">
+          <legend>Servicios requeridos</legend>
+          <small>Cada servicio genera un ítem con reparto independiente.</small>
+          <div>
             {catalogs.investigationServices.map((item) => (
-              <option key={item.id} value={item.id}>
+              <label key={item.id}>
+                <input
+                  type="checkbox"
+                  checked={services.includes(item.id)}
+                  onChange={() => toggleService(item.id)}
+                />
                 {item.label}
-              </option>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
         <label>
           Cobertura
           <select value={form.region} onChange={update("region")}>
@@ -402,7 +538,7 @@ function InvestigationForm({ catalogs, token, run, busy }) {
             ))}
           </select>
         </label>
-        <button className="primary-demo" disabled={busy}>
+        <button className="primary-demo" disabled={busy || !services.length}>
           {busy ? "Procesando..." : "Radicar solicitud"}
         </button>
       </form>
@@ -414,12 +550,18 @@ function VictimsForm({ catalogs, token, run, busy }) {
   const [form, setForm] = useState({
     externalId: "RAD-2026-0004",
     law: "LEY_1448",
-    service: "PSICOLOGICO",
     region: "BOGOTA",
     victimCount: 2,
   });
+  const [services, setServices] = useState(["SVC_VIC_EVALUACION_PSICOLOGICA"]);
   const update = (key) => (event) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
+  const toggleService = (serviceId) =>
+    setServices((current) =>
+      current.includes(serviceId)
+        ? current.filter((id) => id !== serviceId)
+        : [...current, serviceId],
+    );
   return (
     <section className="creation-panel victims">
       <div className="panel-copy">
@@ -439,6 +581,11 @@ function VictimsForm({ catalogs, token, run, busy }) {
               apiCreateVictims(token, {
                 ...form,
                 victimCount: Number(form.victimCount),
+                items: services.map((service) => ({
+                  service,
+                  region: form.region,
+                  law: form.law,
+                })),
               }),
             "Solicitud de Víctimas enviada a aprobación PAG",
           );
@@ -458,16 +605,22 @@ function VictimsForm({ catalogs, token, run, busy }) {
             ))}
           </select>
         </label>
-        <label>
-          Peritaje
-          <select value={form.service} onChange={update("service")}>
+        <fieldset className="service-selector">
+          <legend>Servicios periciales requeridos</legend>
+          <small>Cada servicio conserva aprobación y reparto por ítem.</small>
+          <div>
             {catalogs.victimServices.map((item) => (
-              <option key={item.id} value={item.id}>
+              <label key={item.id}>
+                <input
+                  type="checkbox"
+                  checked={services.includes(item.id)}
+                  onChange={() => toggleService(item.id)}
+                />
                 {item.label}
-              </option>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
         <label>
           Cobertura
           <select value={form.region} onChange={update("region")}>
@@ -487,7 +640,7 @@ function VictimsForm({ catalogs, token, run, busy }) {
             onChange={update("victimCount")}
           />
         </label>
-        <button className="primary-demo" disabled={busy}>
+        <button className="primary-demo" disabled={busy || !services.length}>
           {busy ? "Procesando..." : "Enviar a aprobación previa"}
         </button>
       </form>
@@ -510,6 +663,11 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
         <span className="external-id">{request.externalId}</span>
       </header>
       <p className="request-summary">{request.summary || "Caso registrado"}</p>
+      <p className="request-aggregate-status">
+        <strong>Estado agregado de la solicitud:</strong>{" "}
+        {STATUS_LABELS[request.aggregateStatus] || request.aggregateStatus}
+        {` · ${request.aggregateCounts.closedItems}/${request.aggregateCounts.totalItems} ítems cerrados`}
+      </p>
       {request.persons?.length > 0 && (
         <div className="synthetic-persons">
           <strong>{request.persons.length} persona(s) vinculada(s)</strong>
@@ -538,9 +696,8 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
 }
 
 function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
-  const role = profile?.role;
   const isBusy = busy === item.id;
-  const actionAvailable = canActOnItem(area, role, item.status);
+  const actionAvailable = canActOnItem(area, profile, item.status);
   const nextAction = nextActionFor(area, item.status);
   const selectedCandidate = item.assignment?.evaluated?.find(
     (candidate) => candidate.candidateId === item.assigneeId,
@@ -571,8 +728,8 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
           <strong>{item.assigneeName || "Pendiente de reparto"}</strong>
         </span>
         <span>
-          <small>Progreso</small>
-          <strong>{item.progress ?? 0}%</strong>
+          <small>Estado del trámite</small>
+          <strong>{STATUS_LABELS[item.status] || item.status}</strong>
         </span>
         <span>
           <small>Carga al repartir</small>
@@ -581,21 +738,29 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
           </strong>
         </span>
         <span>
-          <small>Fecha estimada</small>
-          <strong>{item.dueDate || "Por calcular"}</strong>
+          <small>Días restantes</small>
+          <strong>{item.tracking?.daysRemaining ?? "No calculable"}</strong>
+        </span>
+        <span>
+          <small>Semáforo</small>
+          <strong>{item.tracking?.semaphore || "No calculable"}</strong>
+        </span>
+        <span>
+          <small>Oportunidad</small>
+          <strong>{item.tracking?.opportunity || "No calculable"}</strong>
+        </span>
+        <span>
+          <small>Actuaciones</small>
+          <strong>{item.activities?.length || 0}</strong>
         </span>
         <span>
           <small>Producto</small>
           <strong>{item.reportReference || "Sin entrega"}</strong>
         </span>
       </div>
-      <div className="progress-track demo">
-        <i style={{ width: `${item.progress || 0}%` }} />
-      </div>
-
       <div className="demo-actions">
         {area === "INVESTIGACION" &&
-          role === "defensor" &&
+          profileHas(profile, CAPABILITIES.ASSIGN_INVESTIGATION, area) &&
           ["RADICADA", "PENDIENTE_REASIGNACION"].includes(item.status) && (
             <button
               disabled={isBusy}
@@ -611,12 +776,12 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
             </button>
           )}
         {area === "INVESTIGACION" &&
-          role === "pag_investigacion" &&
+          profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&
           item.status === "INFORME_ENTREGADO" && (
             <ReviewActions item={item} token={token} busy={isBusy} run={run} />
           )}
         {area === "VICTIMAS" &&
-          role === "pag_victimas" &&
+          profileHas(profile, CAPABILITIES.APPROVE_VICTIMS, area) &&
           item.status === "PENDIENTE_APROBACION_PAG" && (
             <VictimsApprovalActions
               item={item}
@@ -626,7 +791,7 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
             />
           )}
         {area === "VICTIMAS" &&
-          role === "rjv" &&
+          profileHas(profile, CAPABILITIES.CORRECT_VICTIMS, area) &&
           item.status === "DEVUELTA" && (
             <VictimsCorrectionAction
               item={item}
@@ -635,24 +800,26 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
               run={run}
             />
           )}
-        {area === "INVESTIGACION" && role === "investigador" && (
-          <ExecutorActions
-            item={item}
-            token={token}
-            busy={isBusy}
-            run={run}
-            area="INVESTIGACION"
-          />
-        )}
-        {area === "VICTIMAS" && role === "perito" && (
-          <ExecutorActions
-            item={item}
-            token={token}
-            busy={isBusy}
-            run={run}
-            area="VICTIMAS"
-          />
-        )}
+        {area === "INVESTIGACION" &&
+          profileHas(profile, CAPABILITIES.EXECUTE_INVESTIGATION, area) && (
+            <ExecutorActions
+              item={item}
+              token={token}
+              busy={isBusy}
+              run={run}
+              area="INVESTIGACION"
+            />
+          )}
+        {area === "VICTIMAS" &&
+          profileHas(profile, CAPABILITIES.EXECUTE_VICTIMS, area) && (
+            <ExecutorActions
+              item={item}
+              token={token}
+              busy={isBusy}
+              run={run}
+              area="VICTIMAS"
+            />
+          )}
         <button
           className="detail-button"
           type="button"
@@ -850,7 +1017,6 @@ function ProcessStepper({ area, status }) {
 
 function CaseDetail({ request, item, onClose }) {
   const closeButtonRef = useRef(null);
-  const semaphore = semaphoreFor(item);
   const assignmentSummary = item.assignment
     ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
     : "El reparto todavía no se ha ejecutado.";
@@ -920,24 +1086,30 @@ function CaseDetail({ request, item, onClose }) {
             <dd>{item.assigneeName || "Pendiente de reparto"}</dd>
           </div>
           <div>
-            <dt>Estado</dt>
+            <dt>Estado del trámite</dt>
             <dd>{STATUS_LABELS[item.status] || item.status}</dd>
           </div>
           <div>
-            <dt>Plazo y semáforo</dt>
-            <dd>
-              {item.dueDate || "Sin plazo asignado"} · {semaphore.label}
-            </dd>
+            <dt>Días restantes</dt>
+            <dd>{item.tracking?.daysRemaining ?? "No calculable"}</dd>
           </div>
           <div>
-            <dt>Especialidad</dt>
-            <dd>{item.serviceLabel}</dd>
+            <dt>Semáforo</dt>
+            <dd>{item.tracking?.semaphore || "No calculable"}</dd>
+          </div>
+          <div>
+            <dt>Oportunidad</dt>
+            <dd>{item.tracking?.opportunity || "No calculable"}</dd>
+          </div>
+          <div>
+            <dt>Especialidad o disciplina elegible</dt>
+            <dd>{item.specialtyLabels?.join(", ") || "Sin dato"}</dd>
           </div>
         </dl>
 
         <p className="validation-pending">
-          Fecha estimada y referencia de semáforo pendientes de validación
-          funcional.
+          {item.tracking?.label ||
+            "Plazo y calendario pendientes de validación funcional."}
         </p>
 
         <section className="detail-section">
@@ -1009,9 +1181,8 @@ function CaseDetail({ request, item, onClose }) {
 }
 
 function ExecutorActions({ item, token, busy, run, area }) {
-  const [progress, setProgress] = useState(70);
   const [observation, setObservation] = useState(
-    "Avance de actividades registrado",
+    "Actuación técnica registrada",
   );
   const [reference, setReference] = useState(
     area === "VICTIMAS" ? "F171-2026-0004" : "INF-2026-0004",
@@ -1038,15 +1209,7 @@ function ExecutorActions({ item, token, busy, run, area }) {
         <>
           <div className="inline-action">
             <input
-              aria-label="Porcentaje de avance"
-              type="number"
-              min="1"
-              max="99"
-              value={progress}
-              onChange={(event) => setProgress(event.target.value)}
-            />
-            <input
-              aria-label="Observación del avance"
+              aria-label="Descripción de la actuación"
               value={observation}
               onChange={(event) => setObservation(event.target.value)}
             />
@@ -1057,14 +1220,13 @@ function ExecutorActions({ item, token, busy, run, area }) {
                   item.id,
                   () =>
                     action(token, item.id, "avance", {
-                      progress: Number(progress),
                       observation,
                     }),
-                  "Avance registrado correctamente",
+                  "Actuación registrada correctamente",
                 )
               }
             >
-              Guardar avance
+              Registrar actuación
             </button>
           </div>
           <div className="inline-action">
@@ -1211,7 +1373,7 @@ function nextActionFor(area, status) {
         role: "Investigador/a asignado/a",
       },
       EN_EJECUCION: {
-        action: "Registrar avance o entregar informe",
+        action: "Registrar actuación o entregar informe",
         role: "Investigador/a asignado/a",
       },
       INFORME_ENTREGADO: {
@@ -1245,7 +1407,7 @@ function nextActionFor(area, status) {
       role: "Perito asignado/a",
     },
     EN_EJECUCION: {
-      action: "Registrar avance o finalizar con F-171",
+      action: "Registrar actuación o finalizar con F-171",
       role: "Perito asignado/a",
     },
   };
@@ -1254,31 +1416,34 @@ function nextActionFor(area, status) {
   );
 }
 
-function canActOnItem(area, role, status) {
+function canActOnItem(area, profile, status) {
   if (area === "INVESTIGACION") {
     return (
-      (role === "defensor" &&
+      (profileHas(profile, CAPABILITIES.ASSIGN_INVESTIGATION, area) &&
         ["RADICADA", "PENDIENTE_REASIGNACION"].includes(status)) ||
-      (role === "investigador" &&
+      (profileHas(profile, CAPABILITIES.EXECUTE_INVESTIGATION, area) &&
         ["ASIGNADA", "EN_EJECUCION"].includes(status)) ||
-      (role === "pag_investigacion" && status === "INFORME_ENTREGADO")
+      (profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&
+        status === "INFORME_ENTREGADO")
     );
   }
   return (
-    (role === "rjv" && status === "DEVUELTA") ||
-    (role === "pag_victimas" && status === "PENDIENTE_APROBACION_PAG") ||
-    (role === "perito" && ["ASIGNADA", "EN_EJECUCION"].includes(status))
+    (profileHas(profile, CAPABILITIES.CORRECT_VICTIMS, area) &&
+      status === "DEVUELTA") ||
+    (profileHas(profile, CAPABILITIES.APPROVE_VICTIMS, area) &&
+      status === "PENDIENTE_APROBACION_PAG") ||
+    (profileHas(profile, CAPABILITIES.EXECUTE_VICTIMS, area) &&
+      ["ASIGNADA", "EN_EJECUCION"].includes(status))
   );
 }
 
-function semaphoreFor(item) {
-  if (item.status === "CERRADA") return { label: "Cerrado" };
-  if (!item.dueDate) return { label: "Sin plazo asignado" };
-  const today = new Date();
-  const dueDate = new Date(`${item.dueDate}T23:59:59Z`);
-  if (dueDate < today) return { label: "Vencido" };
-  if (dueDate.toISOString().slice(0, 10) === today.toISOString().slice(0, 10)) {
-    return { label: "Vence hoy" };
-  }
-  return { label: "En plazo" };
+function profileHas(profile, capability, area) {
+  const now = new Date().toISOString();
+  return (profile?.grants || []).some(
+    (grant) =>
+      grant.capability === capability &&
+      (!grant.validFrom || grant.validFrom <= now) &&
+      (!grant.validTo || now < grant.validTo) &&
+      (grant.scopeType === "SYSTEM" || !grant.area || grant.area === area),
+  );
 }

@@ -21,14 +21,3 @@ export function createAuthMiddleware(config) {
     }
   };
 }
-
-export function ensureRoles(allowed) {
-  return (req, _res, next) => {
-    if (!allowed.includes(req.auth.role)) {
-      return next(
-        new AppError(403, "FORBIDDEN", "No tiene permisos para esta accion"),
-      );
-    }
-    return next();
-  };
-}

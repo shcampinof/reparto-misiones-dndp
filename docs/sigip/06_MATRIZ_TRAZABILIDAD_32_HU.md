@@ -106,3 +106,17 @@ Estas brechas justifican conservar el backlog complementario de SIGIP-DP en luga
 ## 6. Conclusión
 
 Las 32 HU son una buena base de alcance y confirman varias decisiones estructurales, pero fueron redactadas como traducción del prototipo y contienen reglas rígidas que las reuniones posteriores corrigieron o dejaron abiertas. Deben pasar por una sesión de refinamiento y aprobación antes de convertirse en criterios contractuales o pruebas definitivas.
+
+## 7. Impacto del cierre funcional pre-Oracle
+
+| Historias afectadas | Tratamiento ejecutado |
+|---|---|
+| HU-04, HU-05, HU-17, HU-31 | capacidades con alcance y vigencia; RACI separado; perfiles no aprobados inactivos |
+| HU-06, HU-07, HU-08, HU-10 | catálogo consultable, versionado y vigente; servicio separado de especialidad/disciplina; cifras no aprobadas ausentes |
+| HU-11, HU-12, HU-14, HU-15, HU-27 | solicitudes multiítem con seguimiento independiente y personas vinculadas a la solicitud de Víctimas |
+| HU-18, HU-19, HU-24, HU-25, HU-29 | devolución/versionado y puntos de aprobación distintos por área |
+| HU-20, HU-21, HU-26 | contratos explícitos bloqueados hasta aprobar novedad, reasignación, transferencia y excepción |
+| HU-22, HU-23 | reparto por estrategia de área con especialidad/disciplina, candidatos, exclusiones, métricas y desempate |
+| HU-28, HU-30 | actuaciones sin porcentaje subjetivo; estado, plazo, semáforo y oportunidad separados |
+
+Este impacto no cambia la clasificación documental de las HU ni llena sus aprobaciones vacías. Describe comportamiento verificable del incremento, no aceptación institucional.

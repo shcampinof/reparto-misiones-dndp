@@ -46,6 +46,9 @@ Por tanto, **ninguna fuente aislada debe declararse “la última versión funci
 | `04_GUIA_DE_LEVANTAMIENTO.md` | Preguntas, talleres y datos que deben solicitarse a ambos grupos. |
 | `05_BACKLOG_MVP_PROPUESTO.md` | Épicas, historias técnicas/funcionales y alcance de versiones. |
 | `06_MATRIZ_TRAZABILIDAD_32_HU.md` | Revisión historia por historia, contradicciones, cobertura y ajustes requeridos. |
+| `14_BRECHAS_FUNCIONALES_Y_RACI.md` | Brechas consolidadas, RACI vigente y perfiles propuestos que permanecen inactivos. |
+| `17_CONTRATO_FUNCIONAL_PRE_ORACLE.md` | Contrato ejecutable del cierre funcional previo al diseño Oracle. |
+| `../decisions/README.md` | Registro central de decisiones funcionales pendientes y comportamiento seguro. |
 | `AGENTS.md` | Instrucciones para colocar en la raíz del repositorio y orientar a Codex. |
 
 ## Pendiente documental

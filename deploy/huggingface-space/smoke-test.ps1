@@ -47,7 +47,7 @@ $defender = Login-Demo "demo-defensor"
 $investigation = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/solicitudes" -Method Post -Headers (Auth-Headers $defender) -ContentType "application/json" -Body (@{
   spoa = "110016000049202600077"
   delito = "Investigación de hechos asociados al caso"
-  service = "INVESTIGACION_CAMPO"
+  service = "SVC_INV_VERIFICACION_TERRENO"
   region = "BOGOTA"
 } | ConvertTo-Json)
 $investigationItem = $investigation.request.items[0]
@@ -55,7 +55,7 @@ $investigationAssigned = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/item
 
 $investigator = Login-Demo "demo-investigador"
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/iniciar" -Method Post -Headers (Auth-Headers $investigator) | Out-Null
-Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/avance" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ progress = 60; observation = "Avance de actividades registrado" } | ConvertTo-Json) | Out-Null
+Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/avance" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ observation = "Actuación registrada" } | ConvertTo-Json) | Out-Null
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/entregar" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ reference = "INF-2026-SMOKE-001" } | ConvertTo-Json) | Out-Null
 $pagInvestigation = Login-Demo "demo-pag-investigacion"
 $investigationClosed = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/aprobar-entrega" -Method Post -Headers (Auth-Headers $pagInvestigation)
@@ -64,7 +64,7 @@ $rjv = Login-Demo "demo-rjv"
 $victims = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
   externalId = "RAD-2026-0077"
   law = "LEY_1448"
-  service = "PSICOLOGICO"
+  service = "SVC_VIC_EVALUACION_PSICOLOGICA"
   region = "BOGOTA"
   victimCount = 2
 } | ConvertTo-Json)
@@ -79,7 +79,7 @@ $victimsResent = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsI
 $victimsAssigned = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims)
 $expert = Login-Demo "demo-perito-psicologia"
 Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/iniciar" -Method Post -Headers (Auth-Headers $expert) | Out-Null
-Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/avance" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ progress = 75; observation = "Avance de actividades registrado" } | ConvertTo-Json) | Out-Null
+Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/avance" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ observation = "Actuación registrada" } | ConvertTo-Json) | Out-Null
 $victimsClosed = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/finalizar" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ f171Reference = "F171-2026-SMOKE-001" } | ConvertTo-Json)
 
 $admin = Login-Demo "demo-admin"

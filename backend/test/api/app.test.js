@@ -38,6 +38,16 @@ function itemFrom(response) {
   return response.body.request.items[0];
 }
 
+function activeGrant(capability, area, scopeType = "AREA") {
+  return {
+    capability,
+    area,
+    scopeType,
+    validFrom: "2026-09-01T00:00:00.000Z",
+    validTo: null,
+  };
+}
+
 test("salud, cuentas sintéticas y protección de rutas", async () => {
   const app = testApp();
   const health = await request(app)
@@ -108,7 +118,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .send({
       spoa: "110016000049202600090",
       delito: "Intento de selección manual",
-      service: "INVESTIGACION_CAMPO",
+      service: "SVC_INV_VERIFICACION_TERRENO",
       region: "BOGOTA",
       investigadorId: "inv-demo-01",
     })
@@ -120,7 +130,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .send({
       spoa: "110016000049202600002",
       delito: "Delito sintético para demostración",
-      service: "INVESTIGACION_CAMPO",
+      service: "SVC_INV_VERIFICACION_TERRENO",
       region: "BOGOTA",
     })
     .expect(201);
@@ -145,6 +155,11 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
       (candidate) => candidate.exclusions.length > 0,
     ),
   );
+  const sourceBeforeExecution = {
+    externalId: assigned.body.request.externalId,
+    summary: assigned.body.request.summary,
+    ownerUserId: assigned.body.request.ownerUserId,
+  };
 
   const own = await request(app)
     .get("/api/demo/bootstrap")
@@ -166,7 +181,7 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
   await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/avance`)
     .set(auth(investigator))
-    .send({ progress: 55, observation: "Avance sintético verificado" })
+    .send({ observation: "Actuación sintética verificada" })
     .expect(200);
   const delivered = await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/entregar`)
@@ -174,6 +189,14 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     .send({ reference: "INF-2026-0004" })
     .expect(200);
   assert.equal(itemFrom(delivered).status, "INFORME_ENTREGADO");
+  assert.deepEqual(
+    {
+      externalId: delivered.body.request.externalId,
+      summary: delivered.body.request.summary,
+      ownerUserId: delivered.body.request.ownerUserId,
+    },
+    sourceBeforeExecution,
+  );
 
   const approved = await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/aprobar-entrega`)
@@ -194,7 +217,7 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   const payload = {
     externalId: "RAD-2026-0099",
     law: "LEY_1448",
-    service: "PSICOLOGICO",
+    service: "SVC_VIC_EVALUACION_PSICOLOGICA",
     region: "BOGOTA",
     victimCount: 2,
   };
@@ -228,6 +251,11 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
       candidate.exclusions.some((reason) => /Ley\/programa/i.test(reason)),
     ),
   );
+  const sourceBeforeExecution = {
+    externalId: assigned.body.request.externalId,
+    ownerUserId: assigned.body.request.ownerUserId,
+    persons: assigned.body.request.persons,
+  };
 
   await request(app)
     .post(`/api/demo/victimas/items/${item.id}/iniciar`)
@@ -236,7 +264,7 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   await request(app)
     .post(`/api/demo/victimas/items/${item.id}/avance`)
     .set(auth(expert))
-    .send({ progress: 70, observation: "Valoración sintética en curso" })
+    .send({ observation: "Valoración sintética en curso" })
     .expect(200);
   const finished = await request(app)
     .post(`/api/demo/victimas/items/${item.id}/finalizar`)
@@ -245,13 +273,21 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
     .expect(200);
   item = itemFrom(finished);
   assert.equal(item.status, "CERRADA");
+  assert.deepEqual(
+    {
+      externalId: finished.body.request.externalId,
+      ownerUserId: finished.body.request.ownerUserId,
+      persons: finished.body.request.persons,
+    },
+    sourceBeforeExecution,
+  );
   assert.equal(item.timeline.at(-1).actor, "demo-perito-psicologia");
   assert.match(item.timeline.at(-1).message, /sin aprobación final/i);
 
   await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/aprobar-entrega`)
     .set(auth(pag))
-    .expect(403);
+    .expect(404);
 });
 
 test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conservando versiones", async () => {
@@ -264,7 +300,7 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
     .send({
       externalId: "RAD-2026-0088",
       law: "LEY_1448",
-      service: "PSICOLOGICO",
+      service: "SVC_VIC_EVALUACION_PSICOLOGICA",
       region: "BOGOTA",
       victimCount: 2,
     })
@@ -335,7 +371,7 @@ test("el administrador técnico no puede adoptar decisiones operativas", async (
       .send({
         spoa: "110016000049202600087",
         delito: "Caso de control de autorización",
-        service: "BALISTICA",
+        service: "SVC_INV_ANALISIS_BALISTICO",
         region: "BOGOTA",
       }),
     request(app)
@@ -351,7 +387,7 @@ test("el administrador técnico no puede adoptar decisiones operativas", async (
     request(app).post("/api/demo/victimas/solicitudes").set(auth(admin)).send({
       externalId: "RAD-2026-0087",
       law: "LEY_1448",
-      service: "PSICOLOGICO",
+      service: "SVC_VIC_EVALUACION_PSICOLOGICA",
       region: "BOGOTA",
       victimCount: 1,
     }),
@@ -371,7 +407,7 @@ test("el administrador técnico no puede adoptar decisiones operativas", async (
   for (const attempt of attempts) {
     const response = await attempt;
     assert.equal(response.status, 403);
-    assert.equal(response.body.error.code, "DEMO_FORBIDDEN");
+    assert.equal(response.body.error.code, "CAPABILITY_FORBIDDEN");
   }
 
   const globalView = await request(app)
@@ -402,7 +438,7 @@ test("la titularidad y el área protegen la corrección de solicitudes devueltas
     .send({
       externalId: "RAD-2026-0086",
       law: "LEY_975",
-      service: "PSICOLOGICO",
+      service: "SVC_VIC_EVALUACION_PSICOLOGICA",
       region: "BOGOTA",
       victimCount: 1,
     })
@@ -422,7 +458,7 @@ test("la titularidad y el área protegen la corrección de solicitudes devueltas
   await request(app)
     .post(`/api/demo/investigacion/items/${itemId}/repartir`)
     .set(auth(rjv))
-    .expect(403);
+    .expect(404);
 });
 
 test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable", async () => {
@@ -434,7 +470,7 @@ test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable
     .send({
       spoa: "110016000049202600085",
       delito: "Caso sin cobertura disponible",
-      service: "BALISTICA",
+      service: "SVC_INV_ANALISIS_BALISTICO",
       region: "CUNDINAMARCA",
     })
     .expect(201);
@@ -463,7 +499,7 @@ test("restablecer demo recupera semillas reproducibles", async () => {
     .send({
       spoa: "110016000049202600099",
       delito: "Registro temporal",
-      service: "BALISTICA",
+      service: "SVC_INV_ANALISIS_BALISTICO",
       region: "BOGOTA",
     })
     .expect(201);
@@ -568,4 +604,505 @@ test("rutas desconocidas y JSON inválido usan errores correlacionados", async (
     .send('{"userId":')
     .expect(400);
   assert.equal(invalid.body.error.code, "INVALID_JSON");
+});
+
+test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos y servicios vigentes", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const response = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(defender))
+    .expect(200);
+
+  assert.equal(
+    response.body.productName,
+    "SIGIP-DP — Gestión investigativa y pericial de la Defensoría del Pueblo",
+  );
+  assert.ok(
+    response.body.authorization.grants.some(
+      (grant) => grant.capability === "EJECUTAR_REPARTO_INVESTIGACION",
+    ),
+  );
+  assert.ok(
+    response.body.authorization.proposedProfiles.every(
+      (profile) =>
+        profile.enabled === false && profile.status === "PENDIENTE_RACI",
+    ),
+  );
+  assert.equal(response.body.serviceCatalog.services.length, 5);
+  assert.equal(response.body.serviceCatalog.specialties.length, 17);
+  assert.ok(
+    response.body.serviceCatalog.specialties.every(
+      (specialty) =>
+        specialty.area === "INVESTIGACION" &&
+        specialty.extensible === true &&
+        specialty.institutionalLimit === false,
+    ),
+  );
+  assert.ok(response.body.serviceCatalog.serviceSpecialtyRelations.length > 5);
+  assert.ok(
+    response.body.serviceCatalog.services.some(
+      (service) => service.specialtyIds.length > 1,
+    ),
+  );
+  assert.ok(
+    response.body.serviceCatalog.services.filter((service) =>
+      service.specialtyIds.includes("ESP_INV_CAMPO"),
+    ).length > 1,
+  );
+  const persistedModel = app.locals.demoRepository.snapshot();
+  const serviceIds = new Set(
+    persistedModel.catalogs.services.map((service) => service.id),
+  );
+  const specialtyIds = new Set(
+    persistedModel.catalogs.specialties.map((specialty) => specialty.id),
+  );
+  assert.equal(persistedModel.catalogs.services.length, 10);
+  assert.equal(persistedModel.catalogs.specialties.length, 19);
+  assert.ok(
+    persistedModel.catalogs.services.every(
+      (service) => !Object.hasOwn(service, "specialtyIds"),
+    ),
+  );
+  assert.ok(
+    persistedModel.catalogs.serviceSpecialtyRelations.every(
+      (relation) =>
+        serviceIds.has(relation.serviceId) &&
+        specialtyIds.has(relation.specialtyId),
+    ),
+  );
+  assert.ok(
+    persistedModel.requests.every((entry) =>
+      entry.items.every((item) => serviceIds.has(item.service)),
+    ),
+  );
+  assert.deepEqual(response.body.parameters.pendingDecisionCodes, [
+    "DEC-PLZ-001",
+    "DEC-TURNO-001",
+  ]);
+  assert.equal(Object.hasOwn(response.body.parameters, "maximumLoad"), false);
+  assert.equal(Object.hasOwn(response.body.parameters, "termDays"), false);
+  assert.equal(
+    Object.hasOwn(response.body.parameters, "semaphoreRanges"),
+    false,
+  );
+  assert.ok(
+    response.body.serviceCatalog.services.every(
+      (service) =>
+        service.status === "PUBLICADO" &&
+        service.specialtyIds.length > 0 &&
+        service.termPolicy.value === null,
+    ),
+  );
+  assert.deepEqual(response.body.dashboards.INVESTIGACION, {
+    requestCount: 3,
+    personCount: 0,
+    itemCount: 4,
+    assignmentCount: 3,
+    pendingItemCount: 1,
+    activeItemCount: 2,
+    closedItemCount: 1,
+  });
+});
+
+test("una solicitud multiítem mantiene estados y repartos independientes", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const created = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send({
+      spoa: "110016000049202600081",
+      delito: "Solicitud con dos servicios",
+      items: [
+        { service: "SVC_INV_VERIFICACION_TERRENO", region: "BOGOTA" },
+        { service: "SVC_INV_ANALISIS_BALISTICO", region: "CUNDINAMARCA" },
+      ],
+    })
+    .expect(201);
+
+  assert.equal(created.body.request.items.length, 2);
+  assert.equal(created.body.request.aggregateStatus, "RADICADA");
+  assert.equal(created.body.request.items[0].status, "RADICADA");
+  assert.equal(created.body.request.items[1].status, "RADICADA");
+  assert.notEqual(
+    created.body.request.items[0].id,
+    created.body.request.items[1].id,
+  );
+
+  const assigned = await request(app)
+    .post(
+      `/api/demo/investigacion/items/${created.body.request.items[0].id}/repartir`,
+    )
+    .set(auth(defender))
+    .expect(200);
+  assert.equal(assigned.body.request.items[0].status, "ASIGNADA");
+  assert.equal(assigned.body.request.items[1].status, "RADICADA");
+  assert.equal(assigned.body.request.items[1].assignment, null);
+  assert.equal(assigned.body.request.aggregateStatus, "EN_TRAMITE");
+
+  const investigator = await login(app, "demo-investigador");
+  const pag = await login(app, "demo-pag-investigacion");
+  const firstItemId = created.body.request.items[0].id;
+  await request(app)
+    .post(`/api/demo/investigacion/items/${firstItemId}/iniciar`)
+    .set(auth(investigator))
+    .expect(200);
+  await request(app)
+    .post(`/api/demo/investigacion/items/${firstItemId}/entregar`)
+    .set(auth(investigator))
+    .send({ reference: "INF-2026-MULTI-001" })
+    .expect(200);
+  const partiallyClosed = await request(app)
+    .post(`/api/demo/investigacion/items/${firstItemId}/aprobar-entrega`)
+    .set(auth(pag))
+    .expect(200);
+  assert.equal(partiallyClosed.body.request.items[0].status, "CERRADA");
+  assert.equal(partiallyClosed.body.request.items[1].status, "RADICADA");
+  assert.equal(
+    partiallyClosed.body.request.aggregateStatus,
+    "PARCIALMENTE_CERRADA",
+  );
+  assert.deepEqual(partiallyClosed.body.request.aggregateCounts, {
+    totalItems: 2,
+    closedItems: 1,
+    assignedItems: 1,
+  });
+});
+
+test("el catálogo es consultable por solicitantes, ejecutores y supervisores según su área", async () => {
+  const app = testApp();
+  const profiles = [
+    ["demo-defensor", "INVESTIGACION", 5, 17],
+    ["demo-investigador", "INVESTIGACION", 5, 17],
+    ["demo-pag-investigacion", "INVESTIGACION", 5, 17],
+    ["demo-rjv", "VICTIMAS", 5, 2],
+    ["demo-perito-psicologia", "VICTIMAS", 5, 2],
+    ["demo-pag-victimas", "VICTIMAS", 5, 2],
+  ];
+
+  for (const [userId, area, serviceCount, specialtyCount] of profiles) {
+    const token = await login(app, userId);
+    const response = await request(app)
+      .get("/api/demo/bootstrap")
+      .set(auth(token))
+      .expect(200);
+    assert.equal(response.body.serviceCatalog.services.length, serviceCount);
+    assert.equal(
+      response.body.serviceCatalog.specialties.length,
+      specialtyCount,
+    );
+    assert.ok(
+      response.body.serviceCatalog.services.every(
+        (service) => service.area === area,
+      ),
+    );
+    assert.ok(
+      response.body.serviceCatalog.specialties.every(
+        (specialty) => specialty.area === area,
+      ),
+    );
+  }
+});
+
+test("una solicitud de Víctimas cierra solo cuando todos sus ítems independientes cierran", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const psychologist = await login(app, "demo-perito-psicologia");
+  const financialExpert = await login(app, "demo-perito-financiero");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send({
+      externalId: "RAD-2026-0084",
+      law: "LEY_1448",
+      region: "BOGOTA",
+      victimCount: 1,
+      items: [
+        {
+          service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+          region: "BOGOTA",
+          law: "LEY_1448",
+        },
+        {
+          service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
+          region: "BOGOTA",
+          law: "LEY_1448",
+        },
+      ],
+    })
+    .expect(201);
+  const [psychologyItem, financialItem] = created.body.request.items;
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${psychologyItem.id}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  await request(app)
+    .post(`/api/demo/victimas/items/${financialItem.id}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${psychologyItem.id}/iniciar`)
+    .set(auth(psychologist))
+    .expect(200);
+  const partial = await request(app)
+    .post(`/api/demo/victimas/items/${psychologyItem.id}/finalizar`)
+    .set(auth(psychologist))
+    .send({ f171Reference: "F171-2026-MULTI-PSI" })
+    .expect(200);
+  assert.equal(partial.body.request.aggregateStatus, "PARCIALMENTE_CERRADA");
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${financialItem.id}/iniciar`)
+    .set(auth(financialExpert))
+    .expect(200);
+  const closed = await request(app)
+    .post(`/api/demo/victimas/items/${financialItem.id}/finalizar`)
+    .set(auth(financialExpert))
+    .send({ f171Reference: "F171-2026-MULTI-FIN" })
+    .expect(200);
+  assert.equal(closed.body.request.aggregateStatus, "CERRADA");
+
+  const ownerView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  const requestView = ownerView.body.requests.find(
+    (entry) => entry.id === created.body.request.id,
+  );
+  assert.deepEqual(
+    requestView.items.map((item) => [item.status, item.reportReference]),
+    [
+      ["CERRADA", "F171-2026-MULTI-PSI"],
+      ["CERRADA", "F171-2026-MULTI-FIN"],
+    ],
+  );
+});
+
+test("dos repartos concurrentes no pierden la carga del mismo candidato", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const create = (spoa) =>
+    request(app)
+      .post("/api/demo/investigacion/solicitudes")
+      .set(auth(defender))
+      .send({
+        spoa,
+        delito: "Concurrencia controlada de reparto",
+        service: "SVC_INV_ANALISIS_BALISTICO",
+        region: "BOGOTA",
+      });
+  const [first, second] = await Promise.all([
+    create("110016000049202600078"),
+    create("110016000049202600079"),
+  ]);
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 201);
+
+  const results = await Promise.all(
+    [itemFrom(first).id, itemFrom(second).id].map((itemId) =>
+      request(app)
+        .post(`/api/demo/investigacion/items/${itemId}/repartir`)
+        .set(auth(defender)),
+    ),
+  );
+  assert.ok(results.every((response) => response.status === 200));
+  const items = results.map((response) => itemFrom(response));
+  assert.ok(items.every((item) => item.assigneeId === "inv-demo-01"));
+  assert.deepEqual(
+    items
+      .map(
+        (item) =>
+          item.assignment.evaluated.find(
+            (candidate) => candidate.candidateId === "inv-demo-01",
+          ).metrics.load,
+      )
+      .sort(),
+    [2, 3],
+  );
+});
+
+test("problemas se registran sin alterar el estado y las prórrogas quedan bloqueadas con decisión trazable", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const investigator = await login(app, "demo-investigador");
+  const created = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send({
+      spoa: "110016000049202600080",
+      delito: "Caso para contrato operativo",
+      service: "SVC_INV_VERIFICACION_TERRENO",
+      region: "BOGOTA",
+    })
+    .expect(201);
+  const itemId = itemFrom(created).id;
+  await request(app)
+    .post(`/api/demo/investigacion/items/${itemId}/repartir`)
+    .set(auth(defender))
+    .expect(200);
+  const problem = await request(app)
+    .post(`/api/demo/investigacion/items/${itemId}/operaciones/problema`)
+    .set(auth(investigator))
+    .send({
+      reason: "Insumo ilegible",
+      description: "El anexo técnico no permite continuar el análisis",
+    })
+    .expect(201);
+  const item = itemFrom(problem);
+  assert.equal(item.status, "ASIGNADA");
+  assert.equal(item.operations.length, 1);
+  assert.equal(item.operations[0].type, "PROBLEMA");
+
+  const pending = await request(app)
+    .post(`/api/demo/investigacion/items/${itemId}/operaciones/prorroga`)
+    .set(auth(investigator))
+    .send({})
+    .expect(409);
+  assert.equal(pending.body.error.code, "PENDING_FUNCTIONAL_DECISION");
+  assert.equal(pending.body.error.details.decisionCode, "DEC-PLZ-001");
+});
+
+test("cada operación especial pendiente permanece deshabilitada con su decisión", async () => {
+  const app = testApp();
+  const pendingOperations = [
+    ["novedad", "GESTIONAR_NOVEDAD", "DEC-NOV-001"],
+    ["excepcion_manual", "RESOLVER_EXCEPCION_MANUAL", "DEC-ASG-EXC"],
+    ["reasignacion", "REASIGNAR_ITEM", "DEC-RACI-OPERACIONES"],
+    ["transferencia", "TRANSFERIR_SOLICITUD", "DEC-RACI-TRANSFERENCIA"],
+    ["prorroga", "SOLICITAR_PRORROGA", "DEC-PLZ-001"],
+    ["ampliacion", "SOLICITAR_AMPLIACION", "DEC-AMP-001"],
+  ];
+  const operator = tokenFor({
+    sub: "operador-contratos-prueba",
+    role: "perfil-propuesto-no-activo",
+    area: "INVESTIGACION",
+    grants: pendingOperations.map(([, capability]) =>
+      activeGrant(capability, "INVESTIGACION"),
+    ),
+  });
+
+  for (const [operation, , decisionCode] of pendingOperations) {
+    const response = await request(app)
+      .post(
+        `/api/demo/investigacion/items/MT-2026-0001/operaciones/${operation}`,
+      )
+      .set(auth(operator))
+      .send({})
+      .expect(409);
+    assert.equal(response.body.error.code, "PENDING_FUNCTIONAL_DECISION");
+    assert.equal(response.body.error.details.decisionCode, decisionCode);
+  }
+});
+
+test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revisión-publicación", async () => {
+  const app = testApp();
+  const admin = await login(app, "demo-admin");
+  await request(app)
+    .post("/api/demo/catalogo/servicios")
+    .set(auth(admin))
+    .send({ area: "INVESTIGACION", id: "SVC_INV_PRUEBA", name: "Prueba" })
+    .expect(403);
+
+  const expiredProposer = tokenFor({
+    sub: "gestor-expirado",
+    role: "perfil-propuesto-no-activo",
+    area: "INVESTIGACION",
+    grants: [
+      {
+        ...activeGrant("PROPONER_CATALOGO", "INVESTIGACION"),
+        validTo: "2026-09-02T00:00:00.000Z",
+      },
+    ],
+  });
+  await request(app)
+    .post("/api/demo/catalogo/servicios")
+    .set(auth(expiredProposer))
+    .send({ area: "INVESTIGACION", id: "SVC_INV_EXPIRADO", name: "Prueba" })
+    .expect(403);
+
+  const proposer = tokenFor({
+    sub: "gestor-catalogo-prueba",
+    role: "perfil-propuesto-no-activo",
+    area: "INVESTIGACION",
+    grants: [
+      activeGrant("PROPONER_CATALOGO", "INVESTIGACION"),
+      activeGrant("CONSULTAR_CATALOGO_SERVICIOS", "INVESTIGACION"),
+    ],
+  });
+  const publisher = tokenFor({
+    sub: "publicador-catalogo-prueba",
+    role: "perfil-propuesto-no-activo",
+    area: "INVESTIGACION",
+    grants: [activeGrant("PUBLICAR_CATALOGO", "INVESTIGACION")],
+  });
+  const draft = await request(app)
+    .post("/api/demo/catalogo/servicios")
+    .set(auth(proposer))
+    .send({
+      area: "INVESTIGACION",
+      id: "SVC_INV_PRUEBA",
+      name: "Servicio funcional de prueba",
+      description: "Descripción controlada",
+      activities: ["Actividad controlada"],
+      scope: ["Alcance controlado"],
+      exclusions: ["Exclusión controlada"],
+      requirements: ["Solicitud completa"],
+      product: "Informe de prueba",
+      specialtyIds: ["ESP_INV_CAMPO"],
+      validFrom: "2026-10-01",
+    })
+    .expect(201);
+  assert.equal(draft.body.service.status, "BORRADOR");
+  assert.deepEqual(draft.body.service.specialtyIds, ["ESP_INV_CAMPO"]);
+
+  await request(app)
+    .post("/api/demo/catalogo/servicios/SVC_INV_PRUEBA/enviar-revision")
+    .set(auth(proposer))
+    .send({ reason: "Validación técnica completada" })
+    .expect(200);
+  const published = await request(app)
+    .post("/api/demo/catalogo/servicios/SVC_INV_PRUEBA/publicar")
+    .set(auth(publisher))
+    .send({ reason: "Aprobación funcional de prueba" })
+    .expect(200);
+  assert.equal(published.body.service.status, "PUBLICADO");
+  assert.deepEqual(
+    published.body.service.history.map((event) => event.to),
+    ["BORRADOR", "EN_REVISION", "PUBLICADO"],
+  );
+  assert.deepEqual(published.body.service.specialtyIds, ["ESP_INV_CAMPO"]);
+  const publishedRelation = app.locals.demoRepository
+    .snapshot()
+    .catalogs.serviceSpecialtyRelations.find(
+      (relation) => relation.serviceId === "SVC_INV_PRUEBA",
+    );
+  assert.equal(publishedRelation.specialtyId, "ESP_INV_CAMPO");
+  assert.equal(publishedRelation.status, "PUBLICADO");
+  assert.deepEqual(
+    publishedRelation.history.map((event) => event.to),
+    ["BORRADOR", "EN_REVISION", "PUBLICADO"],
+  );
+
+  const beforeValidity = await request(app)
+    .get("/api/demo/catalogo/servicios?area=INVESTIGACION&at=2026-09-30")
+    .set(auth(proposer))
+    .expect(200);
+  assert.equal(
+    beforeValidity.body.services.some(
+      (service) => service.id === "SVC_INV_PRUEBA",
+    ),
+    false,
+  );
+  const onValidity = await request(app)
+    .get("/api/demo/catalogo/servicios?area=INVESTIGACION&at=2026-10-01")
+    .set(auth(proposer))
+    .expect(200);
+  assert.equal(
+    onValidity.body.services.some((service) => service.id === "SVC_INV_PRUEBA"),
+    true,
+  );
 });

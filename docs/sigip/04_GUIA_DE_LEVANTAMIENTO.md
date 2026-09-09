@@ -75,7 +75,7 @@ Cada decisión debe registrar: identificador, pregunta, decisión, responsable q
 
 ### Datos a solicitar
 
-- Catálogo oficial de 17 especialidades y requisitos.
+- Catálogo oficial de especialidades y requisitos; contrastar las 17 categorías iniciales de la fuente sin tratarlas como límite ni como lista de servicios.
 - Delitos con competencia y vigencia.
 - 193 investigadores con código, grado, cargo, regional, especialidades, cobertura y estado.
 - Novedades que bloquean asignación y reglas de regreso.

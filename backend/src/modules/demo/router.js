@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../../shared/errors.js";
 
-export function createDemoRouter({ authMiddleware, demoService }) {
+export function createDemoRouter({
+  authMiddleware,
+  demoService,
+  catalogService,
+}) {
   const router = Router();
   router.use(authMiddleware);
 
@@ -9,6 +13,47 @@ export function createDemoRouter({ authMiddleware, demoService }) {
     res.json(demoService.bootstrap(_req.auth)),
   );
   router.post("/reset", (req, res) => res.json(demoService.reset(req.auth)));
+
+  router.get("/catalogo/servicios", (req, res) =>
+    res.json({
+      services: catalogService.listPublished(req.auth, {
+        area: req.query.area,
+        at: req.query.at,
+      }),
+    }),
+  );
+  router.post("/catalogo/servicios", (req, res) =>
+    res
+      .status(201)
+      .json({ service: catalogService.createDraft(req.auth, req.body || {}) }),
+  );
+  router.post("/catalogo/servicios/:id/enviar-revision", (req, res) =>
+    res.json({
+      service: catalogService.submit(req.auth, req.params.id, req.body || {}),
+    }),
+  );
+  router.post("/catalogo/servicios/:id/publicar", (req, res) =>
+    res.json({
+      service: catalogService.publish(req.auth, req.params.id, req.body || {}),
+    }),
+  );
+  router.post("/catalogo/servicios/:id/retirar", (req, res) =>
+    res.json({
+      service: catalogService.retire(req.auth, req.params.id, req.body || {}),
+    }),
+  );
+
+  router.post("/:area/items/:id/operaciones/:type", (req, res) =>
+    res.status(201).json({
+      request: demoService.registerOperation(
+        req.auth,
+        req.params.area,
+        req.params.id,
+        req.params.type,
+        req.body || {},
+      ),
+    }),
+  );
 
   router.post(
     "/investigacion/solicitudes",

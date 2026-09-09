@@ -13,6 +13,7 @@ import {
 import { coreModule } from "../modules/core/index.js";
 import { createDemoRouter } from "../modules/demo/router.js";
 import { createDemoService } from "../modules/demo/service.js";
+import { createCatalogService } from "../modules/core/catalogs/service.js";
 import { integrationsModule } from "../modules/integrations/index.js";
 import { investigationModule } from "../modules/investigacion/index.js";
 import { reportingModule } from "../modules/reporting/index.js";
@@ -31,7 +32,11 @@ export function createApp({ config, logger }) {
   const authService = createAuthService({ config, users });
   const authMiddleware = createAuthMiddleware(config);
   const demoRepository = new InMemoryDemoRepository();
-  const demoService = createDemoService({ repository: demoRepository });
+  const catalogService = createCatalogService({ repository: demoRepository });
+  const demoService = createDemoService({
+    repository: demoRepository,
+    catalogService,
+  });
 
   app.disable("x-powered-by");
   app.locals.config = config;
@@ -72,7 +77,10 @@ export function createApp({ config, logger }) {
   app.get("/api/ready", (req, res) => res.json(readinessPayload(req)));
   app.use("/api/auth", createAuthRouter({ authService, authMiddleware }));
   if (config.auth.demoEnabled) {
-    app.use("/api/demo", createDemoRouter({ authMiddleware, demoService }));
+    app.use(
+      "/api/demo",
+      createDemoRouter({ authMiddleware, demoService, catalogService }),
+    );
   }
 
   if (config.staticDir) {

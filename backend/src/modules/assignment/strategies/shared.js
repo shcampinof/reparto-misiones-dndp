@@ -38,7 +38,7 @@ export function rankAndExplain({
   return {
     strategy: strategyName,
     policyVersion: DEMO_PARAMETERS.version,
-    demoParametersLabel: DEMO_PARAMETERS.label,
+    policyLabel: DEMO_PARAMETERS.label,
     selectedId: selected?.candidateId || null,
     selectedName: selected?.candidateName || null,
     selectedReason: selected

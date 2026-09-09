@@ -4,7 +4,7 @@ export function assignInvestigation(context) {
   return rankAndExplain({
     professionals: context.professionals,
     context,
-    strategyName: "INVESTIGACION_DEMO_V1",
+    strategyName: "INVESTIGACION_PRE_ORACLE_V1",
     now: context.now,
     exclusionRules: [
       (candidate) =>
@@ -12,7 +12,9 @@ export function assignInvestigation(context) {
       (candidate) =>
         exclusion(
           "Especialidad no habilitada",
-          !candidate.specialties.includes(context.service),
+          !context.specialtyIds.some((specialtyId) =>
+            candidate.specialties.includes(specialtyId),
+          ),
         ),
       (candidate) =>
         exclusion(

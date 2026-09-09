@@ -1,16 +1,20 @@
+import { grantsForRole } from "../../modules/core/auth/capabilities.js";
+import { createCatalogSeed } from "./catalog-seeds.js";
+
 export const DEMO_PARAMETERS = Object.freeze({
-  version: "DEMO-2026-01",
-  label: "Valores de demostracion — no aprobados para operacion institucional",
-  investigationTermDays: 20,
-  victimsTermDays: 30,
-  dayType: "CALENDARIO_DEMO",
+  version: "PRE-ORACLE-2026-09",
+  label: "Política técnica pre-Oracle; valores institucionales pendientes",
   tieBreak: "menor carga, ultima asignacion mas antigua, identificador estable",
+  pendingDecisionCodes: ["DEC-PLZ-001", "DEC-TURNO-001"],
 });
 
 export function createDemoSeed() {
   const now = "2026-09-01T14:00:00.000Z";
   return {
     counters: { investigation: 4, victims: 4 },
+    catalogs: createCatalogSeed(),
+    operations: [],
+    audit: [],
     users: [
       demoUser(
         "demo-admin",
@@ -77,7 +81,7 @@ export function createDemoSeed() {
         id: "inv-demo-01",
         area: "INVESTIGACION",
         displayName: "Investigador/a de campo 01",
-        specialties: ["INVESTIGACION_CAMPO", "BALISTICA"],
+        specialties: ["ESP_INV_CAMPO", "ESP_INV_BALISTICA"],
         coverages: ["BOGOTA"],
         laws: [],
         available: true,
@@ -88,7 +92,7 @@ export function createDemoSeed() {
         id: "inv-demo-02",
         area: "INVESTIGACION",
         displayName: "Profesional de investigación 02",
-        specialties: ["INVESTIGACION_CAMPO", "ANALISIS_INFORMACION"],
+        specialties: ["ESP_INV_CAMPO", "ESP_INV_ANALISIS_INFO"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
         laws: [],
         available: true,
@@ -100,9 +104,9 @@ export function createDemoSeed() {
         area: "INVESTIGACION",
         displayName: "Profesional de investigación 03",
         specialties: [
-          "INVESTIGACION_CAMPO",
-          "BALISTICA",
-          "ANALISIS_INFORMACION",
+          "ESP_INV_CAMPO",
+          "ESP_INV_BALISTICA",
+          "ESP_INV_ANALISIS_INFO",
         ],
         coverages: ["BOGOTA"],
         laws: [],
@@ -114,7 +118,7 @@ export function createDemoSeed() {
         id: "per-demo-psi-01",
         area: "VICTIMAS",
         displayName: "Perito Psicología 01",
-        specialties: ["PSICOLOGICO"],
+        specialties: ["DISC_VIC_PSICOLOGIA"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
         laws: ["LEY_1448", "LEY_975"],
         available: true,
@@ -125,7 +129,7 @@ export function createDemoSeed() {
         id: "per-demo-psi-02",
         area: "VICTIMAS",
         displayName: "Perito Psicología 02",
-        specialties: ["PSICOLOGICO"],
+        specialties: ["DISC_VIC_PSICOLOGIA"],
         coverages: ["BOGOTA"],
         laws: ["LEY_975"],
         available: true,
@@ -136,7 +140,7 @@ export function createDemoSeed() {
         id: "per-demo-fin-01",
         area: "VICTIMAS",
         displayName: "Perito Financiero 01",
-        specialties: ["ADMINISTRATIVO_FINANCIERO"],
+        specialties: ["DISC_VIC_FINANCIERA"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
         laws: ["LEY_1448", "LEY_975"],
         available: true,
@@ -147,7 +151,7 @@ export function createDemoSeed() {
         id: "per-demo-fin-02",
         area: "VICTIMAS",
         displayName: "Perito Financiero 02",
-        specialties: ["ADMINISTRATIVO_FINANCIERO"],
+        specialties: ["DISC_VIC_FINANCIERA"],
         coverages: ["BOGOTA"],
         laws: ["LEY_1448"],
         available: false,
@@ -166,19 +170,29 @@ export function createDemoSeed() {
         items: [
           {
             id: "MT-2026-0001",
-            service: "INVESTIGACION_CAMPO",
+            service: "SVC_INV_VERIFICACION_TERRENO",
+            serviceVersion: 1,
+            specialtyIds: ["ESP_INV_CAMPO"],
             region: "BOGOTA",
             law: null,
             status: "EN_EJECUCION",
             assigneeId: "inv-demo-01",
             dueDate: "2026-09-21",
-            progress: 40,
+            termSnapshot: pendingTermPolicy(),
+            activities: [
+              {
+                at: now,
+                actor: "demo-investigador",
+                observation: "Misión iniciada",
+              },
+            ],
             reportReference: null,
             assignment: seedAssignment(
               "inv-demo-01",
               "Investigador/a de campo 01",
               now,
             ),
+            operations: [],
             timeline: [
               event(
                 now,
@@ -203,6 +217,38 @@ export function createDemoSeed() {
               ),
             ],
           },
+          {
+            id: "MT-2026-0001-02",
+            service: "SVC_INV_ANALISIS_BALISTICO",
+            serviceVersion: 1,
+            specialtyIds: ["ESP_INV_BALISTICA"],
+            region: "CUNDINAMARCA",
+            law: null,
+            status: "PENDIENTE_REASIGNACION",
+            assigneeId: null,
+            dueDate: null,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
+            reportReference: null,
+            assignment: pendingAssignment(now),
+            operations: [],
+            timeline: [
+              event(
+                now,
+                null,
+                "RADICADA",
+                "demo-defensor",
+                "Segundo ítem de la solicitud radicado",
+              ),
+              event(
+                now,
+                "RADICADA",
+                "PENDIENTE_REASIGNACION",
+                "sistema-demo",
+                "Sin candidato elegible para la cobertura vigente",
+              ),
+            ],
+          },
         ],
       },
       {
@@ -216,19 +262,23 @@ export function createDemoSeed() {
         items: [
           {
             id: "VIC-ITEM-DEMO-0001",
-            service: "ADMINISTRATIVO_FINANCIERO",
+            service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
+            serviceVersion: 1,
+            specialtyIds: ["DISC_VIC_FINANCIERA"],
             region: "BOGOTA",
             law: "LEY_1448",
             status: "CERRADA",
             assigneeId: "per-demo-fin-01",
             dueDate: "2026-10-01",
-            progress: 100,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
             reportReference: "F171-2026-0001",
             assignment: seedAssignment(
               "per-demo-fin-01",
               "Perito Financiero 01",
               now,
             ),
+            operations: [],
             timeline: [
               event(
                 now,
@@ -279,19 +329,23 @@ export function createDemoSeed() {
         items: [
           {
             id: "MT-2026-0002",
-            service: "ANALISIS_INFORMACION",
+            service: "SVC_INV_ANALISIS_DATOS",
+            serviceVersion: 1,
+            specialtyIds: ["ESP_INV_ANALISIS_INFO"],
             region: "BOGOTA",
             law: null,
             status: "INFORME_ENTREGADO",
             assigneeId: "inv-demo-02",
             dueDate: "2026-09-17",
-            progress: 100,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
             reportReference: "INF-2026-0002",
             assignment: seedAssignment(
               "inv-demo-02",
               "Profesional de investigación 02",
               "2026-08-28T15:10:00.000Z",
             ),
+            operations: [],
             timeline: [
               event(
                 "2026-08-28T15:00:00.000Z",
@@ -335,19 +389,23 @@ export function createDemoSeed() {
         items: [
           {
             id: "MT-2026-0003",
-            service: "BALISTICA",
+            service: "SVC_INV_ANALISIS_BALISTICO",
+            serviceVersion: 1,
+            specialtyIds: ["ESP_INV_BALISTICA"],
             region: "BOGOTA",
             law: null,
             status: "CERRADA",
             assigneeId: "inv-demo-01",
             dueDate: "2026-09-01",
-            progress: 100,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
             reportReference: "INF-2026-0003",
             assignment: seedAssignment(
               "inv-demo-01",
               "Investigador/a de campo 01",
               "2026-08-12T14:05:00.000Z",
             ),
+            operations: [],
             timeline: [
               event(
                 "2026-08-12T14:00:00.000Z",
@@ -402,15 +460,19 @@ export function createDemoSeed() {
         items: [
           {
             id: "VIC-ITEM-DEMO-0002",
-            service: "PSICOLOGICO",
+            service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+            serviceVersion: 1,
+            specialtyIds: ["DISC_VIC_PSICOLOGIA"],
             region: "BOGOTA",
             law: "LEY_975",
             status: "PENDIENTE_APROBACION_PAG",
             assigneeId: null,
             dueDate: null,
-            progress: 0,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
             reportReference: null,
             assignment: null,
+            operations: [],
             timeline: [
               event(
                 "2026-09-01T15:00:00.000Z",
@@ -418,6 +480,49 @@ export function createDemoSeed() {
                 "PENDIENTE_APROBACION_PAG",
                 "demo-rjv",
                 "Solicitud enviada a aprobación previa",
+              ),
+            ],
+          },
+          {
+            id: "VIC-ITEM-DEMO-0002-02",
+            service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
+            serviceVersion: 1,
+            specialtyIds: ["DISC_VIC_FINANCIERA"],
+            region: "BOGOTA",
+            law: "LEY_975",
+            status: "ASIGNADA",
+            assigneeId: "per-demo-fin-01",
+            dueDate: null,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
+            reportReference: null,
+            assignment: seedAssignment(
+              "per-demo-fin-01",
+              "Perito Financiero 01",
+              "2026-09-01T15:10:00.000Z",
+            ),
+            operations: [],
+            timeline: [
+              event(
+                "2026-09-01T15:00:00.000Z",
+                null,
+                "PENDIENTE_APROBACION_PAG",
+                "demo-rjv",
+                "Segundo ítem pericial enviado",
+              ),
+              event(
+                "2026-09-01T15:05:00.000Z",
+                "PENDIENTE_APROBACION_PAG",
+                "APROBADA_REPARTO",
+                "demo-pag-victimas",
+                "Aval previo registrado para el ítem financiero",
+              ),
+              event(
+                "2026-09-01T15:10:00.000Z",
+                "APROBADA_REPARTO",
+                "ASIGNADA",
+                "sistema-demo",
+                "Asignación automática ejecutada",
               ),
             ],
           },
@@ -434,19 +539,23 @@ export function createDemoSeed() {
         items: [
           {
             id: "VIC-ITEM-DEMO-0003",
-            service: "PSICOLOGICO",
+            service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+            serviceVersion: 1,
+            specialtyIds: ["DISC_VIC_PSICOLOGIA"],
             region: "BOGOTA",
             law: "LEY_1448",
             status: "ASIGNADA",
             assigneeId: "per-demo-psi-01",
             dueDate: "2026-09-29",
-            progress: 0,
+            termSnapshot: pendingTermPolicy(),
+            activities: [],
             reportReference: null,
             assignment: seedAssignment(
               "per-demo-psi-01",
               "Perito Psicología 01",
               "2026-08-30T14:10:00.000Z",
             ),
+            operations: [],
             timeline: [
               event(
                 "2026-08-30T14:00:00.000Z",
@@ -490,6 +599,7 @@ function demoUser(id, fullName, role, roleLabel, area, executorId = null) {
         role,
         roleLabel,
         area,
+        grants: grantsForRole(role, area),
         initials: fullName
           .split(" ")
           .slice(0, 2)
@@ -504,13 +614,36 @@ function demoUser(id, fullName, role, roleLabel, area, executorId = null) {
 function seedAssignment(selectedId, selectedName, createdAt) {
   return {
     policyVersion: DEMO_PARAMETERS.version,
-    demoParametersLabel: DEMO_PARAMETERS.label,
+    policyLabel: DEMO_PARAMETERS.label,
     selectedId,
     selectedName,
     selectedReason:
       "Asignación automática según especialidad, cobertura, disponibilidad y carga",
     evaluated: [],
     createdAt,
+  };
+}
+
+function pendingAssignment(createdAt) {
+  return {
+    policyVersion: DEMO_PARAMETERS.version,
+    policyLabel: DEMO_PARAMETERS.label,
+    selectedId: null,
+    selectedName: null,
+    selectedReason: "No existe candidato elegible para la cobertura vigente",
+    evaluated: [],
+    createdAt,
+  };
+}
+
+function pendingTermPolicy() {
+  return {
+    value: null,
+    dayType: null,
+    startEvent: null,
+    calendarId: null,
+    decisionCode: "DEC-PLZ-001",
+    label: "Valor y calendario pendientes de aprobación funcional",
   };
 }
 

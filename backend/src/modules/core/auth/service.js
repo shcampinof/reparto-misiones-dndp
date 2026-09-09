@@ -134,6 +134,7 @@ export function createAuthService({ config, users }) {
         initials: account.initials,
         area: account.area,
         executorId: account.executorId || null,
+        grants: account.grants || [],
       },
       config.auth.jwtSecret,
       { expiresIn: remember ? "30d" : "8h" },
@@ -153,5 +154,6 @@ function profileFrom(user, account) {
     initials: account.initials,
     area: account.area,
     executorId: account.executorId || null,
+    grants: account.grants || [],
   };
 }

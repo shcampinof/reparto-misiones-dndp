@@ -44,5 +44,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Instalar dependencias
         run: npm ci
+      - name: Instalar dependencias backend para pruebas E2E
+        working-directory: backend
+        run: npm ci
+      - name: Instalar navegador para Playwright
+        run: npx playwright install --with-deps chromium
       - name: Verificar frontend
         run: npm run check

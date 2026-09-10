@@ -524,7 +524,17 @@ export function createDemoService({
       ensureVictimsVersions(request);
 
       const at = clock();
+      const returnedVersion = versionForVictimsItem(request, item);
       const corrected = correctedVictimsData(state, request, item, payload, at);
+      const correctionChanges = victimsCorrectionChanges(
+        victimsCorrectionData(returnedVersion.data, item.id),
+        corrected,
+      );
+      if (!correctionChanges.length) {
+        throw businessError(
+          "Realice al menos un cambio en la información devuelta antes de reenviar",
+        );
+      }
       assertUniqueVictimsExternalId(state, corrected.externalId, request.id);
       const service = serviceFromState(
         state,
@@ -572,6 +582,11 @@ export function createDemoService({
           at,
           actor: auth.sub,
           correctionSummary,
+          correction: {
+            itemId: item.id,
+            baseVersion: returnedVersion.version,
+            changes: correctionChanges,
+          },
         }),
       );
       transition(
@@ -912,6 +927,25 @@ function presentRequest(state, request) {
       tracking: trackingFor(item),
       products: presentedProducts(request.area, item),
       documents: presentedProducts(request.area, item),
+      submittedRequestData:
+        request.area === "VICTIMAS"
+          ? submittedVictimsData(request, item)
+          : null,
+      pagObservations:
+        request.area === "VICTIMAS"
+          ? victimsPagObservations(request, item.id)
+          : [],
+      correctionHistory:
+        request.area === "VICTIMAS"
+          ? victimsCorrectionHistory(request, item.id)
+          : [],
+      nextSubmissionVersion:
+        request.area === "VICTIMAS"
+          ? Math.max(
+              0,
+              ...(request.versions || []).map((entry) => entry.version),
+            ) + 1
+          : null,
       approvedRequestData:
         request.area === "VICTIMAS" && item.approvedSubmissionVersion
           ? structuredClone(
@@ -972,12 +1006,14 @@ function victimsSubmissionVersion({
   at,
   actor,
   correctionSummary,
+  correction = null,
 }) {
   return {
     version,
     submittedAt: at,
     submittedBy: actor,
     correctionSummary,
+    correction: structuredClone(correction),
     reviews: [],
     data: {
       externalId: request.externalId,
@@ -996,19 +1032,23 @@ function victimsSubmissionVersion({
 }
 
 function correctedVictimsData(state, request, item, payload, at) {
-  const externalId = text(payload.externalId ?? request.externalId);
-  const law = text(payload.law ?? item.law);
-  const service = text(payload.service ?? item.service);
-  const region = text(payload.region ?? item.region);
+  const submitted = victimsCorrectionData(
+    versionForVictimsItem(request, item).data,
+    item.id,
+  );
+  const externalId = text(payload.externalId ?? submitted.externalId);
+  const law = text(payload.law ?? submitted.law);
+  const service = text(payload.service ?? submitted.service);
+  const region = text(payload.region ?? submitted.region);
   const persons = payload.persons
     ? normalizeVictimsPersons(payload.persons)
-    : structuredClone(request.persons || []);
+    : structuredClone(submitted.persons || []);
   const caseData = payload.caseData
     ? normalizeVictimsCaseData(payload.caseData)
-    : structuredClone(request.caseData || {});
+    : structuredClone(submitted.caseData || {});
   const documents = payload.documents
     ? normalizeDocuments(state, payload.documents, "VICTIMAS", at)
-    : structuredClone(request.documents || []);
+    : structuredClone(submitted.documents || []);
   validateExternalIdPolicy(state, "VICTIMAS", externalId, at);
   requireReference(
     state,
@@ -1031,6 +1071,104 @@ function correctedVictimsData(state, request, item, payload, at) {
     throw businessError("Registre al menos una persona vinculada");
   }
   return { externalId, law, service, region, persons, caseData, documents };
+}
+
+function victimsCorrectionData(versionData, itemId) {
+  const item = (versionData?.items || []).find(
+    (candidate) => candidate.id === itemId,
+  );
+  if (!item) {
+    throw businessError("La versión devuelta no contiene el ítem a corregir");
+  }
+  return {
+    externalId: versionData.externalId,
+    law: item.law,
+    caseData: structuredClone(versionData.caseData || {}),
+    persons: structuredClone(versionData.persons || []),
+    service: item.service,
+    region: item.region,
+    documents: structuredClone(versionData.documents || []),
+  };
+}
+
+function victimsCorrectionChanges(before, after) {
+  const fields = [
+    [
+      "externalId",
+      "Identificador externo",
+      before.externalId,
+      after.externalId,
+    ],
+    ["law", "Ley o programa", before.law, after.law],
+    [
+      "caseData.processReference",
+      "Proceso",
+      before.caseData?.processReference,
+      after.caseData?.processReference,
+    ],
+    [
+      "caseData.hearingApplies",
+      "Aplica audiencia",
+      Boolean(before.caseData?.hearingApplies),
+      Boolean(after.caseData?.hearingApplies),
+    ],
+    [
+      "caseData.hearingDate",
+      "Fecha de audiencia",
+      before.caseData?.hearingDate || null,
+      after.caseData?.hearingDate || null,
+    ],
+    ["caseData.facts", "Hechos", before.caseData?.facts, after.caseData?.facts],
+    ["persons", "Personas vinculadas", before.persons, after.persons],
+    ["service", "Servicio", before.service, after.service],
+    ["region", "Cobertura", before.region, after.region],
+    ["documents", "Documentos", before.documents, after.documents],
+  ];
+  return fields
+    .filter(([, , previous, next]) => !sameValue(previous, next))
+    .map(([field, label, previous, next]) => ({
+      field,
+      label,
+      previous: structuredClone(previous ?? null),
+      next: structuredClone(next ?? null),
+    }));
+}
+
+function sameValue(left, right) {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+function submittedVictimsData(request, item) {
+  const version = (request.versions || []).find(
+    (candidate) => candidate.version === item.submissionVersion,
+  );
+  return version ? victimsCorrectionData(version.data, item.id) : null;
+}
+
+function victimsPagObservations(request, itemId) {
+  return (request.versions || []).flatMap((version) =>
+    (version.reviews || [])
+      .filter(
+        (review) => review.itemId === itemId && review.decision === "DEVUELTA",
+      )
+      .map((review) => ({
+        ...structuredClone(review),
+        version: version.version,
+      })),
+  );
+}
+
+function victimsCorrectionHistory(request, itemId) {
+  return (request.versions || [])
+    .filter((version) => version.correction?.itemId === itemId)
+    .map((version) => ({
+      version: version.version,
+      submittedAt: version.submittedAt,
+      submittedBy: version.submittedBy,
+      correctionSummary: version.correctionSummary,
+      baseVersion: version.correction.baseVersion,
+      changes: structuredClone(version.correction.changes || []),
+    }));
 }
 
 function catalogsFor(state, auth, at) {

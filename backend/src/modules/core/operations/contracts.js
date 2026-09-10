@@ -6,7 +6,7 @@ export const OPERATION_CONTRACTS = Object.freeze({
     enabled: true,
     areas: ["INVESTIGACION", "VICTIMAS"],
     allowedStates: ["ASIGNADA", "EN_EJECUCION"],
-    requiredFields: ["reason", "description"],
+    requiredFields: ["reason", "description", "supportReference"],
     preservesPrimaryState: true,
   },
   NOVEDAD: pending(
@@ -38,6 +38,11 @@ export const OPERATION_CONTRACTS = Object.freeze({
     CAPABILITIES.SOLICITAR_AMPLIACION,
     "DEC-AMP-001",
     "Faltan punto de corte, plazo y regla final de continuidad",
+  ),
+  ACTUALIZACION_F171: pending(
+    CAPABILITIES.SOLICITAR_ACTUALIZACION_F171,
+    "DEC-VIC-F171",
+    "Faltan causal, autorizador y efecto de una actualización posterior del F-171",
   ),
 });
 

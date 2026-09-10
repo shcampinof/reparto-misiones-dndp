@@ -77,3 +77,10 @@ export function apiVictimsAction(token, itemId, action, payload) {
     authenticated(token, "POST", payload),
   );
 }
+
+export function apiRegisterOperation(token, area, itemId, type, payload) {
+  return request(
+    `/demo/${area.toLowerCase()}/items/${encodeURIComponent(itemId)}/operaciones/${type.toLowerCase()}`,
+    authenticated(token, "POST", payload),
+  );
+}

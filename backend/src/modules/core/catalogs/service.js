@@ -32,6 +32,7 @@ export function createCatalogService({
       }
       const specialtyIds = draft.specialtyIds;
       validateSpecialties(state, area, specialtyIds);
+      validateDocumentTypes(state, area, draft.requiredDocumentTypes);
       const at = clock();
       const serviceData = structuredClone(draft);
       delete serviceData.specialtyIds;
@@ -225,6 +226,7 @@ function validateDraft(payload, area) {
     scope: textArray(payload.scope),
     exclusions: textArray(payload.exclusions),
     requirements: textArray(payload.requirements),
+    requiredDocumentTypes: textArray(payload.requiredDocumentTypes),
     product: text(payload.product),
     specialtyIds: textArray(payload.specialtyIds),
     coverage: payload.coverage || {
@@ -261,6 +263,21 @@ function validateSpecialties(state, area, specialtyIds) {
       400,
       "CATALOG_SPECIALTY_INVALID",
       "La relación incluye una especialidad o disciplina no válida",
+    );
+  }
+}
+
+function validateDocumentTypes(state, area, documentTypes) {
+  const valid = new Set(
+    (state.catalogs.documentTypes || [])
+      .filter((entry) => entry.area === area || entry.area === "AMBAS")
+      .map((entry) => entry.id),
+  );
+  if (documentTypes.some((id) => !valid.has(id))) {
+    throw new AppError(
+      400,
+      "CATALOG_DOCUMENT_TYPE_INVALID",
+      "El servicio exige un tipo documental que no existe en el catálogo del área",
     );
   }
 }

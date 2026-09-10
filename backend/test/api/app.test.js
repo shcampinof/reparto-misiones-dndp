@@ -5,6 +5,7 @@ import request from "supertest";
 import { createApp } from "../../src/app/create-app.js";
 import { createConfig } from "../../src/config/index.js";
 import { createSilentLogger } from "../../src/shared/logger.js";
+import { createCatalogSeed } from "../../src/infrastructure/demo/catalog-seeds.js";
 
 const TEST_SECRET = "test-secret-with-at-least-thirty-two-characters";
 
@@ -116,6 +117,30 @@ function victimsPayload(overrides = {}) {
     ...overrides,
   };
 }
+
+test("los catálogos de referencia son versionados, vigentes y ampliables", () => {
+  const catalogs = createCatalogSeed();
+  for (const catalogName of [
+    "regions",
+    "laws",
+    "proceduralStages",
+    "documentTypes",
+  ]) {
+    assert.ok(catalogs[catalogName].length > 0);
+    assert.ok(
+      catalogs[catalogName].every(
+        (entry) =>
+          entry.version === 1 &&
+          entry.status === "PUBLICADO" &&
+          entry.extensible === true &&
+          entry.institutionalLimit === false,
+      ),
+    );
+  }
+  assert.equal(catalogs.identifierPolicies[0].approved, false);
+  assert.equal(catalogs.identifierPolicies[0].pattern, null);
+  assert.equal(catalogs.identifierPolicies[0].requireUnique, true);
+});
 
 test("salud, cuentas sintéticas y protección de rutas", async () => {
   const app = testApp();
@@ -350,6 +375,26 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
     .expect(200);
   item = itemFrom(finished);
   assert.equal(item.status, "CERRADA");
+  assert.equal(item.products.length, 1);
+  assert.deepEqual(
+    {
+      type: item.products[0].type,
+      reference: item.products[0].reference,
+      version: item.products[0].version,
+      status: item.products[0].status,
+      author: item.products[0].author,
+      itemId: item.products[0].itemId,
+    },
+    {
+      type: "F171",
+      reference: "F171-2026-0099",
+      version: 1,
+      status: "REGISTRADO",
+      author: "demo-perito-psicologia",
+      itemId: item.id,
+    },
+  );
+  assert.ok(item.products[0].createdAt);
   assert.deepEqual(
     {
       externalId: finished.body.request.externalId,
@@ -402,9 +447,10 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
     victimsPayload().persons,
   );
   assert.equal(
-    returned.body.request.versions[0].review.observation,
+    returned.body.request.versions[0].reviews[0].observation,
     "Adjuntar soporte de parentesco",
   );
+  assert.equal(returned.body.request.versions[0].reviews[0].itemId, itemId);
   assert.match(itemFrom(returned).timeline.at(-1).message, /devuelta al RJV/i);
 
   await request(app)
@@ -575,6 +621,7 @@ test("sin candidato pasa a PENDIENTE_EXCEPCION y conserva una explicación audit
   const item = itemFrom(created);
   assert.equal(item.status, "PENDIENTE_EXCEPCION");
   assert.equal(item.assigneeId, null);
+  assert.equal(item.exception.type, "FALTA_CANDIDATO");
   assert.match(item.assignment.selectedReason, /todos fueron excluidos/i);
   assert.ok(item.assignment.evaluated.length >= 3);
   assert.ok(
@@ -1106,12 +1153,31 @@ test("problemas se registran sin alterar el estado y las prórrogas quedan bloqu
     .send({
       reason: "Insumo ilegible",
       description: "El anexo técnico no permite continuar el análisis",
+      supportReference: "ANEXO-TECNICO-01",
     })
     .expect(201);
   const item = itemFrom(problem);
   assert.equal(item.status, "ASIGNADA");
   assert.equal(item.operations.length, 1);
   assert.equal(item.operations[0].type, "PROBLEMA");
+  assert.equal(item.operations[0].supportReference, "ANEXO-TECNICO-01");
+  assert.equal(item.operations[0].primaryStatusSnapshot, "ASIGNADA");
+  assert.equal(item.operations[0].routing.status, "EN_BANDEJA");
+  const regionalManager = await login(
+    app,
+    "demo-gestor-regional-investigacion",
+  );
+  const regionalView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(regionalManager))
+    .expect(200);
+  const routedItem = regionalView.body.requests
+    .flatMap((entry) => entry.items)
+    .find((entry) => entry.id === itemId);
+  assert.equal(
+    routedItem.operations.at(-1).supportReference,
+    "ANEXO-TECNICO-01",
+  );
 
   const pending = await request(app)
     .post(`/api/demo/investigacion/items/${itemId}/operaciones/prorroga`)
@@ -1120,6 +1186,241 @@ test("problemas se registran sin alterar el estado y las prórrogas quedan bloqu
     .expect(409);
   assert.equal(pending.body.error.code, "PENDING_FUNCTIONAL_DECISION");
   assert.equal(pending.body.error.details.decisionCode, "DEC-PLZ-001");
+});
+
+test("el perito reporta un problema trazable y el solicitante no adquiere esa capacidad", async () => {
+  const app = testApp();
+  const expert = await login(app, "demo-perito-psicologia");
+  const rjv = await login(app, "demo-rjv");
+  const path =
+    "/api/demo/victimas/items/VIC-ITEM-DEMO-0003/operaciones/problema";
+
+  await request(app)
+    .post(path)
+    .set(auth(expert))
+    .send({ reason: "Falta soporte", description: "No es legible" })
+    .expect(400);
+
+  const reported = await request(app)
+    .post(path)
+    .set(auth(expert))
+    .send({
+      reason: "Falta soporte",
+      description: "El soporte remitido no es legible",
+      supportReference: "REF-VIC-SOPORTE-01",
+    })
+    .expect(201);
+  const item = itemFrom(reported);
+  assert.equal(item.status, "ASIGNADA");
+  assert.equal(item.operations.at(-1).primaryStatusSnapshot, "ASIGNADA");
+  assert.equal(
+    item.operations.at(-1).routing.status,
+    "PENDIENTE_CONFIGURACION",
+  );
+
+  await request(app)
+    .post(path)
+    .set(auth(rjv))
+    .send({
+      reason: "Intento no permitido",
+      description: "El RJV no es ejecutor",
+      supportReference: "REF-01",
+    })
+    .expect(403);
+});
+
+test("Víctimas usa PENDIENTE_EXCEPCION cuando nunca existió candidato", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({
+        externalId: "CASO-VIC-SIN-CANDIDATO",
+        region: "ANTIOQUIA",
+      }),
+    )
+    .expect(201);
+  const approved = await request(app)
+    .post(`/api/demo/victimas/items/${itemFrom(created).id}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  const item = itemFrom(approved);
+  assert.equal(item.status, "PENDIENTE_EXCEPCION");
+  assert.equal(item.assigneeId, null);
+  assert.equal(item.exception.type, "FALTA_CANDIDATO");
+  assert.equal(item.approvedSubmissionVersion, 1);
+  assert.ok(
+    item.timeline.every((event) => event.to !== "PENDIENTE_REASIGNACION"),
+  );
+});
+
+test("la corrección parcial de Víctimas conserva el snapshot del ítem ya aprobado", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({
+        externalId: "CASO-VIC-MULTIITEM",
+        items: [
+          {
+            service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+            region: "BOGOTA",
+            law: "LEY_1448",
+          },
+          {
+            service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
+            region: "BOGOTA",
+            law: "LEY_1448",
+          },
+        ],
+      }),
+    )
+    .expect(201);
+  const [firstId, secondId] = created.body.request.items.map((item) => item.id);
+  const firstApproved = await request(app)
+    .post(`/api/demo/victimas/items/${firstId}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  const firstBefore = firstApproved.body.request.items.find(
+    (item) => item.id === firstId,
+  );
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${secondId}/devolver-solicitud`)
+    .set(auth(pag))
+    .send({ observation: "Precisar persona indirecta" })
+    .expect(200);
+  const correctedPeople = [
+    ...victimsPayload().persons,
+    {
+      alias: "Persona vinculada C",
+      type: "INDIRECTA",
+      relationship: "Familiar",
+      familyGroup: "Núcleo B",
+      contact: {
+        phone: "3000000003",
+        email: null,
+        preferredChannel: "Teléfono",
+      },
+    },
+  ];
+  const corrected = await request(app)
+    .post(`/api/demo/victimas/items/${secondId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({
+      correctionSummary: "Se precisó la relación familiar",
+      externalId: "CASO-VIC-MULTIITEM-CORREGIDO",
+      persons: correctedPeople,
+    })
+    .expect(200);
+  const firstAfter = corrected.body.request.items.find(
+    (item) => item.id === firstId,
+  );
+  const secondAfter = corrected.body.request.items.find(
+    (item) => item.id === secondId,
+  );
+  assert.equal(firstAfter.status, firstBefore.status);
+  assert.equal(firstAfter.assigneeId, firstBefore.assigneeId);
+  assert.equal(firstAfter.approvedSubmissionVersion, 1);
+  assert.equal(firstAfter.approvedRequestData.externalId, "CASO-VIC-MULTIITEM");
+  assert.equal(firstAfter.approvedRequestData.persons.length, 2);
+  assert.equal(secondAfter.submissionVersion, 2);
+  assert.equal(secondAfter.approvedSubmissionVersion, null);
+  assert.equal(corrected.body.request.persons.length, 3);
+  assert.equal(corrected.body.request.versions[0].reviews.length, 2);
+  assert.equal(corrected.body.request.versions[1].reviews.length, 0);
+
+  const secondApproved = await request(app)
+    .post(`/api/demo/victimas/items/${secondId}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  const approvedSecond = secondApproved.body.request.items.find(
+    (item) => item.id === secondId,
+  );
+  assert.equal(approvedSecond.approvedSubmissionVersion, 2);
+  assert.equal(
+    approvedSecond.approvedRequestData.externalId,
+    "CASO-VIC-MULTIITEM-CORREGIDO",
+  );
+});
+
+test("el catálogo valida requisitos por ítem y el identificador de Víctimas es configurable y único", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const rjv = await login(app, "demo-rjv");
+
+  const missingRequirement = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600081",
+        documents: [
+          { type: "SOPORTE_PROCESAL", reference: "SOPORTE-SIN-SOLICITUD" },
+        ],
+      }),
+    )
+    .expect(400);
+  assert.match(missingRequirement.body.error.message, /Ítem 1/i);
+  assert.equal(
+    missingRequirement.body.error.details.items[0].missingDocumentTypes[0].id,
+    "SOLICITUD_DEFENSA",
+  );
+
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload({ externalId: "IDENTIFICADOR LIBRE 2026-A" }))
+    .expect(201);
+  const duplicate = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload({ externalId: "IDENTIFICADOR LIBRE 2026-A" }))
+    .expect(400);
+  assert.match(duplicate.body.error.message, /ya existe/i);
+});
+
+test("los informes de Investigación conservan devolución y nueva versión", async () => {
+  const app = testApp();
+  const investigator = await login(app, "demo-investigador");
+  const pag = await login(app, "demo-pag-investigacion");
+
+  const returned = await request(app)
+    .post("/api/demo/investigacion/items/MT-2026-0002/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Corregir conclusión" })
+    .expect(200);
+  assert.equal(itemFrom(returned).products[0].status, "DEVUELTO");
+
+  const redelivered = await request(app)
+    .post("/api/demo/investigacion/items/MT-2026-0002/entregar")
+    .set(auth(investigator))
+    .send({ reference: "INF-2026-0002-V2" })
+    .expect(200);
+  assert.equal(itemFrom(redelivered).products.length, 2);
+  assert.equal(itemFrom(redelivered).products[1].version, 2);
+  assert.equal(itemFrom(redelivered).products[1].status, "ENTREGADO");
+
+  const approved = await request(app)
+    .post("/api/demo/investigacion/items/MT-2026-0002/aprobar-entrega")
+    .set(auth(pag))
+    .expect(200);
+  assert.deepEqual(
+    itemFrom(approved).products.map(({ version, status }) => ({
+      version,
+      status,
+    })),
+    [
+      { version: 1, status: "DEVUELTO" },
+      { version: 2, status: "APROBADO" },
+    ],
+  );
 });
 
 test("cada operación especial pendiente permanece deshabilitada con su decisión", async () => {
@@ -1131,6 +1432,7 @@ test("cada operación especial pendiente permanece deshabilitada con su decisió
     ["transferencia", "TRANSFERIR_SOLICITUD", "DEC-RACI-TRANSFERENCIA"],
     ["prorroga", "SOLICITAR_PRORROGA", "DEC-PLZ-001"],
     ["ampliacion", "SOLICITAR_AMPLIACION", "DEC-AMP-001"],
+    ["actualizacion_f171", "SOLICITAR_ACTUALIZACION_F171", "DEC-VIC-F171"],
   ];
   const operator = tokenFor({
     sub: "operador-contratos-prueba",
@@ -1195,6 +1497,17 @@ test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revis
     area: "INVESTIGACION",
     grants: [activeGrant("PUBLICAR_CATALOGO", "INVESTIGACION")],
   });
+  await request(app)
+    .post("/api/demo/catalogo/servicios")
+    .set(auth(proposer))
+    .send({
+      area: "INVESTIGACION",
+      id: "SVC_INV_DOC_INVALIDO",
+      name: "Servicio con requisito inválido",
+      specialtyIds: ["ESP_INV_CAMPO"],
+      requiredDocumentTypes: ["TIPO_NO_CATALOGADO"],
+    })
+    .expect(400);
   const draft = await request(app)
     .post("/api/demo/catalogo/servicios")
     .set(auth(proposer))
@@ -1207,6 +1520,7 @@ test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revis
       scope: ["Alcance controlado"],
       exclusions: ["Exclusión controlada"],
       requirements: ["Solicitud completa"],
+      requiredDocumentTypes: ["SOLICITUD_DEFENSA"],
       product: "Informe de prueba",
       specialtyIds: ["ESP_INV_CAMPO"],
       validFrom: "2026-10-01",
@@ -1214,6 +1528,9 @@ test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revis
     .expect(201);
   assert.equal(draft.body.service.status, "BORRADOR");
   assert.deepEqual(draft.body.service.specialtyIds, ["ESP_INV_CAMPO"]);
+  assert.deepEqual(draft.body.service.requiredDocumentTypes, [
+    "SOLICITUD_DEFENSA",
+  ]);
 
   await request(app)
     .post("/api/demo/catalogo/servicios/SVC_INV_PRUEBA/enviar-revision")

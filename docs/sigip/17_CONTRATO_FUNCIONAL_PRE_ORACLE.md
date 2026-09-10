@@ -30,6 +30,13 @@ Las 17 especialidades de Investigación y las 2 disciplinas de Víctimas son cla
 
 En Víctimas, las personas vinculadas pertenecen a la solicitud y sus envíos se versionan. `CASO`, `SOLICITUD`, `PERSONA_SOLICITUD`, `ITEM_SOLICITUD`, `ASIGNACION` y `DOCUMENTO` siguen siendo conceptos distintos para el futuro modelo persistente.
 
+La frontera aplicada en Víctimas es:
+
+- `SOLICITUD`: solicitante, identificador externo, personas, información del proceso/caso y documentos aportados;
+- `ITEM_SOLICITUD`: servicio y versión, especialidad/disciplina derivada, cobertura, ley/programa aplicada, estado, asignación, plazo, operaciones y productos;
+- `VERSION_SOLICITUD`: snapshot inmutable de los datos sometidos y sus ítems; las revisiones de aprobación/devolución se agregan sin reemplazar las anteriores;
+- cada ítem apunta a su versión sometida y, al aprobarse, congela la versión aprobada. Una corrección parcial no mueve el vínculo de los demás ítems.
+
 ## 3. Estados implementados
 
 ### 3.1 Investigación
@@ -50,9 +57,11 @@ La radicación dispara automáticamente el reparto backend de cada ítem. El Def
 Ramas implementadas:
 
 - `PENDIENTE_APROBACION_PAG → DEVUELTA → PENDIENTE_APROBACION_PAG`, con observación y versión.
-- `APROBADA_REPARTO → PENDIENTE_REASIGNACION` cuando no hay candidato.
+- `APROBADA_REPARTO → PENDIENTE_EXCEPCION` cuando no hay candidato inicial.
 
 El F-171 cierra el trámite ordinario sin heredar una aprobación final PAG.
+
+`PENDIENTE_REASIGNACION` se reserva para sustituir un ejecutor que sí estuvo asignado. La transferencia cambia titularidad de la solicitud. Ninguna de esas dos operaciones está habilitada sin RACI.
 
 ## 4. Autorización por capacidad, alcance y vigencia
 
@@ -91,6 +100,10 @@ El ciclo de gobierno es `BORRADOR → EN_REVISION → PUBLICADO → RETIRADO`. P
 
 Las relaciones entre servicio y especialidad/disciplina siguen el mismo ciclo, versión y vigencia del contenido funcional que las publica. Una especialidad puede ejecutar varios servicios y un servicio puede admitir varias especialidades.
 
+Regionales, leyes/programas, etapas procesales, prioridades y tipos documentales se almacenan como catálogos versionados, ampliables, con vigencia e historial. Sus registros iniciales son datos de presentación y no fijan cantidades institucionales. La radicación valida, para cada ítem, los tipos documentales requeridos por la versión seleccionada del servicio y devuelve errores funcionales que identifican ítem, servicio y faltante.
+
+El formato del identificador de Víctimas es una política versionada. Mientras no esté aprobado un patrón institucional, el contrato exige únicamente un valor no vacío y único.
+
 ## 6. Reparto y trazabilidad
 
 El cliente no envía ni decide el asignado. El servidor evalúa candidatos por estrategia de área y conserva candidatos, exclusiones, métricas, desempate, versión de política y explicación del resultado. La especialidad o disciplina se deriva de la versión vigente del servicio.
@@ -115,18 +128,25 @@ Mientras `DEC-PLZ-001` no esté aprobada, plazo, calendario y umbrales permanece
 
 | Operación | Estado en el incremento | Efecto |
 |---|---|---|
-| Reportar problema | Habilitada para el ejecutor asignado | persiste causal y descripción sin cambiar el estado principal |
+| Reportar problema | Habilitada para el ejecutor asignado | exige causal, descripción y soporte/referencia; conserva el estado y su snapshot; Investigación enruta a la bandeja regional configurada |
 | Novedad | Bloqueada por `DEC-NOV-001` | no se inventa autorizador ni efecto sobre encargos activos |
 | Excepción manual | Bloqueada por `DEC-ASG-EXC` | no permite omitir requisitos duros |
 | Reasignación | Bloqueada por `DEC-RACI-OPERACIONES` | falta gestor operativo aprobado |
 | Transferencia | Bloqueada por `DEC-RACI-TRANSFERENCIA` | falta actor y efecto sobre titularidad |
 | Prórroga | Bloqueada por `DEC-PLZ-001` | faltan aprobador, causal, duración y calendario |
 | Ampliación | Bloqueada por `DEC-AMP-001` | faltan punto de corte, plazo y continuidad definitiva |
+| Actualización posterior del F-171 | Bloqueada por `DEC-VIC-F171` | existe contrato técnico inactivo; no se inventa autorizador ni aprobación final PAG |
 
 Las operaciones bloqueadas no se presentan como acciones en la interfaz. Sus contratos internos no simulan éxito ni modifican datos.
 
-## 9. Evidencia ejecutable
+## 9. Productos versionados
 
-Las pruebas automatizadas cubren transiciones válidas e inválidas, permisos concedidos y denegados, titularidad, aislamiento por área y regional, multiítem independiente, reparto automático por hito, cola sin candidato, personas con relaciones y contacto, versionado de Víctimas, bifurcación de cierres, catálogo, métricas condicionadas y ausencia de acciones pendientes.
+Cada versión de producto conserva `itemId`, tipo, referencia, número de versión, autor, fecha y estado. En Investigación, PAG puede devolver una versión entregada con observación; esa versión queda `DEVUELTO` y la siguiente entrega crea una nueva versión antes de una eventual aprobación. En Víctimas, registrar el F-171 crea una versión `REGISTRADO` y ejecuta el cierre ordinario, sin aprobación final PAG.
+
+El contrato para una actualización posterior del F-171 está definido pero deshabilitado. Improcedencia, causal de actualización y autoridad competente continúan pendientes.
+
+## 10. Evidencia ejecutable
+
+Las pruebas automatizadas cubren transiciones válidas e inválidas, permisos concedidos y denegados, titularidad, aislamiento por área y regional, multiítem independiente, reparto automático por hito, cola sin candidato en ambas áreas, reportes con soporte y estado conservado, personas con relaciones y contacto, corrección parcial y vínculo a versión aprobada, requisitos documentales por servicio, identificador de Víctimas no rígido y único, versiones de productos, bifurcación de cierres, catálogo, métricas condicionadas y ausencia de acciones pendientes.
 
 La interfaz incluye recorrido de escritorio y móvil mediante Playwright. El script de humo conserva los dos recorridos completos. No se despliega este incremento hasta recibir una orden explícita.

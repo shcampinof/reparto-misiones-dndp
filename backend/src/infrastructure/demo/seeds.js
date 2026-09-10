@@ -10,7 +10,7 @@ export const DEMO_PARAMETERS = Object.freeze({
 
 export function createDemoSeed() {
   const now = "2026-09-01T14:00:00.000Z";
-  return {
+  const seed = {
     counters: { investigation: 4, victims: 4 },
     catalogs: createCatalogSeed(),
     operations: [seedProblem(now)],
@@ -616,6 +616,117 @@ export function createDemoSeed() {
       },
     ],
   };
+  migratePresentationRecords(seed, now);
+  return seed;
+}
+
+function migratePresentationRecords(seed, at) {
+  for (const request of seed.requests) {
+    for (const item of request.items) {
+      item.products = item.reportReference
+        ? [
+            seedProduct(
+              request.area,
+              item,
+              request.area === "VICTIMAS"
+                ? "REGISTRADO"
+                : item.status === "CERRADA"
+                  ? "APROBADO"
+                  : "ENTREGADO",
+              at,
+            ),
+          ]
+        : [];
+      item.exception =
+        item.status === "PENDIENTE_EXCEPCION"
+          ? {
+              type: "FALTA_CANDIDATO",
+              createdAt: item.assignment?.createdAt || at,
+              assignmentPolicyVersion: item.assignment?.policyVersion || null,
+              reason:
+                item.assignment?.selectedReason || "Sin candidato elegible",
+            }
+          : null;
+      if (request.area === "VICTIMAS") {
+        item.submissionVersion = 1;
+        item.approvedSubmissionVersion = [
+          "APROBADA_REPARTO",
+          "ASIGNADA",
+          "EN_EJECUCION",
+          "CERRADA",
+        ].includes(item.status)
+          ? 1
+          : null;
+        item.approval = item.approvedSubmissionVersion
+          ? {
+              at:
+                item.timeline.find((eventEntry) =>
+                  ["APROBADA_REPARTO", "ASIGNADA"].includes(eventEntry.to),
+                )?.at || at,
+              actor: "demo-pag-victimas",
+              requestVersion: 1,
+            }
+          : null;
+      }
+    }
+    if (request.area === "VICTIMAS") {
+      request.versions = [seedVictimsVersion(request, at)];
+    }
+  }
+}
+
+function seedProduct(area, item, status, at) {
+  const type = area === "VICTIMAS" ? "F171" : "INFORME_INVESTIGACION";
+  return {
+    id: `PROD-${item.id}-${type}-1`,
+    itemId: item.id,
+    type,
+    reference: item.reportReference,
+    version: 1,
+    author:
+      item.timeline.find((entry) =>
+        area === "VICTIMAS"
+          ? entry.to === "CERRADA"
+          : entry.to === "INFORME_ENTREGADO",
+      )?.actor || null,
+    createdAt:
+      item.timeline.find((entry) =>
+        area === "VICTIMAS"
+          ? entry.to === "CERRADA"
+          : entry.to === "INFORME_ENTREGADO",
+      )?.at || at,
+    status,
+  };
+}
+
+function seedVictimsVersion(request, at) {
+  return {
+    version: 1,
+    submittedAt: request.createdAt || at,
+    submittedBy: request.ownerUserId,
+    correctionSummary: null,
+    reviews: request.items
+      .filter((item) => item.approvedSubmissionVersion)
+      .map((item) => ({
+        itemId: item.id,
+        decision: "APROBADA",
+        at: item.approval.at,
+        actor: item.approval.actor,
+      })),
+    data: {
+      externalId: request.externalId,
+      persons: structuredClone(request.persons || []),
+      caseData: structuredClone(request.caseData || null),
+      documents: structuredClone(request.documents || []),
+      items: request.items.map((item) => ({
+        id: item.id,
+        service: item.service,
+        serviceVersion: item.serviceVersion,
+        region: item.region,
+        law: item.law,
+      })),
+    },
+  };
 }
 
 function demoUser(
@@ -687,9 +798,19 @@ function seedProblem(createdAt) {
     status: "REGISTRADO",
     reason: "Insumo documental ilegible",
     description: "Se requiere una copia legible para continuar la actuación",
+    supportReference: "DOC-INV-0001",
     actor: "demo-investigador",
     createdAt,
     decisionCode: null,
+    primaryStatusSnapshot: "EN_EJECUCION",
+    routing: {
+      routeId: "RUTA-PROBLEMA-INV-REGIONAL",
+      routeVersion: 1,
+      status: "EN_BANDEJA",
+      scopeType: "REGION",
+      region: "BOGOTA",
+      recipientRole: "gestor_operativo_regional",
+    },
   };
 }
 

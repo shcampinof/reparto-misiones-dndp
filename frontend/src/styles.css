@@ -1054,6 +1054,56 @@ summary:focus-visible {
   gap: 9px;
   width: 100%;
 }
+
+.problem-report {
+  width: 100%;
+  border: 1px solid #cbd8e8;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  background: #f7fafe;
+}
+
+.problem-report summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #074794;
+}
+
+.problem-report .review-actions {
+  margin-top: 0.75rem;
+}
+
+.role-problem-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.role-problem-list article {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.reported-problems {
+  margin-top: 0.8rem;
+  border-top: 1px solid #dce4ef;
+  padding-top: 0.75rem;
+}
+
+.reported-problems summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.reported-problems ul,
+.reported-problems li {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.reported-problems ul {
+  padding-left: 1rem;
+}
 .inline-action {
   display: grid;
   grid-template-columns: 80px 1fr auto;

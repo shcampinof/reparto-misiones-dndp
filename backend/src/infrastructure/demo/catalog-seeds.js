@@ -23,6 +23,36 @@ const VICTIMS_DISCIPLINES = [
   ["DISC_VIC_FINANCIERA", "Pericia administrativa y financiera"],
 ];
 
+const REFERENCE_CATALOG_SEEDS = Object.freeze({
+  regions: [
+    ["BOGOTA", "Bogotá", "AMBAS"],
+    ["CUNDINAMARCA", "Cundinamarca", "AMBAS"],
+    ["ANTIOQUIA", "Antioquia", "AMBAS"],
+  ],
+  laws: [
+    ["LEY_1448", "Ley 1448", "VICTIMAS"],
+    ["LEY_975", "Ley 975", "VICTIMAS"],
+  ],
+  proceduralStages: [
+    ["INDAGACION", "Indagación", "INVESTIGACION"],
+    ["INVESTIGACION", "Investigación", "INVESTIGACION"],
+    ["JUICIO", "Juicio", "INVESTIGACION"],
+    ["EJECUCION_SENTENCIA", "Ejecución de sentencia", "INVESTIGACION"],
+  ],
+  priorityTypes: [
+    ["ORDINARIA", "Ordinaria", "INVESTIGACION"],
+    ["URGENTE", "Urgente", "INVESTIGACION"],
+    ["UTILIDAD_PUBLICA", "Utilidad pública", "INVESTIGACION"],
+  ],
+  documentTypes: [
+    ["SOLICITUD_DEFENSA", "Solicitud de la defensa", "INVESTIGACION"],
+    ["SOPORTE_PROCESAL", "Soporte procesal", "AMBAS"],
+    ["SOPORTE_PRIORIDAD", "Soporte de prioridad", "INVESTIGACION"],
+    ["FORMATO_SOLICITUD", "Formato de solicitud", "VICTIMAS"],
+    ["SOPORTE_RELACION", "Soporte de relación o parentesco", "VICTIMAS"],
+  ],
+});
+
 const SERVICE_SEEDS = [
   serviceSeed({
     id: "SVC_INV_VERIFICACION_TERRENO",
@@ -214,7 +244,71 @@ export function createCatalogSeed() {
       relation(entry, specialtyId, publishedAt),
     ),
   );
-  return { specialties, services, serviceSpecialtyRelations };
+  const referenceCatalogs = Object.fromEntries(
+    Object.entries(REFERENCE_CATALOG_SEEDS).map(([name, entries]) => [
+      name,
+      entries.map((entry) => referenceEntry(entry, name, publishedAt)),
+    ]),
+  );
+  const identifierPolicies = [
+    {
+      id: "POL-ID-VICTIMAS-RADICADO",
+      area: "VICTIMAS",
+      field: "externalId",
+      pattern: null,
+      requireNonEmpty: true,
+      requireUnique: true,
+      approved: false,
+      version: 1,
+      status: "PUBLICADO",
+      validFrom: "2026-09-01",
+      validTo: null,
+      extensible: true,
+      source:
+        "Política mínima de integridad mientras se aprueba el formato institucional",
+      history: [history(publishedAt, null, "PUBLICADO", "sistema-pre-oracle")],
+    },
+  ];
+  const problemRoutes = [
+    {
+      id: "RUTA-PROBLEMA-INV-REGIONAL",
+      area: "INVESTIGACION",
+      region: "*",
+      scopeType: "REGION",
+      recipientRole: "gestor_operativo_regional",
+      version: 1,
+      status: "PUBLICADO",
+      validFrom: "2026-09-01",
+      validTo: null,
+      source: "Perfil conservador de presentación con alcance regional",
+      history: [history(publishedAt, null, "PUBLICADO", "sistema-pre-oracle")],
+    },
+  ];
+  return {
+    specialties,
+    services,
+    serviceSpecialtyRelations,
+    ...referenceCatalogs,
+    identifierPolicies,
+    problemRoutes,
+  };
+}
+
+function referenceEntry([id, label, area], catalog, publishedAt) {
+  return {
+    id,
+    label,
+    area,
+    catalog,
+    version: 1,
+    status: "PUBLICADO",
+    validFrom: "2026-09-01",
+    validTo: null,
+    extensible: true,
+    institutionalLimit: false,
+    source: "Dato inicial de presentación; catálogo institucional ampliable",
+    history: [history(publishedAt, null, "PUBLICADO", "sistema-pre-oracle")],
+  };
 }
 
 function specialty([id, name], area, kind, publishedAt) {
@@ -278,7 +372,14 @@ function relation(serviceEntry, specialtyId, publishedAt) {
 }
 
 function serviceSeed(entry) {
-  return entry;
+  return {
+    ...entry,
+    requiredDocumentTypes:
+      entry.requiredDocumentTypes ||
+      (entry.area === "INVESTIGACION"
+        ? ["SOLICITUD_DEFENSA"]
+        : ["FORMATO_SOLICITUD"]),
+  };
 }
 
 function history(

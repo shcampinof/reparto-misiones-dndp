@@ -297,7 +297,8 @@ Ramas:
 Ramas:
 
 - `PENDIENTE_APROBACION_PAG → DEVUELTA → RADICADA`.
-- `APROBADA_REPARTO → PENDIENTE_REASIGNACION → ASIGNADA`.
+- `APROBADA_REPARTO → PENDIENTE_EXCEPCION` cuando el reparto inicial no encuentra candidato.
+- `ASIGNADA → PENDIENTE_REASIGNACION → ASIGNADA` queda reservada para un cambio posterior de ejecutor y no se activa sin RACI.
 - `ASIGNADA/EN_EJECUCION → IMPROCEDENTE` con constancia.
 - `COMPLETADA → AMPLIACION` como nuevo ítem hijo al mismo perito.
 - `COMPLETADA → ACTUALIZACION_INFORME → COMPLETADA` con nueva versión.
@@ -367,5 +368,19 @@ El incremento `feat/cierre-funcional-pre-oracle` materializa, sin convertir pend
 - estado, días restantes, semáforo y oportunidad como conceptos distintos;
 - reporte de problema persistido sin alterar el estado principal;
 - ampliación, prórroga, reasignación, transferencia, novedad y excepción bloqueadas mediante códigos de decisión.
+
+El incremento `feat/integridad-flujos-y-reglas` agrega integridad sin aprobar reglas nuevas:
+
+- el reporte de problema exige causal, descripción y soporte o referencia; conserva el estado principal y registra una instantánea de este;
+- la ruta regional de problemas de Investigación es un catálogo vigente; la autoridad receptora de Víctimas continúa pendiente de RACI;
+- la falta inicial de candidato usa `PENDIENTE_EXCEPCION` en ambas áreas; reasignación y transferencia permanecen conceptos distintos e inactivos;
+- en Víctimas, solicitante, identificador, personas, caso y documentos son datos de `SOLICITUD` versionados; servicio, versión del servicio, cobertura, ley/programa aplicada, estado, asignación y producto pertenecen a cada `ITEM_SOLICITUD`;
+- cada ítem de Víctimas conserva `submissionVersion` y, al aprobarse, `approvedSubmissionVersion`; una corrección parcial crea una nueva versión y no cambia la instantánea usada por otro ítem ya aprobado, asignado o cerrado;
+- las decisiones de aprobación y devolución se agregan por ítem a la versión sometida y no sobrescriben revisiones anteriores;
+- la radicación valida por ítem los tipos documentales requeridos por la versión vigente del servicio;
+- regionales, leyes/programas, etapas, prioridades y tipos documentales son catálogos versionados, vigentes y ampliables con datos iniciales solo para presentación;
+- mientras no exista política aprobada para el radicado de Víctimas, se exige identificador no vacío y único, sin una expresión rígida inventada;
+- el informe de Investigación y el F-171 conservan versiones con ítem, autor, fecha, referencia y estado; la devolución investigativa marca la versión y la nueva entrega crea la siguiente;
+- la actualización posterior del F-171 tiene contrato interno bloqueado y no agrega aprobación final PAG a Víctimas.
 
 El detalle contractual y la evidencia esperada están en `17_CONTRATO_FUNCIONAL_PRE_ORACLE.md`; las decisiones abiertas se centralizan en `docs/decisions/README.md`.

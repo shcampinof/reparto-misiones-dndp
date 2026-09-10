@@ -251,7 +251,7 @@ function service(entry, publishedAt) {
       startEvent: null,
       calendarId: null,
       decisionCode: "DEC-PLZ-001",
-      label: "Valor y calendario pendientes de aprobación funcional",
+      label: "Plazo parametrizable por servicio",
     },
     version: 1,
     status: "PUBLICADO",

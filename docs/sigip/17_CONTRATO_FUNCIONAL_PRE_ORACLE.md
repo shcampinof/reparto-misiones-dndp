@@ -1,6 +1,6 @@
 # Contrato funcional pre-Oracle — SIGIP-DP
 
-Fecha de corte: 9 de septiembre de 2026  
+Fecha de corte: 10 de septiembre de 2026  
 Estado: incremento ejecutable para validación; no constituye aprobación institucional.  
 Alcance técnico: aplicación demostrativa en memoria. No autoriza Oracle, migraciones ni integraciones externas.
 
@@ -38,10 +38,10 @@ En Víctimas, las personas vinculadas pertenecen a la solicitud y sus envíos se
 
 Ramas implementadas:
 
-- `RADICADA/PENDIENTE_REASIGNACION → PENDIENTE_REASIGNACION` cuando no hay candidato.
+- `RADICADA → PENDIENTE_EXCEPCION` cuando no hay candidato.
 - `INFORME_ENTREGADO → EN_EJECUCION` cuando PAG devuelve el informe con observación.
 
-No se agrega una aprobación previa de Investigación porque su RACI permanece sin confirmar.
+La radicación dispara automáticamente el reparto backend de cada ítem. El Defensor no lo ejecuta ni lo reintenta. No se agrega una aprobación previa de Investigación porque su RACI permanece sin confirmar.
 
 ### 3.2 Víctimas
 
@@ -61,14 +61,17 @@ La API autoriza cada acción mediante concesiones con `capability`, `area`, `sco
 | Perfil activo | Alcance | Capacidades funcionales principales |
 |---|---|---|
 | Administrador del Sistema | Sistema | consulta global, administración técnica y restablecimiento de presentación |
-| Defensor | Solicitudes propias de Investigación | crear solicitud y ejecutar reparto automático |
+| Defensor | Solicitudes propias de Investigación | crear solicitud y consultar el resultado del reparto automático |
 | Investigador | Asignaciones propias | iniciar, registrar actuaciones, entregar informe y reportar problema |
 | PAG Investigación | Área Investigación | consultar, aprobar o devolver informe |
 | RJV | Solicitudes propias de Víctimas | crear, corregir y reenviar solicitud |
-| PAG Víctimas | Área Víctimas | aprobar/devolver antes del reparto y ejecutar el reparto aprobado |
+| PAG Víctimas | Área Víctimas | aprobar/devolver; la aprobación dispara el reparto automático |
 | Perito | Asignaciones propias | iniciar, registrar actuaciones, finalizar con F-171 y reportar problema |
+| Gestor Operativo Regional | Regional asignada | consulta de solicitudes, problemas e historial de correcciones |
+| Gestor Central de Excepciones | Nacional | consulta de `PENDIENTE_EXCEPCION`, exclusiones y cobertura |
+| Defensor Regional | Regional asignada | consulta territorial e indicadores, sin acciones operativas |
 
-El administrador técnico no recibe capacidades operativas. PAG Central, Gestor Operativo Regional, Defensor Regional, Coordinador GID, Administrativo delegado, PAG de unidad operativa y los perfiles de gobierno de catálogos están registrados como propuestas deshabilitadas `PENDIENTE_RACI`.
+El administrador técnico no recibe capacidades operativas. Los tres perfiles adicionales tienen cuentas conservadoras de presentación, pero su definición institucional continúa `PENDIENTE_RACI`: no reciben corrección, novedad, reasignación, transferencia, cierre causal, reintento ni asignación manual. Coordinador GID, Administrativo delegado, PAG de unidad operativa y los perfiles de gobierno de catálogos permanecen sin cuenta activa.
 
 ## 5. Catálogos funcionales
 
@@ -106,7 +109,7 @@ No se usa un porcentaje subjetivo. El ejecutor registra actuaciones textuales au
 
 La solicitud expone un estado agregado derivado de todos sus ítems. Solo se considera cerrada cuando todos están cerrados; si conviven ítems cerrados y abiertos, se presenta como parcialmente cerrada. Los indicadores identifican expresamente sus unidades: solicitudes, personas, ítems y asignaciones no se suman como si fueran equivalentes.
 
-Mientras `DEC-PLZ-001` no esté aprobada, plazo, calendario y umbrales permanecen nulos y el resultado es `NO_CALCULABLE`/`PENDIENTE_PARAMETRO`. Cerrar un ítem no valida retroactivamente una regla de plazo inexistente.
+Mientras `DEC-PLZ-001` no esté aprobada, plazo, calendario y umbrales permanecen nulos. La interfaz no muestra días restantes, semáforo ni oportunidad; el catálogo informa “Plazo parametrizable por servicio”. Cerrar un ítem no valida retroactivamente una regla de plazo inexistente.
 
 ## 8. Contratos de operaciones especiales
 
@@ -120,10 +123,10 @@ Mientras `DEC-PLZ-001` no esté aprobada, plazo, calendario y umbrales permanece
 | Prórroga | Bloqueada por `DEC-PLZ-001` | faltan aprobador, causal, duración y calendario |
 | Ampliación | Bloqueada por `DEC-AMP-001` | faltan punto de corte, plazo y continuidad definitiva |
 
-Una operación bloqueada responde `PENDING_FUNCTIONAL_DECISION` con su código de decisión; no simula éxito ni modifica datos.
+Las operaciones bloqueadas no se presentan como acciones en la interfaz. Sus contratos internos no simulan éxito ni modifican datos.
 
 ## 9. Evidencia ejecutable
 
-Las pruebas automatizadas cubren transiciones válidas e inválidas, permisos concedidos y denegados, titularidad, aislamiento por área, multiítem independiente, reparto explicable, cola sin candidato, versionado de Víctimas, bifurcación de cierres, catálogo y operaciones pendientes.
+Las pruebas automatizadas cubren transiciones válidas e inválidas, permisos concedidos y denegados, titularidad, aislamiento por área y regional, multiítem independiente, reparto automático por hito, cola sin candidato, personas con relaciones y contacto, versionado de Víctimas, bifurcación de cierres, catálogo, métricas condicionadas y ausencia de acciones pendientes.
 
 La interfaz incluye recorrido de escritorio y móvil mediante Playwright. El script de humo conserva los dos recorridos completos. No se despliega este incremento hasta recibir una orden explícita.

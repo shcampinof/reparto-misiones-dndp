@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  apiAssignInvestigation,
   apiCreateInvestigation,
   apiCreateVictims,
   apiDemoBootstrap,
@@ -15,6 +14,7 @@ const STATUS_LABELS = {
   PENDIENTE_APROBACION_PAG: "Pendiente aprobación PAG",
   DEVUELTA: "Devuelta para corrección",
   APROBADA_REPARTO: "Aprobada para reparto",
+  PENDIENTE_EXCEPCION: "Pendiente de excepción",
   PENDIENTE_REASIGNACION: "Sin candidato / pendiente",
   ASIGNADA: "Asignada",
   EN_EJECUCION: "En ejecución",
@@ -48,9 +48,12 @@ const TRAYS = [
 const CAPABILITIES = {
   RESET: "RESTABLECER_PRESENTACION",
   CREATE_INVESTIGATION: "CREAR_SOLICITUD_INVESTIGACION",
-  ASSIGN_INVESTIGATION: "EJECUTAR_REPARTO_INVESTIGACION",
   EXECUTE_INVESTIGATION: "EJECUTAR_ITEM_INVESTIGACION",
   APPROVE_INVESTIGATION: "APROBAR_INFORME_INVESTIGACION",
+  VIEW_PROBLEMS: "CONSULTAR_PROBLEMAS_INVESTIGACION",
+  VIEW_EXCEPTIONS: "CONSULTAR_EXCEPCIONES_INVESTIGACION",
+  VIEW_COVERAGE: "CONSULTAR_COBERTURA_INVESTIGACION",
+  VIEW_INDICATORS: "CONSULTAR_INDICADORES_INVESTIGACION",
   CREATE_VICTIMS: "CREAR_SOLICITUD_VICTIMAS",
   APPROVE_VICTIMS: "AVALAR_SOLICITUD_VICTIMAS",
   CORRECT_VICTIMS: "CORREGIR_SOLICITUD_VICTIMAS",
@@ -288,6 +291,7 @@ export default function PortalPage() {
           profileHas(profile, CAPABILITIES.CREATE_INVESTIGATION, area) && (
             <InvestigationForm
               catalogs={data.catalogs}
+              profile={profile}
               token={token}
               run={run}
               busy={Boolean(busy)}
@@ -297,11 +301,20 @@ export default function PortalPage() {
           profileHas(profile, CAPABILITIES.CREATE_VICTIMS, area) && (
             <VictimsForm
               catalogs={data.catalogs}
+              profile={profile}
               token={token}
               run={run}
               busy={Boolean(busy)}
             />
           )}
+
+        {area === "INVESTIGACION" && (
+          <InvestigationRoleWorkspace
+            profile={profile}
+            requests={requests}
+            area={area}
+          />
+        )}
 
         <ServiceCatalog
           area={area}
@@ -384,6 +397,98 @@ function Kpi({ label, value, tone }) {
   );
 }
 
+function InvestigationRoleWorkspace({ profile, requests }) {
+  const items = requests.flatMap((request) =>
+    request.items.map((item) => ({ ...item, requestId: request.id })),
+  );
+  if (profileHas(profile, CAPABILITIES.VIEW_EXCEPTIONS, "INVESTIGACION")) {
+    const exceptions = items.filter(
+      (item) => item.status === "PENDIENTE_EXCEPCION",
+    );
+    return (
+      <section className="role-workspace">
+        <div className="section-title">
+          <div>
+            <small>Alcance nacional</small>
+            <h2>Cola de excepciones de Investigación</h2>
+          </div>
+          <span>{exceptions.length} ítem(s)</span>
+        </div>
+        <p>
+          Consulta de cobertura, candidatos excluidos y causales. La gestión
+          manual no está habilitada sin RACI vigente.
+        </p>
+        {exceptions.map((item) => (
+          <article key={item.id}>
+            <strong>
+              {item.requestId} · {item.serviceLabel}
+            </strong>
+            <span>{item.regionLabel}</span>
+            <small>{item.assignment?.selectedReason}</small>
+          </article>
+        ))}
+      </section>
+    );
+  }
+  if (profileHas(profile, CAPABILITIES.VIEW_PROBLEMS, "INVESTIGACION")) {
+    const problems = items.flatMap((item) =>
+      (item.operations || [])
+        .filter((operation) => operation.type === "PROBLEMA")
+        .map((operation) => ({ ...operation, itemId: item.id })),
+    );
+    const corrections = items.flatMap((item) =>
+      (item.timeline || [])
+        .filter((event) => /devuelt|correg/i.test(event.message))
+        .map((event) => ({ ...event, itemId: item.id })),
+    );
+    return (
+      <section className="role-workspace">
+        <div className="section-title">
+          <div>
+            <small>
+              Alcance regional · {profile?.region || "Regional asignada"}
+            </small>
+            <h2>Continuidad operativa de Investigación</h2>
+          </div>
+          <span>{requests.length} solicitud(es)</span>
+        </div>
+        <div className="role-workspace-columns">
+          <article>
+            <strong>Problemas reportados</strong>
+            <span>{problems.length}</span>
+            <small>Consulta de reportes recibidos por la regional.</small>
+          </article>
+          <article>
+            <strong>Historial de correcciones</strong>
+            <span>{corrections.length}</span>
+            <small>
+              Las radicaciones y sus eventos se conservan sin sobrescritura.
+            </small>
+          </article>
+        </div>
+      </section>
+    );
+  }
+  if (profileHas(profile, CAPABILITIES.VIEW_INDICATORS, "INVESTIGACION")) {
+    return (
+      <section className="role-workspace">
+        <div className="section-title">
+          <div>
+            <small>Alcance regional · solo lectura</small>
+            <h2>Seguimiento territorial</h2>
+          </div>
+          <span>{requests.length} solicitud(es)</span>
+        </div>
+        <p>
+          Consulta de estados, cargas, productos e indicadores disponibles. Esta
+          cuenta no reparte, reasigna, corrige, aprueba ni cierra.
+        </p>
+      </section>
+    );
+  }
+  return null;
+}
+
 function ServiceCatalog({ area, services, specialties }) {
   const areaServices = services.filter((service) => service.area === area);
   const specialtyNames = new Map(
@@ -451,7 +556,7 @@ function ServiceCatalog({ area, services, specialties }) {
                 </div>
                 <div>
                   <dt>Plazo</dt>
-                  <dd>{service.termPolicy.label}</dd>
+                  <dd>Plazo parametrizable por servicio</dd>
                 </div>
               </dl>
             </article>
@@ -462,15 +567,49 @@ function ServiceCatalog({ area, services, specialties }) {
   );
 }
 
-function InvestigationForm({ catalogs, token, run, busy }) {
+function InvestigationForm({ catalogs, profile, token, run, busy }) {
+  const steps = [
+    "Solicitante",
+    "Proceso",
+    "Necesidad",
+    "Servicios",
+    "Confirmación",
+  ];
+  const [step, setStep] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
   const [form, setForm] = useState({
+    identifierType: "SPOA",
     spoa: "110016000049202600099",
-    delito: "Investigación de hechos asociados al caso",
+    processReference: "Proceso penal 2026-0099",
+    delito: "Conducta asociada al proceso",
+    proceduralStage: "INVESTIGACION",
+    hearingApplies: true,
+    hearingDate: "2026-10-15",
+    facts: "Hechos relevantes informados por la defensa.",
+    hypothesis: "Hipótesis de trabajo que orienta la verificación.",
+    requiredWork: "Ubicar fuentes y verificar las circunstancias indicadas.",
     region: "BOGOTA",
+    differentialApplies: true,
+    differentialDetail: "Medidas de acceso y comunicación pertinentes.",
+    priorityType: "ORDINARIA",
+    priorityReason: "",
+    prioritySupport: "",
   });
+  const [persons, setPersons] = useState([
+    { alias: "Persona relacionada A", relationship: "Procesado/a", notes: "" },
+  ]);
+  const [documents, setDocuments] = useState([
+    { type: "SOLICITUD_DEFENSA", reference: "REF-SOL-2026-0099" },
+  ]);
   const [services, setServices] = useState(["SVC_INV_VERIFICACION_TERRENO"]);
   const update = (key) => (event) =>
-    setForm((current) => ({ ...current, [key]: event.target.value }));
+    setForm((current) => ({
+      ...current,
+      [key]:
+        event.target.type === "checkbox"
+          ? event.target.checked
+          : event.target.value,
+    }));
   const toggleService = (serviceId) =>
     setServices((current) =>
       current.includes(serviceId)
@@ -478,84 +617,308 @@ function InvestigationForm({ catalogs, token, run, busy }) {
         : [...current, serviceId],
     );
   return (
-    <section className="creation-panel">
+    <section className="creation-panel wizard-panel">
       <div className="panel-copy">
-        <small>Paso 1</small>
+        <small>
+          Paso {step + 1} de {steps.length}
+        </small>
         <h2>Radicar solicitud de investigación</h2>
         <p>
-          La asignación del responsable se realiza automáticamente según los
-          criterios aplicables.
+          Al radicar, el sistema intenta el reparto de cada servicio por
+          separado.
         </p>
       </div>
+      <WizardProgress steps={steps} current={step} />
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (step < steps.length - 1) return setStep(step + 1);
           run(
             "create-inv",
             () =>
               apiCreateInvestigation(token, {
-                ...form,
+                identifierType: form.identifierType,
+                spoa: form.spoa,
+                processReference: form.processReference,
+                delito: form.delito,
+                proceduralStage: form.proceduralStage,
+                hearingApplies: form.hearingApplies,
+                hearingDate: form.hearingDate,
+                facts: form.facts,
+                hypothesis: form.hypothesis,
+                requiredWork: form.requiredWork,
+                differentialApproach: {
+                  applies: form.differentialApplies,
+                  detail: form.differentialDetail,
+                },
+                priority: {
+                  type: form.priorityType,
+                  reason: form.priorityReason,
+                  support: form.prioritySupport,
+                },
+                persons,
+                documents,
                 items: services.map((service) => ({
                   service,
                   region: form.region,
                 })),
               }),
-            "Solicitud de Investigación radicada",
+            "Solicitud radicada; el reparto automático fue procesado por ítem",
           );
         }}
       >
-        <label>
-          Número SPOA
-          <input value={form.spoa} onChange={update("spoa")} maxLength="21" />
-        </label>
-        <label>
-          Delito
-          <input value={form.delito} onChange={update("delito")} />
-        </label>
-        <fieldset className="service-selector">
-          <legend>Servicios requeridos</legend>
-          <small>Cada servicio genera un ítem con reparto independiente.</small>
-          <div>
-            {catalogs.investigationServices.map((item) => (
-              <label key={item.id}>
+        {step === 0 && (
+          <>
+            <ReadonlyRequester
+              profile={profile}
+              label="Defensor/a solicitante"
+            />
+            <PersonsEditor
+              persons={persons}
+              setPersons={setPersons}
+              mode="investigation"
+            />
+          </>
+        )}
+        {step === 1 && (
+          <div className="wizard-fields">
+            <label>
+              Tipo de identificador
+              <select
+                value={form.identifierType}
+                onChange={update("identifierType")}
+              >
+                <option value="SPOA">SPOA</option>
+                <option value="OTRO">Otro identificador</option>
+              </select>
+            </label>
+            <label>
+              SPOA u otro identificador
+              <input
+                aria-label="SPOA u otro identificador"
+                value={form.spoa}
+                onChange={update("spoa")}
+              />
+            </label>
+            <label>
+              Proceso o caso
+              <input
+                value={form.processReference}
+                onChange={update("processReference")}
+              />
+            </label>
+            <label>
+              Delito o conducta
+              <input value={form.delito} onChange={update("delito")} />
+            </label>
+            <label>
+              Etapa procesal
+              <select
+                value={form.proceduralStage}
+                onChange={update("proceduralStage")}
+              >
+                {catalogs.proceduralStages.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={form.hearingApplies}
+                onChange={update("hearingApplies")}
+              />
+              Tiene audiencia programada
+            </label>
+            {form.hearingApplies && (
+              <label>
+                Fecha de audiencia
                 <input
-                  type="checkbox"
-                  checked={services.includes(item.id)}
-                  onChange={() => toggleService(item.id)}
+                  type="date"
+                  value={form.hearingDate}
+                  onChange={update("hearingDate")}
                 />
-                {item.label}
               </label>
-            ))}
+            )}
           </div>
-        </fieldset>
-        <label>
-          Cobertura
-          <select value={form.region} onChange={update("region")}>
-            {catalogs.regions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="primary-demo" disabled={busy || !services.length}>
-          {busy ? "Procesando..." : "Radicar solicitud"}
-        </button>
+        )}
+        {step === 2 && (
+          <div className="wizard-fields full-width">
+            <label>
+              Hechos
+              <textarea value={form.facts} onChange={update("facts")} />
+            </label>
+            <label>
+              Hipótesis
+              <textarea
+                value={form.hypothesis}
+                onChange={update("hypothesis")}
+              />
+            </label>
+            <label>
+              Labores requeridas
+              <textarea
+                value={form.requiredWork}
+                onChange={update("requiredWork")}
+              />
+            </label>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={form.differentialApplies}
+                onChange={update("differentialApplies")}
+              />
+              Aplica enfoque diferencial
+            </label>
+            {form.differentialApplies && (
+              <label>
+                Enfoque diferencial
+                <textarea
+                  value={form.differentialDetail}
+                  onChange={update("differentialDetail")}
+                />
+              </label>
+            )}
+            <label>
+              Prioridad
+              <select
+                value={form.priorityType}
+                onChange={update("priorityType")}
+              >
+                {catalogs.priorityTypes.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {form.priorityType !== "ORDINARIA" && (
+              <>
+                <label>
+                  Causal de prioridad
+                  <input
+                    value={form.priorityReason}
+                    onChange={update("priorityReason")}
+                  />
+                </label>
+                <label>
+                  Soporte de prioridad
+                  <input
+                    value={form.prioritySupport}
+                    onChange={update("prioritySupport")}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        )}
+        {step === 3 && (
+          <>
+            <ServiceSelector
+              title="Servicios requeridos"
+              hint="Cada servicio genera un ítem con estado y reparto independientes."
+              catalog={catalogs.investigationServices}
+              selected={services}
+              toggle={toggleService}
+            />
+            <label>
+              Cobertura
+              <select value={form.region} onChange={update("region")}>
+                {catalogs.regions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <DocumentsEditor
+              documents={documents}
+              setDocuments={setDocuments}
+              catalog={catalogs.investigationDocumentTypes}
+            />
+          </>
+        )}
+        {step === 4 && (
+          <ReviewSummary
+            form={form}
+            profile={profile}
+            persons={persons}
+            documents={documents}
+            serviceCount={services.length}
+            area="INVESTIGACION"
+          >
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              Confirmo que la información está completa para radicar
+            </label>
+          </ReviewSummary>
+        )}
+        <WizardNavigation
+          step={step}
+          last={steps.length - 1}
+          setStep={setStep}
+          busy={busy}
+          disabled={
+            !services.length || (step === steps.length - 1 && !confirmed)
+          }
+          finalLabel="Radicar solicitud"
+        />
       </form>
     </section>
   );
 }
 
-function VictimsForm({ catalogs, token, run, busy }) {
+function VictimsForm({ catalogs, profile, token, run, busy }) {
+  const steps = ["RJV", "Proceso", "Personas", "Servicios", "Confirmación"];
+  const [step, setStep] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
   const [form, setForm] = useState({
     externalId: "RAD-2026-0004",
     law: "LEY_1448",
+    processReference: "Proceso de reparación 2026-0004",
+    hearingApplies: true,
+    hearingDate: "2026-10-20",
+    facts: "Hechos relevantes para la valoración pericial solicitada.",
     region: "BOGOTA",
-    victimCount: 2,
   });
+  const [persons, setPersons] = useState([
+    {
+      alias: "Persona vinculada A",
+      type: "DIRECTA",
+      relationship: "Víctima directa",
+      familyGroup: "Núcleo A",
+      phone: "3000000001",
+      email: "persona.a@example.invalid",
+      preferredChannel: "Correo",
+    },
+    {
+      alias: "Persona vinculada B",
+      type: "INDIRECTA",
+      relationship: "Familiar",
+      familyGroup: "Núcleo A",
+      phone: "3000000002",
+      email: "persona.b@example.invalid",
+      preferredChannel: "Teléfono",
+    },
+  ]);
+  const [documents, setDocuments] = useState([
+    { type: "FORMATO_SOLICITUD", reference: "REF-FORM-2026-0004" },
+  ]);
   const [services, setServices] = useState(["SVC_VIC_EVALUACION_PSICOLOGICA"]);
   const update = (key) => (event) =>
-    setForm((current) => ({ ...current, [key]: event.target.value }));
+    setForm((current) => ({
+      ...current,
+      [key]:
+        event.target.type === "checkbox"
+          ? event.target.checked
+          : event.target.value,
+    }));
   const toggleService = (serviceId) =>
     setServices((current) =>
       current.includes(serviceId)
@@ -563,87 +926,497 @@ function VictimsForm({ catalogs, token, run, busy }) {
         : [...current, serviceId],
     );
   return (
-    <section className="creation-panel victims">
+    <section className="creation-panel victims wizard-panel">
       <div className="panel-copy">
-        <small>Paso 1</small>
+        <small>
+          Paso {step + 1} de {steps.length}
+        </small>
         <h2>Crear solicitud de servicio pericial</h2>
         <p>
-          Registre el contexto del servicio para remitirlo a la aprobación
-          previa correspondiente.
+          El envío conserva el aval previo; al aprobar, el sistema ejecuta el
+          reparto.
         </p>
       </div>
+      <WizardProgress steps={steps} current={step} />
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (step < steps.length - 1) return setStep(step + 1);
           run(
             "create-vic",
             () =>
               apiCreateVictims(token, {
-                ...form,
-                victimCount: Number(form.victimCount),
+                externalId: form.externalId,
+                law: form.law,
+                caseData: {
+                  processReference: form.processReference,
+                  hearingApplies: form.hearingApplies,
+                  hearingDate: form.hearingDate,
+                  facts: form.facts,
+                },
+                persons: persons.map((person) => ({
+                  alias: person.alias,
+                  type: person.type,
+                  relationship: person.relationship,
+                  familyGroup: person.familyGroup,
+                  contact: {
+                    phone: person.phone,
+                    email: person.email,
+                    preferredChannel: person.preferredChannel,
+                  },
+                })),
+                documents,
                 items: services.map((service) => ({
                   service,
                   region: form.region,
                   law: form.law,
                 })),
               }),
-            "Solicitud de Víctimas enviada a aprobación PAG",
+            "Solicitud de Víctimas enviada a aprobación previa",
           );
         }}
       >
-        <label>
-          Número de radicado
-          <input value={form.externalId} onChange={update("externalId")} />
-        </label>
-        <label>
-          Ley/programa
-          <select value={form.law} onChange={update("law")}>
-            {catalogs.laws.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <fieldset className="service-selector">
-          <legend>Servicios periciales requeridos</legend>
-          <small>Cada servicio conserva aprobación y reparto por ítem.</small>
-          <div>
-            {catalogs.victimServices.map((item) => (
-              <label key={item.id}>
-                <input
-                  type="checkbox"
-                  checked={services.includes(item.id)}
-                  onChange={() => toggleService(item.id)}
-                />
-                {item.label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <label>
-          Cobertura
-          <select value={form.region} onChange={update("region")}>
-            {catalogs.regions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Número de víctimas
-          <input
-            type="number"
-            min="1"
-            value={form.victimCount}
-            onChange={update("victimCount")}
+        {step === 0 && (
+          <ReadonlyRequester
+            profile={profile}
+            label="Representante judicial de víctimas"
           />
-        </label>
-        <button className="primary-demo" disabled={busy || !services.length}>
-          {busy ? "Procesando..." : "Enviar a aprobación previa"}
-        </button>
+        )}
+        {step === 1 && (
+          <div className="wizard-fields full-width">
+            <label>
+              Número de radicado
+              <input value={form.externalId} onChange={update("externalId")} />
+            </label>
+            <label>
+              Ley o programa
+              <select value={form.law} onChange={update("law")}>
+                {catalogs.laws.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Proceso
+              <input
+                value={form.processReference}
+                onChange={update("processReference")}
+              />
+            </label>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={form.hearingApplies}
+                onChange={update("hearingApplies")}
+              />
+              Tiene audiencia programada
+            </label>
+            {form.hearingApplies && (
+              <label>
+                Fecha de audiencia
+                <input
+                  type="date"
+                  value={form.hearingDate}
+                  onChange={update("hearingDate")}
+                />
+              </label>
+            )}
+            <label>
+              Hechos
+              <textarea value={form.facts} onChange={update("facts")} />
+            </label>
+          </div>
+        )}
+        {step === 2 && (
+          <PersonsEditor
+            persons={persons}
+            setPersons={setPersons}
+            mode="victims"
+          />
+        )}
+        {step === 3 && (
+          <>
+            <ServiceSelector
+              title="Servicios periciales requeridos"
+              hint="Cada servicio conserva aprobación, reparto, estado y producto por ítem."
+              catalog={catalogs.victimServices}
+              selected={services}
+              toggle={toggleService}
+            />
+            <label>
+              Cobertura
+              <select value={form.region} onChange={update("region")}>
+                {catalogs.regions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <DocumentsEditor
+              documents={documents}
+              setDocuments={setDocuments}
+              catalog={catalogs.victimDocumentTypes}
+            />
+          </>
+        )}
+        {step === 4 && (
+          <ReviewSummary
+            form={form}
+            profile={profile}
+            persons={persons}
+            documents={documents}
+            serviceCount={services.length}
+            area="VICTIMAS"
+          >
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              Confirmo el envío a aprobación previa
+            </label>
+          </ReviewSummary>
+        )}
+        <WizardNavigation
+          step={step}
+          last={steps.length - 1}
+          setStep={setStep}
+          busy={busy}
+          disabled={
+            !services.length || (step === steps.length - 1 && !confirmed)
+          }
+          finalLabel="Enviar a aprobación previa"
+        />
       </form>
+    </section>
+  );
+}
+
+function WizardProgress({ steps, current }) {
+  return (
+    <ol className="wizard-progress" aria-label="Progreso de la radicación">
+      {steps.map((label, index) => (
+        <li
+          key={label}
+          className={
+            index === current ? "active" : index < current ? "complete" : ""
+          }
+        >
+          <span>{index + 1}</span>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WizardNavigation({ step, last, setStep, busy, disabled, finalLabel }) {
+  return (
+    <div className="wizard-navigation">
+      {step > 0 && (
+        <button type="button" onClick={() => setStep(step - 1)}>
+          Anterior
+        </button>
+      )}
+      <button className="primary-demo" disabled={busy || disabled}>
+        {busy ? "Procesando..." : step === last ? finalLabel : "Siguiente"}
+      </button>
+    </div>
+  );
+}
+
+function ReadonlyRequester({ profile, label }) {
+  return (
+    <fieldset className="readonly-requester">
+      <legend>{label} identificado automáticamente</legend>
+      <label>
+        Nombre
+        <input value={profile?.fullName || ""} readOnly />
+      </label>
+      <label>
+        Rol
+        <input value={profile?.roleLabel || profile?.role || ""} readOnly />
+      </label>
+      <label>
+        Correo
+        <input value={profile?.email || ""} readOnly />
+      </label>
+    </fieldset>
+  );
+}
+
+function PersonsEditor({ persons, setPersons, mode }) {
+  const updatePerson = (index, field, value) =>
+    setPersons((current) =>
+      current.map((person, position) =>
+        position === index ? { ...person, [field]: value } : person,
+      ),
+    );
+  const add = () =>
+    setPersons((current) => [
+      ...current,
+      mode === "victims"
+        ? {
+            alias: "",
+            type: "INDIRECTA",
+            relationship: "",
+            familyGroup: "",
+            phone: "",
+            email: "",
+            preferredChannel: "Teléfono",
+          }
+        : { alias: "", relationship: "", notes: "" },
+    ]);
+  return (
+    <fieldset className="persons-editor">
+      <legend>
+        {mode === "victims" ? "Personas vinculadas" : "Personas relacionadas"}
+      </legend>
+      {persons.map((person, index) => (
+        <div className="person-row" key={`person-${index}`}>
+          <label>
+            Identificación de presentación
+            <input
+              aria-label={`Identificación persona ${index + 1}`}
+              value={person.alias}
+              onChange={(event) =>
+                updatePerson(index, "alias", event.target.value)
+              }
+            />
+          </label>
+          {mode === "victims" && (
+            <label>
+              Tipo
+              <select
+                aria-label={`Tipo persona ${index + 1}`}
+                value={person.type}
+                onChange={(event) =>
+                  updatePerson(index, "type", event.target.value)
+                }
+              >
+                <option value="DIRECTA">Víctima directa</option>
+                <option value="INDIRECTA">Víctima indirecta</option>
+              </select>
+            </label>
+          )}
+          <label>
+            {mode === "victims"
+              ? "Parentesco o relación"
+              : "Relación con el caso"}
+            <input
+              value={person.relationship}
+              onChange={(event) =>
+                updatePerson(index, "relationship", event.target.value)
+              }
+            />
+          </label>
+          {mode === "victims" ? (
+            <>
+              <label>
+                Núcleo familiar
+                <input
+                  value={person.familyGroup}
+                  onChange={(event) =>
+                    updatePerson(index, "familyGroup", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                Teléfono
+                <input
+                  value={person.phone}
+                  onChange={(event) =>
+                    updatePerson(index, "phone", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                Correo
+                <input
+                  type="email"
+                  value={person.email}
+                  onChange={(event) =>
+                    updatePerson(index, "email", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                Canal preferido
+                <select
+                  value={person.preferredChannel}
+                  onChange={(event) =>
+                    updatePerson(index, "preferredChannel", event.target.value)
+                  }
+                >
+                  <option>Correo</option>
+                  <option>Teléfono</option>
+                </select>
+              </label>
+            </>
+          ) : (
+            <label>
+              Observaciones
+              <input
+                value={person.notes}
+                onChange={(event) =>
+                  updatePerson(index, "notes", event.target.value)
+                }
+              />
+            </label>
+          )}
+          {persons.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setPersons((current) =>
+                  current.filter((_, position) => position !== index),
+                )
+              }
+            >
+              Quitar persona
+            </button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={add}>
+        Agregar persona
+      </button>
+    </fieldset>
+  );
+}
+
+function DocumentsEditor({ documents, setDocuments, catalog }) {
+  const updateDocument = (index, field, value) =>
+    setDocuments((current) =>
+      current.map((document, position) =>
+        position === index ? { ...document, [field]: value } : document,
+      ),
+    );
+  return (
+    <fieldset className="documents-editor">
+      <legend>Documentos y formatos aplicables</legend>
+      {documents.map((document, index) => (
+        <div className="document-row" key={`document-${index}`}>
+          <label>
+            Tipo
+            <select
+              value={document.type}
+              onChange={(event) =>
+                updateDocument(index, "type", event.target.value)
+              }
+            >
+              {catalog.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Referencia
+            <input
+              aria-label={`Referencia documental ${index + 1}`}
+              value={document.reference}
+              onChange={(event) =>
+                updateDocument(index, "reference", event.target.value)
+              }
+            />
+          </label>
+          {documents.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setDocuments((current) =>
+                  current.filter((_, position) => position !== index),
+                )
+              }
+            >
+              Quitar documento
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() =>
+          setDocuments((current) => [
+            ...current,
+            { type: catalog[0]?.id || "", reference: "" },
+          ])
+        }
+      >
+        Agregar documento
+      </button>
+    </fieldset>
+  );
+}
+
+function ServiceSelector({ title, hint, catalog, selected, toggle }) {
+  return (
+    <fieldset className="service-selector">
+      <legend>{title}</legend>
+      <small>{hint}</small>
+      <div>
+        {catalog.map((item) => (
+          <label key={item.id}>
+            <input
+              type="checkbox"
+              checked={selected.includes(item.id)}
+              onChange={() => toggle(item.id)}
+            />
+            {item.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function ReviewSummary({
+  form,
+  profile,
+  persons,
+  documents,
+  serviceCount,
+  area,
+  children,
+}) {
+  return (
+    <section className="review-summary">
+      <h3>
+        Resumen antes de {area === "INVESTIGACION" ? "radicar" : "enviar"}
+      </h3>
+      <dl>
+        <div>
+          <dt>Solicitante</dt>
+          <dd>{profile?.fullName}</dd>
+        </div>
+        <div>
+          <dt>Proceso</dt>
+          <dd>{form.processReference}</dd>
+        </div>
+        <div>
+          <dt>Personas</dt>
+          <dd>{persons.length}</dd>
+        </div>
+        <div>
+          <dt>Servicios</dt>
+          <dd>{serviceCount}</dd>
+        </div>
+        <div>
+          <dt>Documentos</dt>
+          <dd>{documents.length}</dd>
+        </div>
+        <div>
+          <dt>Cobertura</dt>
+          <dd>{form.region}</dd>
+        </div>
+      </dl>
+      {children}
     </section>
   );
 }
@@ -669,12 +1442,23 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
         {` · ${request.aggregateCounts.closedItems}/${request.aggregateCounts.totalItems} ítems cerrados`}
       </p>
       {request.persons?.length > 0 && (
-        <div className="synthetic-persons">
+        <div className="related-persons">
           <strong>{request.persons.length} persona(s) vinculada(s)</strong>
           {request.persons.map((person) => (
             <span key={person.alias}>
               {person.alias} ·{" "}
-              {person.type === "DIRECTA" ? "Directa" : "Indirecta"}
+              {person.type
+                ? person.type === "DIRECTA"
+                  ? "Directa"
+                  : "Indirecta"
+                : person.relationship}
+              {person.type && person.relationship
+                ? ` · ${person.relationship}`
+                : ""}
+              {person.familyGroup ? ` · ${person.familyGroup}` : ""}
+              {person.contact?.preferredChannel
+                ? ` · Contacto por ${person.contact.preferredChannel.toLowerCase()}`
+                : ""}
             </span>
           ))}
         </div>
@@ -737,18 +1521,22 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
             {selectedCandidate ? selectedCandidate.metrics.load : "No aplica"}
           </strong>
         </span>
-        <span>
-          <small>Días restantes</small>
-          <strong>{item.tracking?.daysRemaining ?? "No calculable"}</strong>
-        </span>
-        <span>
-          <small>Semáforo</small>
-          <strong>{item.tracking?.semaphore || "No calculable"}</strong>
-        </span>
-        <span>
-          <small>Oportunidad</small>
-          <strong>{item.tracking?.opportunity || "No calculable"}</strong>
-        </span>
+        {item.tracking?.configured && (
+          <>
+            <span>
+              <small>Días restantes</small>
+              <strong>{item.tracking.daysRemaining}</strong>
+            </span>
+            <span>
+              <small>Semáforo</small>
+              <strong>{item.tracking.semaphore}</strong>
+            </span>
+            <span>
+              <small>Oportunidad</small>
+              <strong>{item.tracking.opportunity}</strong>
+            </span>
+          </>
+        )}
         <span>
           <small>Actuaciones</small>
           <strong>{item.activities?.length || 0}</strong>
@@ -759,22 +1547,6 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
         </span>
       </div>
       <div className="demo-actions">
-        {area === "INVESTIGACION" &&
-          profileHas(profile, CAPABILITIES.ASSIGN_INVESTIGATION, area) &&
-          ["RADICADA", "PENDIENTE_REASIGNACION"].includes(item.status) && (
-            <button
-              disabled={isBusy}
-              onClick={() =>
-                run(
-                  item.id,
-                  () => apiAssignInvestigation(token, item.id),
-                  "Asignación automática de Investigación completada",
-                )
-              }
-            >
-              Validar y ejecutar reparto
-            </button>
-          )}
         {area === "INVESTIGACION" &&
           profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&
           item.status === "INFORME_ENTREGADO" && (
@@ -897,11 +1669,11 @@ function VictimsApprovalActions({ item, token, busy, run }) {
             run(
               item.id,
               () => apiVictimsAction(token, item.id, "aprobar-y-repartir"),
-              "Aprobación previa y asignación automática completadas",
+              "Aprobación registrada; el reparto automático fue procesado",
             )
           }
         >
-          Aprobar y repartir
+          Aprobar solicitud
         </button>
       </div>
     </div>
@@ -1019,7 +1791,7 @@ function CaseDetail({ request, item, onClose }) {
   const closeButtonRef = useRef(null);
   const assignmentSummary = item.assignment
     ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
-    : "El reparto todavía no se ha ejecutado.";
+    : "El reparto automático se ejecutará al cumplirse el hito aplicable.";
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
@@ -1089,28 +1861,31 @@ function CaseDetail({ request, item, onClose }) {
             <dt>Estado del trámite</dt>
             <dd>{STATUS_LABELS[item.status] || item.status}</dd>
           </div>
-          <div>
-            <dt>Días restantes</dt>
-            <dd>{item.tracking?.daysRemaining ?? "No calculable"}</dd>
-          </div>
-          <div>
-            <dt>Semáforo</dt>
-            <dd>{item.tracking?.semaphore || "No calculable"}</dd>
-          </div>
-          <div>
-            <dt>Oportunidad</dt>
-            <dd>{item.tracking?.opportunity || "No calculable"}</dd>
-          </div>
+          {item.tracking?.configured && (
+            <>
+              <div>
+                <dt>Días restantes</dt>
+                <dd>{item.tracking.daysRemaining}</dd>
+              </div>
+              <div>
+                <dt>Semáforo</dt>
+                <dd>{item.tracking.semaphore}</dd>
+              </div>
+              <div>
+                <dt>Oportunidad</dt>
+                <dd>{item.tracking.opportunity}</dd>
+              </div>
+            </>
+          )}
           <div>
             <dt>Especialidad o disciplina elegible</dt>
             <dd>{item.specialtyLabels?.join(", ") || "Sin dato"}</dd>
           </div>
         </dl>
 
-        <p className="validation-pending">
-          {item.tracking?.label ||
-            "Plazo y calendario pendientes de validación funcional."}
-        </p>
+        {item.tracking?.configured && (
+          <p className="validation-pending">{item.tracking.label}</p>
+        )}
 
         <section className="detail-section">
           <h3>Explicación resumida de asignación</h3>
@@ -1338,6 +2113,7 @@ function processFor(area, status) {
     area === "INVESTIGACION"
       ? {
           RADICADA: 1,
+          PENDIENTE_EXCEPCION: 1,
           PENDIENTE_REASIGNACION: 1,
           ASIGNADA: 2,
           EN_EJECUCION: 2,
@@ -1361,12 +2137,12 @@ function nextActionFor(area, status) {
   if (area === "INVESTIGACION") {
     const actions = {
       RADICADA: {
-        action: "Validar datos y ejecutar reparto automático",
-        role: "Defensor/a solicitante",
+        action: "Procesar reparto automático",
+        role: "Sistema",
       },
-      PENDIENTE_REASIGNACION: {
-        action: "Reintentar reparto con datos elegibles",
-        role: "Defensor/a solicitante",
+      PENDIENTE_EXCEPCION: {
+        action: "Consultar la excepción registrada",
+        role: "Gestión central de excepciones",
       },
       ASIGNADA: {
         action: "Iniciar misión",
@@ -1391,7 +2167,7 @@ function nextActionFor(area, status) {
       role: "Representante judicial de víctimas",
     },
     PENDIENTE_APROBACION_PAG: {
-      action: "Aprobar y ejecutar reparto automático",
+      action: "Aprobar solicitud; el sistema repartirá automáticamente",
       role: "PAG / Supervisor Víctimas",
     },
     APROBADA_REPARTO: {
@@ -1419,8 +2195,6 @@ function nextActionFor(area, status) {
 function canActOnItem(area, profile, status) {
   if (area === "INVESTIGACION") {
     return (
-      (profileHas(profile, CAPABILITIES.ASSIGN_INVESTIGATION, area) &&
-        ["RADICADA", "PENDIENTE_REASIGNACION"].includes(status)) ||
       (profileHas(profile, CAPABILITIES.EXECUTE_INVESTIGATION, area) &&
         ["ASIGNADA", "EN_EJECUCION"].includes(status)) ||
       (profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&

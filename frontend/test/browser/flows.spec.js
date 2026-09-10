@@ -34,6 +34,39 @@ function requestCard(page, externalId) {
   return page.locator(".request-card").filter({ hasText: externalId });
 }
 
+async function submitInvestigation(page, spoa, configureServices) {
+  const roleField = page.getByRole("textbox", { name: "Rol", exact: true });
+  await expect(roleField).toHaveValue("Defensor/a solicitante");
+  await expect(roleField).toHaveAttribute("readonly", "");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByLabel("SPOA u otro identificador").fill(spoa);
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  if (configureServices) await configureServices();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page
+    .getByLabel("Confirmo que la información está completa para radicar")
+    .check();
+  await page.getByRole("button", { name: "Radicar solicitud" }).click();
+}
+
+async function submitVictims(page, externalId) {
+  const roleField = page.getByRole("textbox", { name: "Rol", exact: true });
+  await expect(roleField).toHaveValue("Representante judicial de víctimas");
+  await expect(roleField).toHaveAttribute("readonly", "");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByLabel("Número de radicado").fill(externalId);
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await expect(page.getByLabel("Identificación persona 1")).toBeVisible();
+  await expect(page.getByLabel("Identificación persona 2")).toBeVisible();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByLabel("Confirmo el envío a aprobación previa").check();
+  await page
+    .getByRole("button", { name: "Enviar a aprobación previa" })
+    .click();
+}
+
 async function expectNoInternalPresentationText(page) {
   const visibleText = await page.locator("body").innerText();
   expect(visibleText).not.toMatch(
@@ -50,15 +83,12 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
 }) => {
   const externalId = "RAD-2026-0098";
   await chooseProfile(page, { area: "VICTIMAS", userId: "demo-rjv" });
-  await page.getByLabel("Número de radicado").fill(externalId);
   await expect(
     page.getByLabel(/perito asignado|funcionario responsable/i),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Enviar a aprobación previa" })
-    .click();
+  await submitVictims(page, externalId);
   await expect(
-    page.getByText("Solicitud de Víctimas enviada a aprobación PAG"),
+    page.getByText("Solicitud de Víctimas enviada a aprobación previa"),
   ).toBeVisible();
   await expect(requestCard(page, externalId)).toContainText(
     "Pendiente aprobación PAG",
@@ -112,10 +142,12 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
     userId: "demo-pag-victimas",
   });
   await requestCard(page, externalId)
-    .getByRole("button", { name: "Aprobar y repartir" })
+    .getByRole("button", { name: "Aprobar solicitud" })
     .click();
   await expect(
-    page.getByText("Aprobación previa y asignación automática completadas"),
+    page.getByText(
+      "Aprobación registrada; el reparto automático fue procesado",
+    ),
   ).toBeVisible();
   await expect(requestCard(page, externalId)).toContainText("Asignada");
 
@@ -147,14 +179,15 @@ test("Investigación completa reparto, ejecución y aprobación PAG", async ({
 }) => {
   const spoa = "110016000049202600098";
   await chooseProfile(page, { userId: "demo-defensor" });
-  await page.getByLabel("Número SPOA").fill(spoa);
   await expect(
     page.getByLabel(/investigador asignado|funcionario responsable/i),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Radicar solicitud" }).click();
-  await requestCard(page, spoa)
-    .getByRole("button", { name: "Validar y ejecutar reparto" })
-    .click();
+  await submitInvestigation(page, spoa);
+  await expect(
+    requestCard(page, spoa).getByRole("button", {
+      name: /reparto|reintentar/i,
+    }),
+  ).toHaveCount(0);
   await expect(requestCard(page, spoa)).toContainText("Asignada");
 
   await logout(page);
@@ -190,7 +223,7 @@ test("el administrador conserva consulta y restablecimiento sin acciones operati
     page.getByRole("button", { name: "Restablecer información inicial" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Aprobar y repartir" }),
+    page.getByRole("button", { name: "Aprobar solicitud" }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Aprobar y cerrar" }),
@@ -213,16 +246,16 @@ test("sin candidato muestra la cola pendiente y su explicación", async ({
 }) => {
   const spoa = "110016000049202600097";
   await chooseProfile(page, { userId: "demo-defensor" });
-  await page.getByLabel("Número SPOA").fill(spoa);
-  await page.getByLabel("Verificación investigativa en terreno").uncheck();
-  await page.getByLabel("Análisis técnico balístico").check();
-  await page.getByLabel("Cobertura").selectOption("CUNDINAMARCA");
-  await page.getByRole("button", { name: "Radicar solicitud" }).click();
-  await requestCard(page, spoa)
-    .getByRole("button", { name: "Validar y ejecutar reparto" })
-    .click();
+  await submitInvestigation(page, spoa, async () => {
+    await page.getByLabel("Verificación investigativa en terreno").uncheck();
+    await page.getByLabel("Análisis técnico balístico").check();
+    await page.getByLabel("Cobertura").selectOption("CUNDINAMARCA");
+  });
   const card = requestCard(page, spoa);
-  await expect(card).toContainText("Sin candidato / pendiente");
+  await expect(card).toContainText("Pendiente de excepción");
+  await expect(
+    card.getByRole("button", { name: /reparto|reintentar/i }),
+  ).toHaveCount(0);
   await expect(card).toContainText(/todos fueron excluidos/i);
   await expect(card).toContainText("Cobertura territorial no habilitada");
 });
@@ -232,9 +265,9 @@ test("una solicitud conserva varios ítems y el catálogo separa servicio de esp
 }) => {
   const spoa = "110016000049202600096";
   await chooseProfile(page, { userId: "demo-defensor" });
-  await page.getByLabel("Número SPOA").fill(spoa);
-  await page.getByLabel("Análisis técnico balístico").check();
-  await page.getByRole("button", { name: "Radicar solicitud" }).click();
+  await submitInvestigation(page, spoa, async () => {
+    await page.getByLabel("Análisis técnico balístico").check();
+  });
 
   const card = requestCard(page, spoa);
   await expect(card.locator(".item-card")).toHaveCount(2);
@@ -249,7 +282,7 @@ test("una solicitud conserva varios ítems y el catálogo separa servicio de esp
   ).toBeVisible();
   await expect(page.getByText("Producto esperado").first()).toBeVisible();
   await expect(
-    page.getByText(/pendientes de aprobación funcional/i).first(),
+    page.getByText("Plazo parametrizable por servicio").first(),
   ).toBeVisible();
 
   await logout(page);
@@ -272,7 +305,9 @@ test("el recorrido principal permanece utilizable en viewport móvil", async ({
   await expect(
     page.getByRole("heading", { name: "Investigación", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("Número SPOA")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Rol", exact: true }),
+  ).toHaveValue("Defensor/a solicitante");
   await expect(
     page.getByText("Consultar alcance, requisitos y producto", { exact: true }),
   ).toBeVisible();
@@ -290,10 +325,10 @@ test("el recorrido principal permanece utilizable en viewport móvil", async ({
     .click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(
-    dialog.getByText("Días restantes", { exact: true }),
-  ).toBeVisible();
-  await expect(dialog.getByText("Oportunidad", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Días restantes", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(dialog.getByText("Oportunidad", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Cerrar detalle" }).click();
 });
 
@@ -304,6 +339,9 @@ test("el catálogo resulta visible por alcance sin exponer acciones o textos int
     { userId: "demo-defensor" },
     { userId: "demo-investigador" },
     { userId: "demo-pag-investigacion" },
+    { userId: "demo-gestor-regional-investigacion" },
+    { userId: "demo-gestor-central-excepciones" },
+    { userId: "demo-defensor-regional" },
     { area: "VICTIMAS", userId: "demo-rjv" },
     { area: "VICTIMAS", userId: "demo-perito-psicologia" },
     { area: "VICTIMAS", userId: "demo-pag-victimas" },
@@ -331,4 +369,40 @@ test("el catálogo resulta visible por alcance sin exponer acciones o textos int
     ).toHaveCount(0);
     await logout(page);
   }
+});
+
+test("los perfiles adicionales recorren bandejas conservadoras sin acciones operativas", async ({
+  page,
+}) => {
+  const profiles = [
+    [
+      "demo-gestor-regional-investigacion",
+      "Continuidad operativa de Investigación",
+    ],
+    ["demo-gestor-central-excepciones", "Cola de excepciones de Investigación"],
+    ["demo-defensor-regional", "Seguimiento territorial"],
+  ];
+  for (const [userId, heading] of profiles) {
+    await chooseProfile(page, { userId });
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: /validar y ejecutar reparto|reintentar reparto|reasignar|transferir|aprobar y cerrar|corregir y reenviar/i,
+      }),
+    ).toHaveCount(0);
+    await logout(page);
+  }
+});
+
+test("sin regla de plazo no presenta tarjetas de días, semáforo u oportunidad", async ({
+  page,
+}) => {
+  await chooseProfile(page, { userId: "demo-defensor" });
+  await expect(page.getByText("Días restantes", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Semáforo", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Oportunidad", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No calculable")).toHaveCount(0);
+  await expect(page.getByText("Sin configuración aprobada")).toHaveCount(0);
 });

@@ -6,7 +6,7 @@ Demostración funcional del **Sistema de Información para la Gestión Investiga
 - Space canónico: `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`
 - Aplicación desplegada: `https://shcampinof-reparto-misiones-dndp.hf.space`
 
-> Ambiente de demostración: utiliza únicamente personas, solicitudes, referencias y documentos sintéticos. El almacén temporal en memoria no es la persistencia productiva prevista.
+> Entorno público de presentación: utiliza únicamente identidades y referencias ficticias. Nunca debe contener datos personales reales, documentos institucionales, secretos ni conexión Oracle. El almacén en memoria no es la persistencia productiva prevista.
 
 ## Ejecución local
 
@@ -31,9 +31,9 @@ npm run dev
 - API: `http://localhost:4000`
 - Salud: `http://localhost:4000/api/health`
 
-La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Administrador, Defensor, Investigador y PAG Investigación; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. El perfil `Administrador del sistema` conserva consulta global, gestión técnica y restablecimiento, pero no adopta decisiones operativas.
+La pantalla inicial ofrece acceso directo, sin contraseñas, a perfiles de presentación. Investigación incluye Administrador, Defensor, Investigador, PAG Investigación, Gestor Operativo Regional, Gestor Central de Excepciones y Defensor Regional; Víctimas incluye RJV, PAG/supervisor y peritos psicológico y financiero. Los tres perfiles adicionales de Investigación tienen navegación consultiva conservadora; no reciben actuaciones sujetas a RACI. El perfil `Administrador del sistema` conserva consulta global, gestión técnica y restablecimiento, pero no adopta decisiones operativas.
 
-El modo demo se habilita de forma explícita con `ENABLE_DEMO_ACCOUNTS=true` y está prohibido por configuración en producción. No se requieren ni se publican credenciales.
+En desarrollo, las cuentas de presentación se habilitan con `ENABLE_DEMO_ACCOUNTS=true`; el Space usa `DEMO_MODE=true`. No se publican credenciales.
 
 ## Verificación
 
@@ -50,7 +50,7 @@ npm run build
 npm run test:browser
 ```
 
-Las pruebas API y de navegador recorren ambos flujos completos, devolución/corrección/reenvío en Víctimas, autorización por área y titularidad, reparto exclusivo del backend, restricción operativa del administrador y restablecimiento reproducible.
+Las pruebas API y de navegador recorren ambos flujos completos, asistentes de radicación, personas múltiples, devolución/corrección/reenvío en Víctimas, autorización por área/región/titularidad, reparto automático por hito, restricción operativa de perfiles consultivos y restablecimiento reproducible.
 
 ## Despliegue vigente
 
@@ -71,13 +71,13 @@ backend/src/
 frontend/src/                   acceso por roles, tableros, acciones y trazabilidad
 ```
 
-Las decisiones pendientes usan parámetros rotulados como `Valores de demostración` y una versión de política. Cada reparto registra candidatos, exclusiones, métricas y motivo. El cliente nunca envía el funcionario seleccionado.
+Cada reparto registra candidatos, exclusiones, métricas y motivo. El cliente nunca envía el funcionario seleccionado. Si no existe una regla vigente de plazo, la interfaz omite días restantes, semáforo y oportunidad, y el catálogo indica que el plazo es parametrizable por servicio.
 
 ## Límites
 
 - El almacén vive durante la ejecución, se repone al reiniciar y puede restablecerse desde la interfaz.
-- Los plazos usan días calendario exclusivamente para la demostración; no representan una regla aprobada.
+- Los plazos no se presentan como aprobados mientras no exista una regla vigente aplicable.
 - Oracle, SharePoint, AD/Entra ID, correo, migración histórica y datos institucionales no están habilitados.
-- No debe exponerse esta configuración como ambiente productivo.
+- La instancia en servidor será el entorno institucional; el Space público no debe tratarse como ambiente productivo.
 
 Consulte [la guía de demostración](docs/sigip/11_GUIA_DE_DEMOSTRACION.md), [la línea base técnica](docs/sigip/08_LINEA_BASE_TECNICA.md), [la base de ingeniería](docs/sigip/08A_BASE_INGENIERIA_IMPLEMENTADA.md) y [las brechas funcionales/RACI](docs/sigip/14_BRECHAS_FUNCIONALES_Y_RACI.md).

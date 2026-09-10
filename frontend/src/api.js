@@ -57,13 +57,6 @@ export function apiCreateInvestigation(token, payload) {
   );
 }
 
-export function apiAssignInvestigation(token, itemId) {
-  return request(
-    `/demo/investigacion/items/${encodeURIComponent(itemId)}/repartir`,
-    authenticated(token, "POST"),
-  );
-}
-
 export function apiInvestigationAction(token, itemId, action, payload) {
   return request(
     `/demo/investigacion/items/${encodeURIComponent(itemId)}/${action}`,

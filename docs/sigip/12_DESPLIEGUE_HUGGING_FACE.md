@@ -11,6 +11,8 @@
 
 El despliegue usa el repositorio independiente del Space y no publica `docs/sigip/`, fuentes de levantamiento, pruebas ni archivos locales. Los scripts se niegan a subir a cualquier identificador distinto del Space canónico.
 
+El Space es público y se usa exclusivamente para presentación. Nunca debe contener datos personales reales, documentos institucionales, secretos ni conexión Oracle. La instancia desplegada en servidor institucional será el entorno destinado a operación institucional y deberá usar identidad, seguridad, persistencia y configuración aprobadas.
+
 ## Configuración requerida
 
 Variables del contenedor:
@@ -89,7 +91,7 @@ El administrador conserva esta función técnica y consulta global. No puede apr
 
 El repositorio de presentación está en memoria. Los cambios sobreviven mientras vive el proceso, pero pueden perderse cuando Hugging Face reinicia, suspende o reconstruye el contenedor. Esto no constituye persistencia productiva.
 
-No hay Oracle, SharePoint, AD/Entra ID, correo real, migración histórica ni interoperabilidad institucional. Los valores de plazo, cobertura y desempate pendientes continúan identificados internamente como no aprobados.
+No hay Oracle, SharePoint, AD/Entra ID, correo real, migración histórica ni interoperabilidad institucional. No se debe cargar información personal real ni documentación institucional al Space público. Los valores de plazo, cobertura y desempate pendientes continúan identificados internamente como no aprobados.
 
 ## Reversa
 

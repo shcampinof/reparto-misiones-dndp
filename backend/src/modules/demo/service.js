@@ -25,6 +25,27 @@ const REFERENCE_CATALOGS = Object.freeze({
     { id: "LEY_1448", label: "Ley 1448" },
     { id: "LEY_975", label: "Ley 975" },
   ],
+  proceduralStages: [
+    { id: "INDAGACION", label: "Indagación" },
+    { id: "INVESTIGACION", label: "Investigación" },
+    { id: "JUICIO", label: "Juicio" },
+    { id: "EJECUCION_SENTENCIA", label: "Ejecución de sentencia" },
+  ],
+  priorityTypes: [
+    { id: "ORDINARIA", label: "Ordinaria" },
+    { id: "URGENTE", label: "Urgente" },
+    { id: "UTILIDAD_PUBLICA", label: "Utilidad pública" },
+  ],
+  investigationDocumentTypes: [
+    { id: "SOLICITUD_DEFENSA", label: "Solicitud de la defensa" },
+    { id: "SOPORTE_PROCESAL", label: "Soporte procesal" },
+    { id: "SOPORTE_PRIORIDAD", label: "Soporte de prioridad" },
+  ],
+  victimDocumentTypes: [
+    { id: "FORMATO_SOLICITUD", label: "Formato de solicitud" },
+    { id: "SOPORTE_PROCESAL", label: "Soporte procesal" },
+    { id: "SOPORTE_RELACION", label: "Soporte de relación o parentesco" },
+  ],
 });
 
 export function createDemoService({
@@ -95,11 +116,7 @@ export function createDemoService({
       ownerUserId: auth.sub,
     });
     rejectClientAssignee(payload);
-    const spoa = text(payload.spoa);
-    const delito = text(payload.delito);
-    if (!/^\d{21}$/.test(spoa))
-      throw businessError("SPOA debe contener 21 dígitos");
-    if (!delito) throw businessError("Delito es obligatorio");
+    const intake = normalizeInvestigationIntake(payload);
 
     return repository.transaction((state) => {
       const at = clock();
@@ -115,9 +132,15 @@ export function createDemoService({
         id: `INV-2026-${number}`,
         area: "INVESTIGACION",
         ownerUserId: auth.sub,
-        externalId: spoa,
-        summary: delito,
+        externalId: intake.externalId,
+        summary: intake.conduct,
         createdAt: at,
+        requester: requesterSnapshot(state, auth),
+        persons: intake.persons,
+        caseData: intake.caseData,
+        differentialApproach: intake.differentialApproach,
+        priority: intake.priority,
+        documents: intake.documents,
         items: requestedItems.map((requested, index) => {
           const service = serviceFromState(
             state,
@@ -152,6 +175,12 @@ export function createDemoService({
           };
         }),
       };
+      request.versions = [
+        requestSubmissionVersion({ request, version: 1, at, actor: auth.sub }),
+      ];
+      for (const item of request.items) {
+        attemptInvestigationAssignment(state, item, at);
+      }
       state.requests.unshift(request);
       return presentRequestForAuth(state, request, auth);
     });
@@ -160,41 +189,15 @@ export function createDemoService({
   function assignInvestigationItem(auth, itemId) {
     return repository.transaction((state) => {
       const { request, item } = findItem(state, itemId, "INVESTIGACION");
-      assertCapability(auth, CAPABILITIES.EJECUTAR_REPARTO_INVESTIGACION, {
+      assertCapability(auth, CAPABILITIES.REINTENTAR_REPARTO_EXCEPCION, {
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
-      });
-      assertState(item, ["RADICADA", "PENDIENTE_REASIGNACION"]);
-      const at = clock();
-      const assignment = assignInvestigation({
-        professionals: professionalsWithLoad(state),
-        serviceId: item.service,
-        specialtyIds: item.specialtyIds,
         region: item.region,
-        now: at,
       });
-      item.assignment = assignment;
-      if (!assignment.selectedId) {
-        transition(
-          item,
-          "PENDIENTE_REASIGNACION",
-          auth.sub,
-          assignment.selectedReason,
-          at,
-        );
-      } else {
-        item.assigneeId = assignment.selectedId;
-        item.dueDate = null;
-        recordAssignmentInstant(state, assignment.selectedId, at);
-        transition(
-          item,
-          "ASIGNADA",
-          "sistema-demo",
-          assignment.selectedReason,
-          at,
-        );
-      }
+      assertState(item, ["PENDIENTE_EXCEPCION"]);
+      const at = clock();
+      attemptInvestigationAssignment(state, item, at);
       return presentRequestForAuth(state, request, auth);
     });
   }
@@ -259,6 +262,7 @@ export function createDemoService({
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, ["INFORME_ENTREGADO"]);
       transition(
@@ -283,6 +287,7 @@ export function createDemoService({
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, ["INFORME_ENTREGADO"]);
       transition(
@@ -302,18 +307,7 @@ export function createDemoService({
       ownerUserId: auth.sub,
     });
     rejectClientAssignee(payload);
-    const externalId = text(payload.externalId);
-    const law = text(payload.law);
-    const persons = normalizePersons(payload);
-    if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
-      throw businessError(
-        "Use un número de radicado con formato RAD-AAAA-NNNN",
-      );
-    }
-    requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
-    if (persons.length < 1) {
-      throw businessError("Registre al menos una persona vinculada");
-    }
+    const intake = normalizeVictimsIntake(payload);
 
     return repository.transaction((state) => {
       const at = clock();
@@ -329,10 +323,13 @@ export function createDemoService({
         id: `SVP-2026-${number}`,
         area: "VICTIMAS",
         ownerUserId: auth.sub,
-        externalId,
-        summary: `${requestedItems.length} servicio(s) · ${law}`,
+        externalId: intake.externalId,
+        summary: `${requestedItems.length} servicio(s) · ${intake.law}`,
         createdAt: at,
-        persons,
+        requester: requesterSnapshot(state, auth),
+        persons: intake.persons,
+        caseData: intake.caseData,
+        documents: intake.documents,
         items: requestedItems.map((requested, index) => {
           const service = serviceFromState(
             state,
@@ -351,7 +348,7 @@ export function createDemoService({
             serviceVersion: service.version,
             specialtyIds: structuredClone(service.specialtyIds),
             region: requested.region,
-            law: requested.law || law,
+            law: requested.law || intake.law,
             status: "PENDIENTE_APROBACION_PAG",
             assigneeId: null,
             dueDate: null,
@@ -393,6 +390,7 @@ export function createDemoService({
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, ["PENDIENTE_APROBACION_PAG"]);
       const at = clock();
@@ -416,7 +414,7 @@ export function createDemoService({
         transition(
           item,
           "PENDIENTE_REASIGNACION",
-          "sistema-demo",
+          "motor-reparto",
           assignment.selectedReason,
           at,
         );
@@ -427,7 +425,7 @@ export function createDemoService({
         transition(
           item,
           "ASIGNADA",
-          "sistema-demo",
+          "motor-reparto",
           assignment.selectedReason,
           at,
         );
@@ -448,6 +446,7 @@ export function createDemoService({
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, ["PENDIENTE_APROBACION_PAG"]);
       ensureVictimsVersions(request);
@@ -482,6 +481,7 @@ export function createDemoService({
         area: request.area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, ["DEVUELTA"]);
       ensureVictimsVersions(request);
@@ -496,13 +496,9 @@ export function createDemoService({
       );
       request.externalId = corrected.externalId;
       request.summary = `${request.items.length} servicio(s) · ${corrected.law}`;
-      request.persons = Array.from(
-        { length: corrected.victimCount },
-        (_, index) => ({
-          alias: `Persona vinculada ${String(index + 1).padStart(3, "0")}`,
-          type: index === 0 ? "DIRECTA" : "INDIRECTA",
-        }),
-      );
+      request.persons = corrected.persons;
+      request.caseData = corrected.caseData;
+      request.documents = corrected.documents;
       item.service = corrected.service;
       item.serviceVersion = service.version;
       item.specialtyIds = structuredClone(service.specialtyIds);
@@ -606,6 +602,7 @@ export function createDemoService({
         area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       if (!contract.enabled) {
         throw new AppError(
@@ -658,6 +655,7 @@ export function createDemoService({
         area,
         ownerUserId: request.ownerUserId,
         assigneeId: item.assigneeId,
+        region: item.region,
       });
       assertState(item, states);
       mutate(item, clock());
@@ -689,18 +687,19 @@ export function createDemoService({
 function visibleRequests(state, auth) {
   return state.requests
     .map((request) => {
-      const allItems = request.items;
+      const visibleItems = request.items.filter((item) =>
+        hasCapability(auth, CAPABILITIES.CONSULTAR_SOLICITUDES, {
+          area: request.area,
+          ownerUserId: request.ownerUserId,
+          assigneeId: item.assigneeId,
+          region: item.region,
+        }),
+      );
       return {
         ...request,
-        aggregateStatus: aggregateRequestStatus(allItems),
-        aggregateCounts: aggregateRequestCounts(allItems),
-        items: allItems.filter((item) =>
-          hasCapability(auth, CAPABILITIES.CONSULTAR_SOLICITUDES, {
-            area: request.area,
-            ownerUserId: request.ownerUserId,
-            assigneeId: item.assigneeId,
-          }),
-        ),
+        aggregateStatus: aggregateRequestStatus(request.items),
+        aggregateCounts: aggregateRequestCounts(request.items),
+        items: visibleItems,
       };
     })
     .filter((request) => request.items.length > 0);
@@ -744,6 +743,68 @@ function professionalsWithLoad(state) {
       professional.demoBaseLoad +
       (activeByProfessional.get(professional.id) || 0),
   }));
+}
+
+function attemptInvestigationAssignment(state, item, at) {
+  const assignment = assignInvestigation({
+    professionals: professionalsWithLoad(state),
+    serviceId: item.service,
+    specialtyIds: item.specialtyIds,
+    region: item.region,
+    now: at,
+  });
+  item.assignment = assignment;
+  if (!assignment.selectedId) {
+    item.assigneeId = null;
+    item.dueDate = null;
+    transition(
+      item,
+      "PENDIENTE_EXCEPCION",
+      "motor-reparto",
+      assignment.selectedReason,
+      at,
+    );
+    return;
+  }
+  item.assigneeId = assignment.selectedId;
+  item.dueDate = null;
+  recordAssignmentInstant(state, assignment.selectedId, at);
+  transition(item, "ASIGNADA", "motor-reparto", assignment.selectedReason, at);
+}
+
+function requesterSnapshot(state, auth) {
+  const user = state.users.find((candidate) => candidate.id === auth.sub);
+  return {
+    userId: auth.sub,
+    fullName: user?.fullName || auth.fullName || "Solicitante",
+    role: auth.role,
+    email: auth.email || null,
+    region: auth.region || null,
+  };
+}
+
+function requestSubmissionVersion({ request, version, at, actor }) {
+  return {
+    version,
+    submittedAt: at,
+    submittedBy: actor,
+    correctionSummary: null,
+    data: {
+      externalId: request.externalId,
+      requester: structuredClone(request.requester),
+      persons: structuredClone(request.persons),
+      caseData: structuredClone(request.caseData),
+      differentialApproach: structuredClone(request.differentialApproach),
+      priority: structuredClone(request.priority),
+      documents: structuredClone(request.documents),
+      items: request.items.map((item) => ({
+        id: item.id,
+        service: item.service,
+        serviceVersion: item.serviceVersion,
+        region: item.region,
+      })),
+    },
+  };
 }
 
 function recordAssignmentInstant(state, professionalId, at) {
@@ -803,6 +864,7 @@ function presentRequestForAuth(state, request, auth) {
       area: request.area,
       ownerUserId: request.ownerUserId,
       assigneeId: item.assigneeId,
+      region: item.region,
     }),
   );
   return presentRequest(state, {
@@ -841,6 +903,8 @@ function victimsSubmissionVersion({
     data: {
       externalId: request.externalId,
       persons: structuredClone(request.persons || []),
+      caseData: structuredClone(request.caseData || null),
+      documents: structuredClone(request.documents || []),
       items: request.items.map((item) => ({
         id: item.id,
         service: item.service,
@@ -857,17 +921,28 @@ function correctedVictimsData(state, request, item, payload, at) {
   const law = text(payload.law ?? item.law);
   const service = text(payload.service ?? item.service);
   const region = text(payload.region ?? item.region);
-  const victimCount = Number(payload.victimCount ?? request.persons?.length);
+  const persons = payload.persons
+    ? normalizeVictimsPersons(payload.persons)
+    : structuredClone(request.persons || []);
+  const caseData = payload.caseData
+    ? normalizeVictimsCaseData(payload.caseData)
+    : structuredClone(request.caseData || {});
+  const documents = payload.documents
+    ? normalizeDocuments(
+        payload.documents,
+        REFERENCE_CATALOGS.victimDocumentTypes,
+      )
+    : structuredClone(request.documents || []);
   if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
     throw businessError("Use un número de radicado con formato RAD-AAAA-NNNN");
   }
   requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
   serviceFromState(state, "VICTIMAS", service, at);
   requireCatalog(region, REFERENCE_CATALOGS.regions, "Cobertura no válida");
-  if (!Number.isInteger(victimCount) || victimCount < 1) {
+  if (persons.length < 1) {
     throw businessError("Registre al menos una persona vinculada");
   }
-  return { externalId, law, service, region, victimCount };
+  return { externalId, law, service, region, persons, caseData, documents };
 }
 
 function catalogsFor(state, auth, at) {
@@ -893,6 +968,10 @@ function catalogsFor(state, auth, at) {
     victimServices: victims.map(({ id, name }) => ({ id, label: name })),
     regions: REFERENCE_CATALOGS.regions,
     laws: REFERENCE_CATALOGS.laws,
+    proceduralStages: REFERENCE_CATALOGS.proceduralStages,
+    priorityTypes: REFERENCE_CATALOGS.priorityTypes,
+    investigationDocumentTypes: REFERENCE_CATALOGS.investigationDocumentTypes,
+    victimDocumentTypes: REFERENCE_CATALOGS.victimDocumentTypes,
   };
 }
 
@@ -916,26 +995,195 @@ function normalizeRequestedItems(state, area, payload, at) {
   });
 }
 
-function normalizePersons(payload) {
-  if (Array.isArray(payload.persons)) {
-    return payload.persons.map((person, index) => ({
-      alias:
-        text(person.alias) ||
-        `Persona vinculada ${String(index + 1).padStart(3, "0")}`,
-      type:
-        text(person.type).toUpperCase() === "INDIRECTA"
-          ? "INDIRECTA"
-          : "DIRECTA",
-      relationship: text(person.relationship) || null,
-      familyGroup: text(person.familyGroup) || null,
-    }));
+function normalizeInvestigationIntake(payload) {
+  const identifierType = text(payload.identifierType || "SPOA").toUpperCase();
+  const externalId = text(payload.spoa || payload.externalId);
+  const conduct = text(payload.delito || payload.conduct);
+  if (identifierType === "SPOA" && !/^\d{21}$/.test(externalId)) {
+    throw businessError("SPOA debe contener 21 dígitos");
   }
-  const victimCount = Number(payload.victimCount);
-  if (!Number.isInteger(victimCount) || victimCount < 1) return [];
-  return Array.from({ length: victimCount }, (_, index) => ({
-    alias: `Persona vinculada ${String(index + 1).padStart(3, "0")}`,
-    type: index === 0 ? "DIRECTA" : "INDIRECTA",
-  }));
+  if (identifierType !== "SPOA" && !externalId) {
+    throw businessError("El identificador del proceso es obligatorio");
+  }
+  if (!conduct) throw businessError("Delito o conducta es obligatorio");
+  const persons = normalizeInvestigationPersons(payload.persons);
+  if (!persons.length)
+    throw businessError("Registre al menos una persona relacionada");
+  const caseData = normalizeInvestigationCaseData(
+    payload,
+    identifierType,
+    conduct,
+  );
+  const differentialApproach = {
+    applies: Boolean(payload.differentialApproach?.applies),
+    detail: text(payload.differentialApproach?.detail) || null,
+  };
+  if (differentialApproach.applies && !differentialApproach.detail) {
+    throw businessError("Describa el enfoque diferencial aplicable");
+  }
+  const priority = {
+    type: text(payload.priority?.type || "ORDINARIA").toUpperCase(),
+    reason: text(payload.priority?.reason) || null,
+    support: text(payload.priority?.support) || null,
+  };
+  requireCatalog(
+    priority.type,
+    REFERENCE_CATALOGS.priorityTypes,
+    "Prioridad no válida",
+  );
+  if (
+    priority.type !== "ORDINARIA" &&
+    (!priority.reason || !priority.support)
+  ) {
+    throw businessError("La prioridad requiere causal y soporte");
+  }
+  const documents = normalizeDocuments(
+    payload.documents,
+    REFERENCE_CATALOGS.investigationDocumentTypes,
+  );
+  return {
+    externalId,
+    conduct,
+    persons,
+    caseData,
+    differentialApproach,
+    priority,
+    documents,
+  };
+}
+
+function normalizeInvestigationCaseData(payload, identifierType, conduct) {
+  const stage = text(payload.proceduralStage).toUpperCase();
+  requireCatalog(
+    stage,
+    REFERENCE_CATALOGS.proceduralStages,
+    "Etapa procesal no válida",
+  );
+  const caseData = {
+    identifierType,
+    processReference: text(payload.processReference),
+    conduct,
+    proceduralStage: stage,
+    hearingApplies: Boolean(payload.hearingApplies),
+    hearingDate: text(payload.hearingDate) || null,
+    facts: text(payload.facts),
+    hypothesis: text(payload.hypothesis),
+    requiredWork: text(payload.requiredWork),
+  };
+  for (const [field, label] of [
+    ["processReference", "proceso o caso"],
+    ["facts", "hechos"],
+    ["hypothesis", "hipótesis"],
+    ["requiredWork", "labores requeridas"],
+  ]) {
+    if (!caseData[field])
+      throw businessError(`La información de ${label} es obligatoria`);
+  }
+  if (caseData.hearingApplies && !caseData.hearingDate) {
+    throw businessError("Registre la fecha de audiencia");
+  }
+  return caseData;
+}
+
+function normalizeInvestigationPersons(persons) {
+  if (!Array.isArray(persons)) return [];
+  return persons.map((person) => {
+    const alias = text(person.alias);
+    const relation = text(person.relationship);
+    if (!alias || !relation) {
+      throw businessError(
+        "Cada persona relacionada requiere identificación y relación con el caso",
+      );
+    }
+    return { alias, relationship: relation, notes: text(person.notes) || null };
+  });
+}
+
+function normalizeVictimsIntake(payload) {
+  const externalId = text(payload.externalId);
+  const law = text(payload.law);
+  if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
+    throw businessError("Use un número de radicado con formato RAD-AAAA-NNNN");
+  }
+  requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
+  const persons = normalizeVictimsPersons(payload.persons);
+  if (!persons.length)
+    throw businessError("Registre al menos una persona vinculada");
+  return {
+    externalId,
+    law,
+    persons,
+    caseData: normalizeVictimsCaseData(payload.caseData || payload),
+    documents: normalizeDocuments(
+      payload.documents,
+      REFERENCE_CATALOGS.victimDocumentTypes,
+    ),
+  };
+}
+
+function normalizeVictimsCaseData(source) {
+  const caseData = {
+    processReference: text(source.processReference),
+    hearingApplies: Boolean(source.hearingApplies),
+    hearingDate: text(source.hearingDate) || null,
+    facts: text(source.facts),
+  };
+  if (!caseData.processReference || !caseData.facts) {
+    throw businessError("Proceso y hechos son obligatorios");
+  }
+  if (caseData.hearingApplies && !caseData.hearingDate) {
+    throw businessError("Registre la fecha de audiencia");
+  }
+  return caseData;
+}
+
+function normalizeVictimsPersons(persons) {
+  if (!Array.isArray(persons)) return [];
+  return persons.map((person) => {
+    const alias = text(person.alias);
+    const type = text(person.type).toUpperCase();
+    const relationship = text(person.relationship);
+    const familyGroup = text(person.familyGroup);
+    const contact = {
+      phone: text(person.contact?.phone) || null,
+      email: text(person.contact?.email) || null,
+      preferredChannel: text(person.contact?.preferredChannel) || null,
+    };
+    if (!alias || !["DIRECTA", "INDIRECTA"].includes(type) || !familyGroup) {
+      throw businessError(
+        "Cada persona requiere identificación, tipo y núcleo familiar",
+      );
+    }
+    if (type === "INDIRECTA" && !relationship) {
+      throw businessError(
+        "La víctima indirecta requiere parentesco o relación",
+      );
+    }
+    if (!contact.phone && !contact.email) {
+      throw businessError("Cada persona requiere al menos un dato de contacto");
+    }
+    return {
+      alias,
+      type,
+      relationship: relationship || null,
+      familyGroup,
+      contact,
+    };
+  });
+}
+
+function normalizeDocuments(documents, catalog) {
+  if (!Array.isArray(documents) || !documents.length) {
+    throw businessError("Registre al menos un documento o formato aplicable");
+  }
+  return documents.map((document) => {
+    const type = text(document.type).toUpperCase();
+    const reference = text(document.reference);
+    requireCatalog(type, catalog, "Tipo de documento no válido");
+    if (!reference)
+      throw businessError("La referencia documental es obligatoria");
+    return { type, reference };
+  });
 }
 
 function serviceFromState(state, area, id, at) {
@@ -965,22 +1213,12 @@ function normalizeAreaPath(value) {
 }
 
 function trackingFor(item) {
-  const terminal = item.status === "CERRADA";
   const approvedTermPolicy =
     item.termSnapshot?.value &&
     item.termSnapshot?.dayType &&
     item.termSnapshot?.calendarId;
   if (!item.dueDate || !approvedTermPolicy) {
-    return {
-      daysRemaining: null,
-      semaphoreCode: terminal ? "CERRADO" : "PENDIENTE_PARAMETRO",
-      semaphore: terminal ? "Cerrado" : "Sin configuración aprobada",
-      opportunityCode: terminal ? "CERRADO" : "NO_CALCULABLE",
-      opportunity: terminal ? "Cerrado" : "No calculable",
-      label: terminal
-        ? "Ítem cerrado"
-        : "Plazo y calendario pendientes de definición funcional",
-    };
+    return { configured: false };
   }
   const today = new Date().toISOString().slice(0, 10);
   const daysRemaining = Math.ceil(
@@ -989,6 +1227,7 @@ function trackingFor(item) {
       86_400_000,
   );
   return {
+    configured: true,
     daysRemaining,
     semaphoreCode: daysRemaining < 0 ? "VENCIDO" : "EN_PLAZO",
     semaphore: daysRemaining < 0 ? "Vencido" : "En plazo",
@@ -1014,6 +1253,7 @@ function dashboard(requests, area) {
       [
         "RADICADA",
         "PENDIENTE_APROBACION_PAG",
+        "PENDIENTE_EXCEPCION",
         "PENDIENTE_REASIGNACION",
       ].includes(item.status),
     ).length,
@@ -1037,7 +1277,7 @@ function aggregateRequestCounts(items) {
   return {
     totalItems: items.length,
     closedItems: items.filter((item) => item.status === "CERRADA").length,
-    assignedItems: items.filter((item) => item.assignment).length,
+    assignedItems: items.filter((item) => item.assigneeId).length,
   };
 }
 

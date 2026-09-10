@@ -45,13 +45,27 @@ $internalRoute = Invoke-WebRequest "$BaseUrl/portal" -Headers (Gateway-Headers) 
 
 $defender = Login-Demo "demo-defensor"
 $investigation = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/solicitudes" -Method Post -Headers (Auth-Headers $defender) -ContentType "application/json" -Body (@{
+  identifierType = "SPOA"
   spoa = "110016000049202600077"
   delito = "Investigación de hechos asociados al caso"
+  processReference = "Proceso penal de verificación"
+  proceduralStage = "INVESTIGACION"
+  hearingApplies = $true
+  hearingDate = "2026-10-15"
+  facts = "Hechos de verificación sin información personal real"
+  hypothesis = "Hipótesis de trabajo para comprobar el recorrido"
+  requiredWork = "Verificar fuentes y circunstancias"
+  differentialApproach = @{ applies = $false; detail = $null }
+  priority = @{ type = "ORDINARIA"; reason = $null; support = $null }
+  persons = @(@{ alias = "Persona relacionada A"; relationship = "Procesado/a"; notes = $null })
+  documents = @(@{ type = "SOLICITUD_DEFENSA"; reference = "REF-SOL-SMOKE-001" })
   service = "SVC_INV_VERIFICACION_TERRENO"
   region = "BOGOTA"
-} | ConvertTo-Json)
+} | ConvertTo-Json -Depth 8)
 $investigationItem = $investigation.request.items[0]
-$investigationAssigned = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/repartir" -Method Post -Headers (Auth-Headers $defender)
+Assert-Forbidden {
+  Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/repartir" -Method Post -Headers (Auth-Headers $defender)
+}
 
 $investigator = Login-Demo "demo-investigador"
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/iniciar" -Method Post -Headers (Auth-Headers $investigator) | Out-Null
@@ -66,8 +80,18 @@ $victims = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes" -Method Po
   law = "LEY_1448"
   service = "SVC_VIC_EVALUACION_PSICOLOGICA"
   region = "BOGOTA"
-  victimCount = 2
-} | ConvertTo-Json)
+  caseData = @{
+    processReference = "Proceso de reparación de verificación"
+    hearingApplies = $true
+    hearingDate = "2026-10-20"
+    facts = "Hechos de verificación sin información personal real"
+  }
+  persons = @(
+    @{ alias = "Persona vinculada A"; type = "DIRECTA"; relationship = "Víctima directa"; familyGroup = "Núcleo A"; contact = @{ phone = "3000000001"; email = "persona.a@example.invalid"; preferredChannel = "Correo" } },
+    @{ alias = "Persona vinculada B"; type = "INDIRECTA"; relationship = "Familiar"; familyGroup = "Núcleo A"; contact = @{ phone = "3000000002"; email = "persona.b@example.invalid"; preferredChannel = "Teléfono" } }
+  )
+  documents = @(@{ type = "FORMATO_SOLICITUD"; reference = "REF-FORM-SMOKE-001" })
+} | ConvertTo-Json -Depth 8)
 $victimsItem = $victims.request.items[0]
 $pagVictims = Login-Demo "demo-pag-victimas"
 $victimsReturned = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/devolver-solicitud" -Method Post -Headers (Auth-Headers $pagVictims) -ContentType "application/json" -Body (@{
@@ -83,6 +107,12 @@ Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/avance" -
 $victimsClosed = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/finalizar" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ f171Reference = "F171-2026-SMOKE-001" } | ConvertTo-Json)
 
 $admin = Login-Demo "demo-admin"
+$regionalManager = Login-Demo "demo-gestor-regional-investigacion"
+$centralManager = Login-Demo "demo-gestor-central-excepciones"
+$regionalDefender = Login-Demo "demo-defensor-regional"
+$regionalManagerView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $regionalManager)
+$centralManagerView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $centralManager)
+$regionalDefenderView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $regionalDefender)
 Assert-Forbidden {
   Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/aprobar-entrega" -Method Post -Headers (Auth-Headers $admin)
 }
@@ -96,12 +126,16 @@ $reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth
   Ready = $ready.status
   Spa = $homeResponse.StatusCode
   SpaInternalRoute = $internalRoute.StatusCode
-  InvestigationAssigned = $investigationAssigned.request.items[0].status
+  InvestigationAssigned = $investigation.request.items[0].status
+  DefenderRetryDenied = $true
   InvestigationFinal = $investigationClosed.request.items[0].status
   VictimsReturned = $victimsReturned.request.items[0].status
   VictimsResent = $victimsResent.request.items[0].status
   VictimsAssigned = $victimsAssigned.request.items[0].status
   VictimsFinal = $victimsClosed.request.items[0].status
   AdminOperationalDenied = $true
+  RegionalManagerRequests = $regionalManagerView.requests.Count
+  CentralExceptionRequests = $centralManagerView.requests.Count
+  RegionalDefenderRequests = $regionalDefenderView.requests.Count
   ResetSeedRequests = $reset.requests.Count
 } | ConvertTo-Json

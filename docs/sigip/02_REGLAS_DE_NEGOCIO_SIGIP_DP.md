@@ -119,7 +119,7 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 | RN-COM-053 | La carga se calculará desde asignaciones activas reales, no desde un número editable en el registro del funcionario. | D |
 | RN-COM-054 | Las novedades vigentes impedirán nuevas asignaciones; el funcionario conservará acceso a lo ya asignado según el tipo de novedad. | C |
 | RN-COM-055 | Una asignación manual será excepcional, exigirá candidato, motivo, responsable y evidencia o referencia cuando aplique. | C |
-| RN-COM-056 | Si no existe candidato, el ítem pasará a `PENDIENTE_REASIGNACION` o equivalente y no quedará silenciosamente sin responsable. | C |
+| RN-COM-056 | Si no existe candidato en el reparto ordinario, el ítem pasará a `PENDIENTE_EXCEPCION` y no quedará silenciosamente sin responsable. | C |
 | RN-COM-057 | Toda reasignación conservará el ejecutor anterior, fechas, motivo, soporte y trabajo ya realizado. | C |
 | RN-COM-058 | La asignación manual no omitirá silenciosamente requisitos duros de especialidad, cobertura, habilitación legal o estado. Toda excepción aprobada identificará la regla omitida, autorizador, causal y evidencia. | C/D |
 
@@ -286,7 +286,7 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 Ramas:
 
 - `EN_REVISION → DEVUELTA → RADICADA`.
-- `APROBADA_REPARTO → PENDIENTE_REASIGNACION → ASIGNADA`.
+- `RADICADA → PENDIENTE_EXCEPCION` cuando el reparto automático no encuentra candidato.
 - `EN_EJECUCION → SOLICITUD_AMPLIACION → AMPLIACION_APROBADA/RECHAZADA`.
 - Cualquier estado permitido → `ANULADA`, con autorización y motivo.
 
@@ -359,6 +359,10 @@ El incremento `feat/cierre-funcional-pre-oracle` materializa, sin convertir pend
 - siete perfiles activos y perfiles adicionales propuestos pero deshabilitados;
 - servicios separados de especialidades o disciplinas, con versión, vigencia e historial;
 - uno o varios ítems por solicitud, con estado y reparto independientes;
+- radicación completa por pasos, con solicitante identificado en solo lectura, personas, proceso, necesidad, servicios, documentos y confirmación;
+- reparto automático por ítem al radicar Investigación y al aprobar previamente Víctimas, sin selección manual del ejecutor;
+- perfiles regionales y central de Investigación habilitados sólo para navegación consultiva conservadora mientras se aprueba su RACI;
+- indicadores temporales ocultos cuando no existe regla de plazo vigente;
 - actuaciones auditables sin porcentaje subjetivo;
 - estado, días restantes, semáforo y oportunidad como conceptos distintos;
 - reporte de problema persistido sin alterar el estado principal;

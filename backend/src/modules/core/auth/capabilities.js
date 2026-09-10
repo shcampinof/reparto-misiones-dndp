@@ -6,9 +6,13 @@ export const CAPABILITIES = Object.freeze({
   ADMINISTRAR_PLATAFORMA: "ADMINISTRAR_PLATAFORMA",
   RESTABLECER_PRESENTACION: "RESTABLECER_PRESENTACION",
   CREAR_SOLICITUD_INVESTIGACION: "CREAR_SOLICITUD_INVESTIGACION",
-  EJECUTAR_REPARTO_INVESTIGACION: "EJECUTAR_REPARTO_INVESTIGACION",
+  REINTENTAR_REPARTO_EXCEPCION: "REINTENTAR_REPARTO_EXCEPCION",
   EJECUTAR_ITEM_INVESTIGACION: "EJECUTAR_ITEM_INVESTIGACION",
   APROBAR_INFORME_INVESTIGACION: "APROBAR_INFORME_INVESTIGACION",
+  CONSULTAR_PROBLEMAS_INVESTIGACION: "CONSULTAR_PROBLEMAS_INVESTIGACION",
+  CONSULTAR_EXCEPCIONES_INVESTIGACION: "CONSULTAR_EXCEPCIONES_INVESTIGACION",
+  CONSULTAR_COBERTURA_INVESTIGACION: "CONSULTAR_COBERTURA_INVESTIGACION",
+  CONSULTAR_INDICADORES_INVESTIGACION: "CONSULTAR_INDICADORES_INVESTIGACION",
   CREAR_SOLICITUD_VICTIMAS: "CREAR_SOLICITUD_VICTIMAS",
   AVALAR_SOLICITUD_VICTIMAS: "AVALAR_SOLICITUD_VICTIMAS",
   CORREGIR_SOLICITUD_VICTIMAS: "CORREGIR_SOLICITUD_VICTIMAS",
@@ -27,6 +31,7 @@ export const CAPABILITIES = Object.freeze({
 export const SCOPE_TYPES = Object.freeze({
   SYSTEM: "SYSTEM",
   AREA: "AREA",
+  REGION: "REGION",
   OWN_REQUESTS: "OWN_REQUESTS",
   OWN_ASSIGNMENTS: "OWN_ASSIGNMENTS",
 });
@@ -34,7 +39,7 @@ export const SCOPE_TYPES = Object.freeze({
 const OPEN_ENDED = null;
 const BASE_VALID_FROM = "2026-09-01T00:00:00.000Z";
 
-export function grantsForRole(role, area) {
+export function grantsForRole(role, area, region = null) {
   const viewCatalog = grant(
     CAPABILITIES.CONSULTAR_CATALOGO_SERVICIOS,
     area,
@@ -54,11 +59,6 @@ export function grantsForRole(role, area) {
       ),
       grant(
         CAPABILITIES.CREAR_SOLICITUD_INVESTIGACION,
-        "INVESTIGACION",
-        SCOPE_TYPES.OWN_REQUESTS,
-      ),
-      grant(
-        CAPABILITIES.EJECUTAR_REPARTO_INVESTIGACION,
         "INVESTIGACION",
         SCOPE_TYPES.OWN_REQUESTS,
       ),
@@ -100,6 +100,51 @@ export function grantsForRole(role, area) {
         CAPABILITIES.APROBAR_INFORME_INVESTIGACION,
         "INVESTIGACION",
         SCOPE_TYPES.AREA,
+      ),
+    ],
+    gestor_operativo_regional: [
+      grant(
+        CAPABILITIES.CONSULTAR_SOLICITUDES,
+        "INVESTIGACION",
+        SCOPE_TYPES.REGION,
+        region,
+      ),
+      grant(
+        CAPABILITIES.CONSULTAR_PROBLEMAS_INVESTIGACION,
+        "INVESTIGACION",
+        SCOPE_TYPES.REGION,
+        region,
+      ),
+    ],
+    gestor_central_excepciones: [
+      grant(
+        CAPABILITIES.CONSULTAR_SOLICITUDES,
+        "INVESTIGACION",
+        SCOPE_TYPES.AREA,
+      ),
+      grant(
+        CAPABILITIES.CONSULTAR_EXCEPCIONES_INVESTIGACION,
+        "INVESTIGACION",
+        SCOPE_TYPES.AREA,
+      ),
+      grant(
+        CAPABILITIES.CONSULTAR_COBERTURA_INVESTIGACION,
+        "INVESTIGACION",
+        SCOPE_TYPES.AREA,
+      ),
+    ],
+    defensor_regional: [
+      grant(
+        CAPABILITIES.CONSULTAR_SOLICITUDES,
+        "INVESTIGACION",
+        SCOPE_TYPES.REGION,
+        region,
+      ),
+      grant(
+        CAPABILITIES.CONSULTAR_INDICADORES_INVESTIGACION,
+        "INVESTIGACION",
+        SCOPE_TYPES.REGION,
+        region,
       ),
     ],
     rjv: [
@@ -183,11 +228,12 @@ export function assertCapability(auth, capability, context = {}) {
   }
 }
 
-function grant(capability, area, scopeType) {
+function grant(capability, area, scopeType, region = null) {
   return {
     capability,
     area,
     scopeType,
+    ...(scopeType === SCOPE_TYPES.REGION ? { region } : {}),
     validFrom: BASE_VALID_FROM,
     validTo: OPEN_ENDED,
   };
@@ -205,6 +251,9 @@ function scopeMatches(grantEntry, auth, context) {
   if (grantEntry.scopeType === SCOPE_TYPES.SYSTEM) return true;
   if (grantEntry.area !== context.area) return false;
   if (grantEntry.scopeType === SCOPE_TYPES.AREA) return true;
+  if (grantEntry.scopeType === SCOPE_TYPES.REGION) {
+    return Boolean(grantEntry.region) && grantEntry.region === context.region;
+  }
   if (grantEntry.scopeType === SCOPE_TYPES.OWN_REQUESTS) {
     return Boolean(context.ownerUserId) && context.ownerUserId === auth.sub;
   }

@@ -32,15 +32,15 @@ Precedencia: acto o procedimiento vigente aprobado, HU aceptada, decisión forma
 |---|---|---|---|
 | BF-01 | Investigación y Víctimas necesitan estados y permisos separados. El código y el Space ya separan formularios, reparto y cierre; las HU-24, HU-25 y HU-29 respaldan la bifurcación. | confirmado | Se conserva la separación. No se introduce una máquina común única. |
 | BF-02 | Investigación dispone actualmente de Administrador del Sistema, Defensor, Investigador y PAG Investigación. | confirmado | Se mantienen esos perfiles. El administrador queda limitado a consulta global, gestión técnica y restablecimiento de la información de presentación. |
-| BF-03 | PAG Central, Administrador Regional y Defensor Regional aparecen como perfiles posibles, pero las fuentes no fijan responsabilidad, territorio ni suplencia. | pendiente de validación | Se registran como propuestos y permanecen deshabilitados. |
+| BF-03 | Gestor Central de Excepciones, Gestor Operativo Regional y Defensor Regional aparecen como perfiles posibles, pero las fuentes no fijan toda su responsabilidad, suplencia ni RACI. | pendiente de validación | Se habilitan cuentas conservadoras de presentación: consulta nacional de excepciones, consulta regional de continuidad y consulta territorial, respectivamente. Ninguna recibe actuaciones operativas. |
 | BF-04 | Coordinador GID, Administrativo delegado y PAG unidad operativa provienen de configuraciones o prototipos anteriores, sin RACI aprobado para este alcance. | pendiente de validación | No se recuperan, crean ni habilitan automáticamente. |
 | BF-05 | Víctimas requiere aprobación o devolución del PAG antes del reparto. La devolución debe volver al RJV, exigir observación y conservar correcciones. | confirmado | Se implementa `PENDIENTE_APROBACION_PAG → DEVUELTA → PENDIENTE_APROBACION_PAG`, con actor, observación, línea de tiempo y versiones de radicación inmutables. |
 | BF-06 | RN-COM-007 impide que la administración técnica adopte decisiones operativas por el solo rol. En `main`, el administrador podía crear, repartir, aprobar y devolver mediante API. | confirmado | Se retiran esos permisos del servidor y la interfaz. Conserva consulta global y restablecimiento. |
-| BF-07 | Si el reparto no encuentra candidato, RN-COM-056 exige conservar una cola explícita. | confirmado | Se mantiene `PENDIENTE_REASIGNACION` y se exponen candidatos, exclusiones y una explicación comprensible. |
+| BF-07 | Si el reparto no encuentra candidato, RN-COM-056 exige conservar una cola explícita. | confirmado | Investigación usa `PENDIENTE_EXCEPCION` y expone candidatos, exclusiones y una explicación comprensible al perfil central consultivo. |
 | BF-08 | No está confirmado quién realiza una eventual revisión previa en Investigación ni si bloquea el reparto. La HU-17 tampoco puede imponer al Administrador Regional como revisor común. | pendiente de validación | No se agrega revisión previa. El recorrido de presentación continúa de radicación a reparto sin inventar un aprobador. |
 | BF-09 | Las fuentes mencionan 15, 34 y 42 defensorías regionales. La referencia funcional más reciente indica 42, pero no existe catálogo oficial verificable con vigencia. | contradicción documental | No se codifica ninguna cantidad. Se exige catálogo institucional oficial, configurable, versionado y con fuente maestra. |
 | BF-10 | El paquete verificable contiene HU-01 a HU-32. No se encontró archivo ni contenido verificable de HU-33. | pendiente de validación | HU-33 queda como fuente pendiente; no se infieren requisitos. |
-| BF-11 | Una solicitud de Víctimas puede involucrar múltiples víctimas, parentescos, núcleos, carga masiva, varios ítems y disciplinas, además de versiones. | confirmado | Se elimina el máximo fijo, se conservan personas y versiones, y se habilitan varios ítems con estado/reparto independientes. Parentescos completos y carga masiva continúan pendientes. |
+| BF-11 | Una solicitud de Víctimas puede involucrar múltiples víctimas, parentescos, núcleos, carga masiva, varios ítems y disciplinas, además de versiones. | confirmado | Se registran múltiples personas reales por fila de formulario, tipo directa/indirecta, parentesco, núcleo y contacto; se conservan versiones e ítems independientes. La carga masiva continúa como contrato pendiente y no se presenta como acción. |
 | BF-12 | El reparto debe guardar candidatos, exclusiones, métricas, desempate, política y resultado. El prototipo lo hace para una transacción síncrona en memoria, pero no ofrece garantías entre procesos. | confirmado | Se conserva la explicación. La concurrencia productiva sigue siendo requisito obligatorio de persistencia, no resuelto en este sprint. |
 | BF-13 | HU-26 permite omitir regional y grado en asignación manual; las observaciones funcionales señalan que especialidad, competencia, cobertura, grado y disponibilidad no deben omitirse. | contradicción documental | No se implementa override manual. Deben definirse autorizador, requisitos no omitibles, causal, justificación y evidencia. |
 | BF-14 | Las novedades excluyen nuevas asignaciones, pero faltan estructura oficial y efecto sobre encargos activos. | parametrizable | Deben tener tipo, inicio, fin, autorizador, vigencia y efecto sobre nuevas asignaciones. El tratamiento de misiones activas queda pendiente. |
@@ -59,7 +59,7 @@ Notación: **R** ejecuta, **A** responde por la decisión, **C** es consultado, 
 | Consulta global y soporte técnico | R/A | I | I | I |
 | Restablecer información de presentación | R/A | — | — | — |
 | Radicar solicitud | — | R/A | — | I |
-| Ejecutar reparto automático desde una solicitud propia | — | R | — | I |
+| Procesar reparto automático al radicar cada ítem | — | I | — | I |
 | Consultar misión propia asignada | C | I | R/A | C |
 | Iniciar, avanzar y entregar informe | — | I | R/A | I |
 | Aprobar o devolver el informe entregado | — | I | I | R/A |
@@ -76,21 +76,21 @@ El administrador no aprueba, reparte, devuelve informes ni cierra solicitudes po
 | Radicar solicitud y personas vinculadas | — | R/A | I | — |
 | Aprobar o devolver antes del reparto | — | I | R/A | — |
 | Corregir y reenviar una solicitud devuelta | — | R/A | I | — |
-| Ejecutar reparto tras aprobación | — | I | R | I |
+| Procesar reparto automático tras aprobación | — | I | I | I |
 | Iniciar, avanzar y entregar F-171 | — | I | I | R/A |
 | Cierre ordinario con F-171 | — | I | I | R/A |
 
 El cierre ordinario de Víctimas no hereda aprobación final del PAG. Una posible devolución posterior del producto por el RJV sigue siendo una decisión distinta y pendiente conforme a RN-VIC-053.
 
-## 6. Roles propuestos que permanecen inactivos
+## 6. Perfiles adicionales de presentación y RACI pendiente
 
 | Rol propuesto | Área posible | Estado | Validación mínima requerida |
 |---|---|---|---|
-| PAG Central | Separada por área | pendiente de validación | Acciones, alcance nacional/regional, suplencia, segregación y relación con PAG existentes. |
-| Administrador Regional | Separada por área | pendiente de validación | Si administra catálogos o adopta decisiones; territorio; ausencia; escalamiento y auditoría. |
-| Defensor Regional | Separada por área | pendiente de validación | Consulta, autorización excepcional, transferencia, ámbito territorial y suplencia. |
+| Gestor Central de Excepciones | Investigación, nacional | consulta de presentación | Reintento y asignación manual requieren RACI, causal, justificación, soporte y reglas no omitibles. |
+| Gestor Operativo Regional | Investigación, regional | consulta de presentación | Corrección, novedad, reasignación, transferencia y cierre causal requieren autorización y RACI. No aprueba informes. |
+| Defensor Regional | Investigación, regional | solo lectura | Consulta solicitudes, cargas, productos e indicadores disponibles. No firma ni adopta decisiones operativas. |
 
-No se habilitan estos roles por variables de entorno ni se les asignan actuaciones. Tampoco se recuperan Coordinador GID, Administrativo delegado o PAG unidad operativa sin una decisión RACI trazable.
+Estas cuentas permiten recorrer bandejas con facultades conservadoras en el Space. Su asignación institucional definitiva deberá provenir de configuración y RACI vigentes. Tampoco se recuperan Coordinador GID, Administrativo delegado o PAG unidad operativa sin una decisión trazable.
 
 ## 7. Taller funcional pendiente
 

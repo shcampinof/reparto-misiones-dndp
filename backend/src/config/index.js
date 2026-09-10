@@ -70,9 +70,15 @@ export function createConfig(env = process.env) {
     rjv: booleanValue(env.ENABLE_ROLE_RJV, true),
     pag_victimas: booleanValue(env.ENABLE_ROLE_PAG_VICTIMAS, true),
     perito: booleanValue(env.ENABLE_ROLE_PERITO, true),
-    pag_central: false,
-    administrador_regional: false,
-    defensor_regional: false,
+    gestor_operativo_regional: booleanValue(
+      env.ENABLE_ROLE_GESTOR_OPERATIVO_REGIONAL,
+      true,
+    ),
+    gestor_central_excepciones: booleanValue(
+      env.ENABLE_ROLE_GESTOR_CENTRAL_EXCEPCIONES,
+      true,
+    ),
+    defensor_regional: booleanValue(env.ENABLE_ROLE_DEFENSOR_REGIONAL, true),
   };
 
   const config = {

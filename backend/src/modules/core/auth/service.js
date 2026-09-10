@@ -90,6 +90,7 @@ export function createAuthService({ config, users }) {
         role: account.role,
         roleLabel: account.roleLabel,
         area: account.area,
+        region: account.region || null,
       });
     }
     return [...unique.values()];
@@ -133,6 +134,7 @@ export function createAuthService({ config, users }) {
         fullName: user.fullName,
         initials: account.initials,
         area: account.area,
+        region: account.region || null,
         executorId: account.executorId || null,
         grants: account.grants || [],
       },
@@ -153,6 +155,7 @@ function profileFrom(user, account) {
     email: account.email,
     initials: account.initials,
     area: account.area,
+    region: account.region || null,
     executorId: account.executorId || null,
     grants: account.grants || [],
   };

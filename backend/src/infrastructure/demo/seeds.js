@@ -13,7 +13,7 @@ export function createDemoSeed() {
   return {
     counters: { investigation: 4, victims: 4 },
     catalogs: createCatalogSeed(),
-    operations: [],
+    operations: [seedProblem(now)],
     audit: [],
     users: [
       demoUser(
@@ -44,6 +44,31 @@ export function createDemoSeed() {
         "pag_investigacion",
         "PAG Investigación",
         "INVESTIGACION",
+      ),
+      demoUser(
+        "demo-gestor-regional-investigacion",
+        "Gestor operativo regional Bogotá",
+        "gestor_operativo_regional",
+        "Gestor operativo regional",
+        "INVESTIGACION",
+        null,
+        "BOGOTA",
+      ),
+      demoUser(
+        "demo-gestor-central-excepciones",
+        "Gestor central de excepciones",
+        "gestor_central_excepciones",
+        "Gestor central de excepciones",
+        "INVESTIGACION",
+      ),
+      demoUser(
+        "demo-defensor-regional",
+        "Defensor regional Bogotá",
+        "defensor_regional",
+        "Defensor regional",
+        "INVESTIGACION",
+        null,
+        "BOGOTA",
       ),
       demoUser(
         "demo-rjv",
@@ -192,7 +217,7 @@ export function createDemoSeed() {
               "Investigador/a de campo 01",
               now,
             ),
-            operations: [],
+            operations: [seedProblem(now)],
             timeline: [
               event(
                 now,
@@ -215,6 +240,13 @@ export function createDemoSeed() {
                 "demo-investigador",
                 "Misión iniciada",
               ),
+              event(
+                now,
+                "EN_EJECUCION",
+                "EN_EJECUCION",
+                "demo-investigador",
+                "Problema reportado · Insumo documental ilegible",
+              ),
             ],
           },
           {
@@ -224,7 +256,7 @@ export function createDemoSeed() {
             specialtyIds: ["ESP_INV_BALISTICA"],
             region: "CUNDINAMARCA",
             law: null,
-            status: "PENDIENTE_REASIGNACION",
+            status: "PENDIENTE_EXCEPCION",
             assigneeId: null,
             dueDate: null,
             termSnapshot: pendingTermPolicy(),
@@ -243,8 +275,8 @@ export function createDemoSeed() {
               event(
                 now,
                 "RADICADA",
-                "PENDIENTE_REASIGNACION",
-                "sistema-demo",
+                "PENDIENTE_EXCEPCION",
+                "motor-reparto",
                 "Sin candidato elegible para la cobertura vigente",
               ),
             ],
@@ -586,7 +618,15 @@ export function createDemoSeed() {
   };
 }
 
-function demoUser(id, fullName, role, roleLabel, area, executorId = null) {
+function demoUser(
+  id,
+  fullName,
+  role,
+  roleLabel,
+  area,
+  executorId = null,
+  region = null,
+) {
   return {
     id,
     document: id,
@@ -599,13 +639,14 @@ function demoUser(id, fullName, role, roleLabel, area, executorId = null) {
         role,
         roleLabel,
         area,
-        grants: grantsForRole(role, area),
+        grants: grantsForRole(role, area, region),
         initials: fullName
           .split(" ")
           .slice(0, 2)
           .map((part) => part[0])
           .join(""),
         executorId,
+        region,
       },
     ],
   };
@@ -636,6 +677,22 @@ function pendingAssignment(createdAt) {
   };
 }
 
+function seedProblem(createdAt) {
+  return {
+    id: "OP-0001",
+    type: "PROBLEMA",
+    area: "INVESTIGACION",
+    requestId: "INV-2026-0001",
+    itemId: "MT-2026-0001",
+    status: "REGISTRADO",
+    reason: "Insumo documental ilegible",
+    description: "Se requiere una copia legible para continuar la actuación",
+    actor: "demo-investigador",
+    createdAt,
+    decisionCode: null,
+  };
+}
+
 function pendingTermPolicy() {
   return {
     value: null,
@@ -643,7 +700,7 @@ function pendingTermPolicy() {
     startEvent: null,
     calendarId: null,
     decisionCode: "DEC-PLZ-001",
-    label: "Valor y calendario pendientes de aprobación funcional",
+    label: "Plazo parametrizable por servicio",
   };
 }
 

@@ -48,6 +48,75 @@ function activeGrant(capability, area, scopeType = "AREA") {
   };
 }
 
+function investigationPayload(overrides = {}) {
+  return {
+    identifierType: "SPOA",
+    spoa: "110016000049202600090",
+    processReference: "Proceso penal de prueba",
+    delito: "Conducta objeto de investigación",
+    proceduralStage: "INVESTIGACION",
+    hearingApplies: true,
+    hearingDate: "2026-10-15",
+    facts: "Hechos relevantes para la solicitud.",
+    hypothesis: "Hipótesis de trabajo verificable.",
+    requiredWork: "Verificar fuentes y circunstancias.",
+    differentialApproach: { applies: false, detail: null },
+    priority: { type: "ORDINARIA", reason: null, support: null },
+    persons: [
+      {
+        alias: "Persona relacionada A",
+        relationship: "Procesado/a",
+        notes: null,
+      },
+    ],
+    documents: [{ type: "SOLICITUD_DEFENSA", reference: "REF-SOL-INV-001" }],
+    service: "SVC_INV_VERIFICACION_TERRENO",
+    region: "BOGOTA",
+    ...overrides,
+  };
+}
+
+function victimsPayload(overrides = {}) {
+  return {
+    externalId: "RAD-2026-0099",
+    law: "LEY_1448",
+    service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+    region: "BOGOTA",
+    caseData: {
+      processReference: "Proceso de reparación de prueba",
+      hearingApplies: true,
+      hearingDate: "2026-10-20",
+      facts: "Hechos relevantes para la valoración.",
+    },
+    persons: [
+      {
+        alias: "Persona vinculada A",
+        type: "DIRECTA",
+        relationship: "Víctima directa",
+        familyGroup: "Núcleo A",
+        contact: {
+          phone: "3000000001",
+          email: "persona.a@example.invalid",
+          preferredChannel: "Correo",
+        },
+      },
+      {
+        alias: "Persona vinculada B",
+        type: "INDIRECTA",
+        relationship: "Familiar",
+        familyGroup: "Núcleo A",
+        contact: {
+          phone: "3000000002",
+          email: "persona.b@example.invalid",
+          preferredChannel: "Teléfono",
+        },
+      },
+    ],
+    documents: [{ type: "FORMATO_SOLICITUD", reference: "REF-FORM-VIC-001" }],
+    ...overrides,
+  };
+}
+
 test("salud, cuentas sintéticas y protección de rutas", async () => {
   const app = testApp();
   const health = await request(app)
@@ -65,7 +134,7 @@ test("salud, cuentas sintéticas y protección de rutas", async () => {
   const accounts = await request(app)
     .get("/api/auth/demo-accounts")
     .expect(200);
-  assert.ok(accounts.body.accounts.length >= 8);
+  assert.ok(accounts.body.accounts.length >= 11);
   assert.ok(
     accounts.body.accounts.every((account) =>
       account.userId.startsWith("demo-"),
@@ -127,22 +196,16 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
     .set(auth(defender))
-    .send({
-      spoa: "110016000049202600002",
-      delito: "Delito sintético para demostración",
-      service: "SVC_INV_VERIFICACION_TERRENO",
-      region: "BOGOTA",
-    })
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600002",
+        delito: "Conducta para recorrido integral",
+        service: "SVC_INV_VERIFICACION_TERRENO",
+        region: "BOGOTA",
+      }),
+    )
     .expect(201);
   let item = itemFrom(created);
-  assert.equal(item.status, "RADICADA");
-
-  const assigned = await request(app)
-    .post(`/api/demo/investigacion/items/${item.id}/repartir`)
-    .set(auth(defender))
-    .send({ assigneeId: "inv-demo-01" })
-    .expect(200);
-  item = itemFrom(assigned);
   assert.equal(item.status, "ASIGNADA");
   assert.equal(
     item.assigneeId,
@@ -150,15 +213,23 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
     "el backend decide por menor carga",
   );
   assert.ok(item.assignment.evaluated.length >= 3);
+  const deniedRetry = await request(app)
+    .post(`/api/demo/investigacion/items/${item.id}/repartir`)
+    .set(auth(defender))
+    .expect(403);
+  assert.equal(deniedRetry.body.error.code, "CAPABILITY_FORBIDDEN");
   assert.ok(
     item.assignment.evaluated.some(
       (candidate) => candidate.exclusions.length > 0,
     ),
   );
   const sourceBeforeExecution = {
-    externalId: assigned.body.request.externalId,
-    summary: assigned.body.request.summary,
-    ownerUserId: assigned.body.request.ownerUserId,
+    externalId: created.body.request.externalId,
+    summary: created.body.request.summary,
+    ownerUserId: created.body.request.ownerUserId,
+    persons: created.body.request.persons,
+    caseData: created.body.request.caseData,
+    documents: created.body.request.documents,
   };
 
   const own = await request(app)
@@ -194,6 +265,9 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
       externalId: delivered.body.request.externalId,
       summary: delivered.body.request.summary,
       ownerUserId: delivered.body.request.ownerUserId,
+      persons: delivered.body.request.persons,
+      caseData: delivered.body.request.caseData,
+      documents: delivered.body.request.documents,
     },
     sourceBeforeExecution,
   );
@@ -214,13 +288,9 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   const rjv = await login(app, "demo-rjv");
   const pag = await login(app, "demo-pag-victimas");
   const expert = await login(app, "demo-perito-psicologia");
-  const payload = {
+  const payload = victimsPayload({
     externalId: "RAD-2026-0099",
-    law: "LEY_1448",
-    service: "SVC_VIC_EVALUACION_PSICOLOGICA",
-    region: "BOGOTA",
-    victimCount: 2,
-  };
+  });
 
   const cannotChoose = await request(app)
     .post("/api/demo/victimas/solicitudes")
@@ -237,6 +307,11 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
   let item = itemFrom(created);
   assert.equal(item.status, "PENDIENTE_APROBACION_PAG");
   assert.equal(created.body.request.persons.length, 2);
+
+  await request(app)
+    .post(`/api/demo/victimas/items/${item.id}/aprobar-y-repartir`)
+    .set(auth(rjv))
+    .expect(403);
 
   const assigned = await request(app)
     .post(`/api/demo/victimas/items/${item.id}/aprobar-y-repartir`)
@@ -255,6 +330,8 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
     externalId: assigned.body.request.externalId,
     ownerUserId: assigned.body.request.ownerUserId,
     persons: assigned.body.request.persons,
+    caseData: assigned.body.request.caseData,
+    documents: assigned.body.request.documents,
   };
 
   await request(app)
@@ -278,6 +355,8 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
       externalId: finished.body.request.externalId,
       ownerUserId: finished.body.request.ownerUserId,
       persons: finished.body.request.persons,
+      caseData: finished.body.request.caseData,
+      documents: finished.body.request.documents,
     },
     sourceBeforeExecution,
   );
@@ -297,13 +376,11 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
   const created = await request(app)
     .post("/api/demo/victimas/solicitudes")
     .set(auth(rjv))
-    .send({
-      externalId: "RAD-2026-0088",
-      law: "LEY_1448",
-      service: "SVC_VIC_EVALUACION_PSICOLOGICA",
-      region: "BOGOTA",
-      victimCount: 2,
-    })
+    .send(
+      victimsPayload({
+        externalId: "RAD-2026-0088",
+      }),
+    )
     .expect(201);
   const itemId = itemFrom(created).id;
 
@@ -320,10 +397,10 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
     .expect(200);
   assert.equal(itemFrom(returned).status, "DEVUELTA");
   assert.equal(returned.body.request.versions.length, 1);
-  assert.deepEqual(returned.body.request.versions[0].data.persons, [
-    { alias: "Persona vinculada 001", type: "DIRECTA" },
-    { alias: "Persona vinculada 002", type: "INDIRECTA" },
-  ]);
+  assert.deepEqual(
+    returned.body.request.versions[0].data.persons,
+    victimsPayload().persons,
+  );
   assert.equal(
     returned.body.request.versions[0].review.observation,
     "Adjuntar soporte de parentesco",
@@ -341,14 +418,29 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
     .set(auth(rjv))
     .send({
       correctionSummary: "Soporte incorporado y grupo familiar actualizado",
-      victimCount: 7,
+      persons: [
+        ...victimsPayload().persons,
+        {
+          alias: "Persona vinculada C",
+          type: "INDIRECTA",
+          relationship: "Familiar",
+          familyGroup: "Núcleo B",
+          contact: {
+            phone: "3000000003",
+            email: null,
+            preferredChannel: "Teléfono",
+          },
+        },
+      ],
     })
     .expect(200);
   assert.equal(itemFrom(resent).status, "PENDIENTE_APROBACION_PAG");
-  assert.equal(resent.body.request.persons.length, 7);
+  assert.equal(resent.body.request.persons.length, 3);
   assert.equal(resent.body.request.versions.length, 2);
   assert.equal(resent.body.request.versions[0].data.persons.length, 2);
-  assert.equal(resent.body.request.versions[1].data.persons.length, 7);
+  assert.equal(resent.body.request.versions[1].data.persons.length, 3);
+  assert.equal(resent.body.request.persons[2].relationship, "Familiar");
+  assert.equal(resent.body.request.persons[2].familyGroup, "Núcleo B");
   assert.match(
     itemFrom(resent).timeline.at(-1).message,
     /corregida y reenviada/i,
@@ -435,13 +527,12 @@ test("la titularidad y el área protegen la corrección de solicitudes devueltas
   const created = await request(app)
     .post("/api/demo/victimas/solicitudes")
     .set(auth(rjv))
-    .send({
-      externalId: "RAD-2026-0086",
-      law: "LEY_975",
-      service: "SVC_VIC_EVALUACION_PSICOLOGICA",
-      region: "BOGOTA",
-      victimCount: 1,
-    })
+    .send(
+      victimsPayload({
+        externalId: "RAD-2026-0086",
+        law: "LEY_975",
+      }),
+    )
     .expect(201);
   const itemId = itemFrom(created).id;
   await request(app)
@@ -461,25 +552,28 @@ test("la titularidad y el área protegen la corrección de solicitudes devueltas
     .expect(404);
 });
 
-test("sin candidato conserva PENDIENTE_REASIGNACION y una explicación auditable", async () => {
+test("sin candidato pasa a PENDIENTE_EXCEPCION y conserva una explicación auditable", async () => {
   const app = testApp();
   const defender = await login(app, "demo-defensor");
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
     .set(auth(defender))
-    .send({
-      spoa: "110016000049202600085",
-      delito: "Caso sin cobertura disponible",
-      service: "SVC_INV_ANALISIS_BALISTICO",
-      region: "CUNDINAMARCA",
-    })
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600085",
+        delito: "Caso sin cobertura disponible",
+        service: "SVC_INV_ANALISIS_BALISTICO",
+        region: "CUNDINAMARCA",
+      }),
+    )
     .expect(201);
-  const assigned = await request(app)
+  const deniedRetry = await request(app)
     .post(`/api/demo/investigacion/items/${itemFrom(created).id}/repartir`)
     .set(auth(defender))
-    .expect(200);
-  const item = itemFrom(assigned);
-  assert.equal(item.status, "PENDIENTE_REASIGNACION");
+    .expect(403);
+  assert.equal(deniedRetry.body.error.code, "CAPABILITY_FORBIDDEN");
+  const item = itemFrom(created);
+  assert.equal(item.status, "PENDIENTE_EXCEPCION");
   assert.equal(item.assigneeId, null);
   assert.match(item.assignment.selectedReason, /todos fueron excluidos/i);
   assert.ok(item.assignment.evaluated.length >= 3);
@@ -496,12 +590,14 @@ test("restablecer demo recupera semillas reproducibles", async () => {
   await request(app)
     .post("/api/demo/investigacion/solicitudes")
     .set(auth(defender))
-    .send({
-      spoa: "110016000049202600099",
-      delito: "Registro temporal",
-      service: "SVC_INV_ANALISIS_BALISTICO",
-      region: "BOGOTA",
-    })
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600099",
+        delito: "Registro para comprobar restablecimiento",
+        service: "SVC_INV_ANALISIS_BALISTICO",
+        region: "BOGOTA",
+      }),
+    )
     .expect(201);
 
   const reset = await request(app)
@@ -594,6 +690,78 @@ test("autorización separa roles, áreas y casos visibles", async () => {
     .expect(403);
 });
 
+test("los perfiles adicionales de Investigación conservan alcances separados y solo lectura", async () => {
+  const app = testApp();
+  const regional = await login(app, "demo-gestor-regional-investigacion");
+  const central = await login(app, "demo-gestor-central-excepciones");
+  const defenderRegional = await login(app, "demo-defensor-regional");
+
+  const regionalView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(regional))
+    .expect(200);
+  assert.ok(
+    regionalView.body.requests
+      .flatMap((entry) => entry.items)
+      .every((item) => item.region === "BOGOTA"),
+  );
+  assert.ok(
+    regionalView.body.authorization.grants.some(
+      (grant) => grant.capability === "CONSULTAR_PROBLEMAS_INVESTIGACION",
+    ),
+  );
+
+  const centralView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(central))
+    .expect(200);
+  assert.ok(
+    centralView.body.requests
+      .flatMap((entry) => entry.items)
+      .some((item) => item.status === "PENDIENTE_EXCEPCION"),
+  );
+  assert.ok(
+    centralView.body.authorization.grants.some(
+      (grant) => grant.capability === "CONSULTAR_EXCEPCIONES_INVESTIGACION",
+    ),
+  );
+
+  const defenderView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(defenderRegional))
+    .expect(200);
+  assert.ok(
+    defenderView.body.authorization.grants.every(
+      (grant) =>
+        ![
+          "REINTENTAR_REPARTO_EXCEPCION",
+          "RESOLVER_EXCEPCION_MANUAL",
+          "REASIGNAR_ITEM",
+          "APROBAR_INFORME_INVESTIGACION",
+        ].includes(grant.capability),
+    ),
+  );
+
+  for (const token of [regional, central, defenderRegional]) {
+    await request(app)
+      .post("/api/demo/investigacion/items/MT-2026-0001-02/repartir")
+      .set(auth(token))
+      .expect(403);
+  }
+});
+
+test("las métricas de plazo se omiten cuando no existe una regla vigente", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const response = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(defender))
+    .expect(200);
+  for (const item of response.body.requests.flatMap((entry) => entry.items)) {
+    assert.deepEqual(item.tracking, { configured: false });
+  }
+});
+
 test("rutas desconocidas y JSON inválido usan errores correlacionados", async () => {
   const app = testApp();
   const missing = await request(app).get("/api/no-existe").expect(404);
@@ -619,8 +787,8 @@ test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos 
     "SIGIP-DP — Gestión investigativa y pericial de la Defensoría del Pueblo",
   );
   assert.ok(
-    response.body.authorization.grants.some(
-      (grant) => grant.capability === "EJECUTAR_REPARTO_INVESTIGACION",
+    response.body.authorization.grants.every(
+      (grant) => grant.capability !== "REINTENTAR_REPARTO_EXCEPCION",
     ),
   );
   assert.ok(
@@ -691,7 +859,8 @@ test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos 
       (service) =>
         service.status === "PUBLICADO" &&
         service.specialtyIds.length > 0 &&
-        service.termPolicy.value === null,
+        service.termPolicy.value === null &&
+        service.termPolicy.label === "Plazo parametrizable por servicio",
     ),
   );
   assert.deepEqual(response.body.dashboards.INVESTIGACION, {
@@ -711,35 +880,28 @@ test("una solicitud multiítem mantiene estados y repartos independientes", asyn
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
     .set(auth(defender))
-    .send({
-      spoa: "110016000049202600081",
-      delito: "Solicitud con dos servicios",
-      items: [
-        { service: "SVC_INV_VERIFICACION_TERRENO", region: "BOGOTA" },
-        { service: "SVC_INV_ANALISIS_BALISTICO", region: "CUNDINAMARCA" },
-      ],
-    })
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600081",
+        delito: "Solicitud con dos servicios",
+        items: [
+          { service: "SVC_INV_VERIFICACION_TERRENO", region: "BOGOTA" },
+          { service: "SVC_INV_ANALISIS_BALISTICO", region: "CUNDINAMARCA" },
+        ],
+      }),
+    )
     .expect(201);
 
   assert.equal(created.body.request.items.length, 2);
-  assert.equal(created.body.request.aggregateStatus, "RADICADA");
-  assert.equal(created.body.request.items[0].status, "RADICADA");
-  assert.equal(created.body.request.items[1].status, "RADICADA");
+  assert.equal(created.body.request.aggregateStatus, "EN_TRAMITE");
+  assert.equal(created.body.request.items[0].status, "ASIGNADA");
+  assert.equal(created.body.request.items[1].status, "PENDIENTE_EXCEPCION");
   assert.notEqual(
     created.body.request.items[0].id,
     created.body.request.items[1].id,
   );
 
-  const assigned = await request(app)
-    .post(
-      `/api/demo/investigacion/items/${created.body.request.items[0].id}/repartir`,
-    )
-    .set(auth(defender))
-    .expect(200);
-  assert.equal(assigned.body.request.items[0].status, "ASIGNADA");
-  assert.equal(assigned.body.request.items[1].status, "RADICADA");
-  assert.equal(assigned.body.request.items[1].assignment, null);
-  assert.equal(assigned.body.request.aggregateStatus, "EN_TRAMITE");
+  assert.ok(created.body.request.items.every((item) => item.assignment));
 
   const investigator = await login(app, "demo-investigador");
   const pag = await login(app, "demo-pag-investigacion");
@@ -758,7 +920,10 @@ test("una solicitud multiítem mantiene estados y repartos independientes", asyn
     .set(auth(pag))
     .expect(200);
   assert.equal(partiallyClosed.body.request.items[0].status, "CERRADA");
-  assert.equal(partiallyClosed.body.request.items[1].status, "RADICADA");
+  assert.equal(
+    partiallyClosed.body.request.items[1].status,
+    "PENDIENTE_EXCEPCION",
+  );
   assert.equal(
     partiallyClosed.body.request.aggregateStatus,
     "PARCIALMENTE_CERRADA",
@@ -814,24 +979,23 @@ test("una solicitud de Víctimas cierra solo cuando todos sus ítems independien
   const created = await request(app)
     .post("/api/demo/victimas/solicitudes")
     .set(auth(rjv))
-    .send({
-      externalId: "RAD-2026-0084",
-      law: "LEY_1448",
-      region: "BOGOTA",
-      victimCount: 1,
-      items: [
-        {
-          service: "SVC_VIC_EVALUACION_PSICOLOGICA",
-          region: "BOGOTA",
-          law: "LEY_1448",
-        },
-        {
-          service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
-          region: "BOGOTA",
-          law: "LEY_1448",
-        },
-      ],
-    })
+    .send(
+      victimsPayload({
+        externalId: "RAD-2026-0084",
+        items: [
+          {
+            service: "SVC_VIC_EVALUACION_PSICOLOGICA",
+            region: "BOGOTA",
+            law: "LEY_1448",
+          },
+          {
+            service: "SVC_VIC_LIQUIDACION_PERJUICIOS",
+            region: "BOGOTA",
+            law: "LEY_1448",
+          },
+        ],
+      }),
+    )
     .expect(201);
   const [psychologyItem, financialItem] = created.body.request.items;
 
@@ -889,12 +1053,14 @@ test("dos repartos concurrentes no pierden la carga del mismo candidato", async 
     request(app)
       .post("/api/demo/investigacion/solicitudes")
       .set(auth(defender))
-      .send({
-        spoa,
-        delito: "Concurrencia controlada de reparto",
-        service: "SVC_INV_ANALISIS_BALISTICO",
-        region: "BOGOTA",
-      });
+      .send(
+        investigationPayload({
+          spoa,
+          delito: "Concurrencia controlada de reparto",
+          service: "SVC_INV_ANALISIS_BALISTICO",
+          region: "BOGOTA",
+        }),
+      );
   const [first, second] = await Promise.all([
     create("110016000049202600078"),
     create("110016000049202600079"),
@@ -902,15 +1068,7 @@ test("dos repartos concurrentes no pierden la carga del mismo candidato", async 
   assert.equal(first.status, 201);
   assert.equal(second.status, 201);
 
-  const results = await Promise.all(
-    [itemFrom(first).id, itemFrom(second).id].map((itemId) =>
-      request(app)
-        .post(`/api/demo/investigacion/items/${itemId}/repartir`)
-        .set(auth(defender)),
-    ),
-  );
-  assert.ok(results.every((response) => response.status === 200));
-  const items = results.map((response) => itemFrom(response));
+  const items = [itemFrom(first), itemFrom(second)];
   assert.ok(items.every((item) => item.assigneeId === "inv-demo-01"));
   assert.deepEqual(
     items
@@ -932,18 +1090,16 @@ test("problemas se registran sin alterar el estado y las prórrogas quedan bloqu
   const created = await request(app)
     .post("/api/demo/investigacion/solicitudes")
     .set(auth(defender))
-    .send({
-      spoa: "110016000049202600080",
-      delito: "Caso para contrato operativo",
-      service: "SVC_INV_VERIFICACION_TERRENO",
-      region: "BOGOTA",
-    })
+    .send(
+      investigationPayload({
+        spoa: "110016000049202600080",
+        delito: "Caso para contrato operativo",
+        service: "SVC_INV_VERIFICACION_TERRENO",
+        region: "BOGOTA",
+      }),
+    )
     .expect(201);
   const itemId = itemFrom(created).id;
-  await request(app)
-    .post(`/api/demo/investigacion/items/${itemId}/repartir`)
-    .set(auth(defender))
-    .expect(200);
   const problem = await request(app)
     .post(`/api/demo/investigacion/items/${itemId}/operaciones/problema`)
     .set(auth(investigator))

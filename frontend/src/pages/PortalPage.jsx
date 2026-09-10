@@ -364,6 +364,7 @@ export default function PortalPage() {
                   token={token}
                   busy={busy}
                   run={run}
+                  catalogs={data.catalogs}
                   onOpenDetail={(itemId, opener) =>
                     openDetail(request.id, itemId, opener)
                   }
@@ -1440,7 +1441,15 @@ function ReviewSummary({
   );
 }
 
-function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
+function RequestCard({
+  request,
+  profile,
+  token,
+  busy,
+  run,
+  catalogs,
+  onOpenDetail,
+}) {
   return (
     <article className="request-card">
       <header>
@@ -1486,11 +1495,13 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
         <ItemCard
           key={item.id}
           item={item}
+          request={request}
           area={request.area}
           profile={profile}
           token={token}
           busy={busy}
           run={run}
+          catalogs={catalogs}
           onOpenDetail={(opener) => onOpenDetail(item.id, opener)}
         />
       ))}
@@ -1498,7 +1509,17 @@ function RequestCard({ request, profile, token, busy, run, onOpenDetail }) {
   );
 }
 
-function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
+function ItemCard({
+  item,
+  request,
+  area,
+  profile,
+  token,
+  busy,
+  run,
+  catalogs,
+  onOpenDetail,
+}) {
   const isBusy = busy === item.id;
   const actionAvailable = canActOnItem(area, profile, item.status);
   const nextAction = nextActionFor(area, item.status);
@@ -1596,6 +1617,8 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
           item.status === "DEVUELTA" && (
             <VictimsCorrectionAction
               item={item}
+              request={request}
+              catalogs={catalogs}
               token={token}
               busy={isBusy}
               run={run}
@@ -1734,38 +1757,440 @@ function VictimsApprovalActions({ item, token, busy, run }) {
   );
 }
 
-function VictimsCorrectionAction({ item, token, busy, run }) {
+function VictimsCorrectionAction({
+  item,
+  request,
+  catalogs,
+  token,
+  busy,
+  run,
+}) {
+  const original = item.submittedRequestData;
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
   const [correctionSummary, setCorrectionSummary] = useState("");
+  const [form, setForm] = useState(() => correctionFormFrom(original));
+  const [persons, setPersons] = useState(() =>
+    correctionPersonsFrom(original?.persons),
+  );
+  const [documents, setDocuments] = useState(() =>
+    structuredClone(original?.documents || []),
+  );
+  if (!original) return null;
+
+  const update = (key) => (event) =>
+    setForm((current) => ({
+      ...current,
+      [key]:
+        event.target.type === "checkbox"
+          ? event.target.checked
+          : event.target.value,
+    }));
+  const payload = correctionPayload(form, persons, documents);
+  const changes = correctionChangesForPresentation(original, payload, catalogs);
+  const lastObservation = item.pagObservations?.at(-1);
+  const steps = ["Solicitud", "Personas y soportes", "Confirmación"];
+
+  function submit() {
+    run(
+      item.id,
+      () =>
+        apiVictimsAction(token, item.id, "corregir-reenviar", {
+          ...payload,
+          correctionSummary,
+        }),
+      "Solicitud corregida y reenviada al PAG",
+    );
+  }
+
   return (
-    <div className="review-actions correction-actions">
-      <label>
-        Corrección realizada
-        <input
-          value={correctionSummary}
-          onChange={(event) => setCorrectionSummary(event.target.value)}
-          placeholder="Describa el ajuste antes de reenviar"
-        />
-      </label>
-      <div>
-        <button
-          className="primary-demo"
-          disabled={busy || !correctionSummary.trim()}
-          onClick={() =>
-            run(
-              item.id,
-              () =>
-                apiVictimsAction(token, item.id, "corregir-reenviar", {
-                  correctionSummary,
-                }),
-              "Solicitud corregida y reenviada al PAG",
-            )
-          }
-        >
-          Corregir y reenviar
-        </button>
-      </div>
+    <div className="correction-launcher">
+      <button type="button" onClick={() => setOpen(true)}>
+        Abrir asistente de corrección
+      </button>
+      {open && (
+        <div className="correction-overlay" onMouseDown={() => setOpen(false)}>
+          <section
+            className="correction-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`correction-title-${item.id}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <small>
+                  Ítem {item.id} · versión devuelta {item.submissionVersion}
+                </small>
+                <h2 id={`correction-title-${item.id}`}>
+                  Corregir solicitud de Víctimas
+                </h2>
+              </div>
+              <button type="button" onClick={() => setOpen(false)}>
+                Cerrar
+              </button>
+            </header>
+
+            <div className="pag-return-observation">
+              <strong>Observación de devolución del PAG</strong>
+              <p>
+                {lastObservation?.observation || "Sin observación registrada"}
+              </p>
+              {lastObservation && (
+                <small>
+                  Versión {lastObservation.version} ·{" "}
+                  {new Date(lastObservation.at).toLocaleString("es-CO")}
+                </small>
+              )}
+            </div>
+
+            <WizardProgress steps={steps} current={step} />
+
+            {step === 0 && (
+              <div className="wizard-fields full-width">
+                <label>
+                  Identificador externo
+                  <input
+                    aria-label="Identificador externo corregido"
+                    value={form.externalId}
+                    onChange={update("externalId")}
+                  />
+                </label>
+                <label>
+                  Ley o programa
+                  <select
+                    aria-label="Ley o programa corregido"
+                    value={form.law}
+                    onChange={update("law")}
+                  >
+                    {catalogs.laws.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Proceso
+                  <input
+                    aria-label="Proceso corregido"
+                    value={form.processReference}
+                    onChange={update("processReference")}
+                  />
+                </label>
+                <label className="check-field">
+                  <input
+                    type="checkbox"
+                    checked={form.hearingApplies}
+                    onChange={update("hearingApplies")}
+                  />
+                  Tiene audiencia programada
+                </label>
+                {form.hearingApplies && (
+                  <label>
+                    Fecha de audiencia
+                    <input
+                      aria-label="Fecha de audiencia corregida"
+                      type="date"
+                      value={form.hearingDate}
+                      onChange={update("hearingDate")}
+                    />
+                  </label>
+                )}
+                <label>
+                  Hechos
+                  <textarea
+                    aria-label="Hechos corregidos"
+                    value={form.facts}
+                    onChange={update("facts")}
+                  />
+                </label>
+              </div>
+            )}
+
+            {step === 1 && (
+              <div className="correction-editors">
+                <PersonsEditor
+                  persons={persons}
+                  setPersons={setPersons}
+                  mode="victims"
+                />
+                <div className="wizard-fields">
+                  <label>
+                    Servicio del ítem devuelto
+                    <select
+                      aria-label="Servicio corregido"
+                      value={form.service}
+                      onChange={update("service")}
+                    >
+                      {catalogs.victimServices.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Cobertura
+                    <select
+                      aria-label="Cobertura corregida"
+                      value={form.region}
+                      onChange={update("region")}
+                    >
+                      {catalogs.regions.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <DocumentsEditor
+                  documents={documents}
+                  setDocuments={setDocuments}
+                  catalog={catalogs.victimDocumentTypes}
+                />
+              </div>
+            )}
+
+            {step === 2 && (
+              <section className="correction-review">
+                <h3>Resumen de cambios antes de reenviar</h3>
+                <dl>
+                  <div>
+                    <dt>Ítem afectado</dt>
+                    <dd>{item.id}</dd>
+                  </div>
+                  <div>
+                    <dt>Versión devuelta</dt>
+                    <dd>{item.submissionVersion}</dd>
+                  </div>
+                  <div>
+                    <dt>Versión que será creada</dt>
+                    <dd>{item.nextSubmissionVersion}</dd>
+                  </div>
+                  <div>
+                    <dt>Solicitud</dt>
+                    <dd>{request.id}</dd>
+                  </div>
+                </dl>
+                {changes.length ? (
+                  <div className="correction-differences">
+                    {changes.map((change) => (
+                      <article key={change.field}>
+                        <strong>{change.label}</strong>
+                        <div>
+                          <span>
+                            <small>Valor anterior</small>
+                            {displayCorrectionValue(change.previous)}
+                          </span>
+                          <span>
+                            <small>Valor nuevo</small>
+                            {displayCorrectionValue(change.next)}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="no-correction-changes">
+                    No hay cambios reales para reenviar.
+                  </p>
+                )}
+                <label>
+                  Descripción obligatoria de la corrección
+                  <textarea
+                    aria-label="Descripción obligatoria de la corrección"
+                    value={correctionSummary}
+                    onChange={(event) =>
+                      setCorrectionSummary(event.target.value)
+                    }
+                    placeholder="Explique qué se corrigió"
+                  />
+                </label>
+              </section>
+            )}
+
+            <div className="wizard-navigation correction-navigation">
+              {step > 0 && (
+                <button type="button" onClick={() => setStep(step - 1)}>
+                  Anterior
+                </button>
+              )}
+              {step < steps.length - 1 ? (
+                <button
+                  className="primary-demo"
+                  type="button"
+                  onClick={() => setStep(step + 1)}
+                >
+                  Siguiente
+                </button>
+              ) : (
+                <button
+                  className="primary-demo"
+                  type="button"
+                  disabled={
+                    busy || !changes.length || !correctionSummary.trim()
+                  }
+                  onClick={submit}
+                >
+                  Reenviar corrección al PAG
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
+}
+
+function correctionFormFrom(original = {}) {
+  return {
+    externalId: original.externalId || "",
+    law: original.law || "",
+    processReference: original.caseData?.processReference || "",
+    hearingApplies: Boolean(original.caseData?.hearingApplies),
+    hearingDate: original.caseData?.hearingDate || "",
+    facts: original.caseData?.facts || "",
+    service: original.service || "",
+    region: original.region || "",
+  };
+}
+
+function correctionPersonsFrom(persons = []) {
+  return persons.map((person) => ({
+    alias: person.alias || "",
+    type: person.type || "DIRECTA",
+    relationship: person.relationship || "",
+    familyGroup: person.familyGroup || "",
+    phone: person.contact?.phone || "",
+    email: person.contact?.email || "",
+    preferredChannel: person.contact?.preferredChannel || "Correo",
+  }));
+}
+
+function correctionPayload(form, persons, documents) {
+  return {
+    externalId: correctionText(form.externalId),
+    law: correctionText(form.law),
+    caseData: {
+      processReference: correctionText(form.processReference),
+      hearingApplies: form.hearingApplies,
+      hearingDate: form.hearingApplies
+        ? correctionText(form.hearingDate) || null
+        : null,
+      facts: correctionText(form.facts),
+    },
+    persons: persons.map((person) => ({
+      alias: correctionText(person.alias),
+      type: correctionText(person.type).toUpperCase(),
+      relationship: correctionText(person.relationship) || null,
+      familyGroup: correctionText(person.familyGroup),
+      contact: {
+        phone: correctionText(person.phone) || null,
+        email: correctionText(person.email) || null,
+        preferredChannel: correctionText(person.preferredChannel) || null,
+      },
+    })),
+    service: correctionText(form.service),
+    region: correctionText(form.region),
+    documents: documents.map((document) => ({
+      type: correctionText(document.type).toUpperCase(),
+      reference: correctionText(document.reference),
+    })),
+  };
+}
+
+function correctionText(value) {
+  return String(value || "").trim();
+}
+
+function correctionChangesForPresentation(original, next, catalogs) {
+  const labels = {
+    laws: new Map(catalogs.laws.map((entry) => [entry.id, entry.label])),
+    services: new Map(
+      catalogs.victimServices.map((entry) => [entry.id, entry.label]),
+    ),
+    regions: new Map(catalogs.regions.map((entry) => [entry.id, entry.label])),
+  };
+  const entries = [
+    [
+      "externalId",
+      "Identificador externo",
+      original.externalId,
+      next.externalId,
+    ],
+    [
+      "law",
+      "Ley o programa",
+      labels.laws.get(original.law) || original.law,
+      labels.laws.get(next.law) || next.law,
+    ],
+    [
+      "caseData.processReference",
+      "Proceso",
+      original.caseData?.processReference,
+      next.caseData.processReference,
+    ],
+    [
+      "caseData.hearingApplies",
+      "Aplica audiencia",
+      Boolean(original.caseData?.hearingApplies),
+      Boolean(next.caseData.hearingApplies),
+    ],
+    [
+      "caseData.hearingDate",
+      "Fecha de audiencia",
+      original.caseData?.hearingDate || null,
+      next.caseData.hearingDate || null,
+    ],
+    ["caseData.facts", "Hechos", original.caseData?.facts, next.caseData.facts],
+    ["persons", "Personas vinculadas", original.persons, next.persons],
+    [
+      "service",
+      "Servicio",
+      labels.services.get(original.service) || original.service,
+      labels.services.get(next.service) || next.service,
+    ],
+    [
+      "region",
+      "Cobertura",
+      labels.regions.get(original.region) || original.region,
+      labels.regions.get(next.region) || next.region,
+    ],
+    ["documents", "Documentos", original.documents, next.documents],
+  ];
+  return entries
+    .filter(([, , previous, current]) =>
+      correctionValuesDiffer(previous, current),
+    )
+    .map(([field, label, previous, current]) => ({
+      field,
+      label,
+      previous,
+      next: current,
+    }));
+}
+
+function correctionValuesDiffer(previous, next) {
+  return JSON.stringify(previous ?? null) !== JSON.stringify(next ?? null);
+}
+
+function displayCorrectionValue(value) {
+  if (Array.isArray(value)) {
+    return value.length
+      ? value
+          .map((entry) =>
+            entry.reference
+              ? `${entry.type}: ${entry.reference}`
+              : `${entry.alias} (${entry.type === "DIRECTA" ? "Directa" : "Indirecta"})`,
+          )
+          .join("; ")
+      : "Sin registros";
+  }
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  return value || "Sin dato";
 }
 
 function ReviewActions({ item, token, busy, run }) {
@@ -1843,6 +2268,9 @@ function ProcessStepper({ area, status }) {
 
 function CaseDetail({ request, item, onClose }) {
   const closeButtonRef = useRef(null);
+  const approvedItem = item.approvedRequestData?.items?.find(
+    (candidate) => candidate.id === item.id,
+  );
   const assignmentSummary = item.assignment
     ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
     : "El reparto automático se ejecutará al cumplirse el hito aplicable.";
@@ -1951,6 +2379,199 @@ function CaseDetail({ request, item, onClose }) {
 
         {item.tracking?.configured && (
           <p className="validation-pending">{item.tracking.label}</p>
+        )}
+
+        {request.area === "VICTIMAS" && (
+          <section className="detail-section">
+            <h3>Información vigente de la solicitud</h3>
+            <dl className="detail-facts compact-detail-facts">
+              <div>
+                <dt>Proceso</dt>
+                <dd>{request.caseData?.processReference || "Sin dato"}</dd>
+              </div>
+              <div>
+                <dt>Audiencia</dt>
+                <dd>
+                  {request.caseData?.hearingApplies
+                    ? request.caseData.hearingDate || "Fecha pendiente"
+                    : "No aplica"}
+                </dd>
+              </div>
+              <div>
+                <dt>Hechos</dt>
+                <dd>{request.caseData?.facts || "Sin dato"}</dd>
+              </div>
+              <div>
+                <dt>Personas</dt>
+                <dd>{request.persons?.length || 0}</dd>
+              </div>
+            </dl>
+            <ul className="document-list">
+              {(request.persons || []).map((person, index) => (
+                <li key={`${person.alias}-${index}`}>
+                  <strong>{person.alias}</strong>
+                  <span>
+                    {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
+                    {person.relationship || "Sin parentesco"} ·{" "}
+                    {person.familyGroup}
+                  </span>
+                  <small>
+                    Contacto: {person.contact?.phone || person.contact?.email}
+                  </small>
+                </li>
+              ))}
+              {(request.documents || []).map((document, index) => (
+                <li key={`${document.type}-${document.reference}-${index}`}>
+                  <strong>{document.type}</strong>
+                  <span>{document.reference}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {request.area === "VICTIMAS" && item.pagObservations?.length > 0 && (
+          <section className="detail-section">
+            <h3>Observaciones del PAG</h3>
+            <ol className="detail-timeline">
+              {item.pagObservations
+                .slice()
+                .reverse()
+                .map((observation, index) => (
+                  <li key={`${observation.version}-${observation.at}-${index}`}>
+                    <strong>Versión {observation.version} devuelta</strong>
+                    <small>
+                      {new Date(observation.at).toLocaleString("es-CO")}
+                    </small>
+                    <p>{observation.observation}</p>
+                  </li>
+                ))}
+            </ol>
+          </section>
+        )}
+
+        {request.area === "VICTIMAS" && item.correctionHistory?.length > 0 && (
+          <section className="detail-section">
+            <h3>Historial de correcciones y diferencias</h3>
+            {item.correctionHistory
+              .slice()
+              .reverse()
+              .map((correction) => (
+                <article
+                  className="correction-history-entry"
+                  key={correction.version}
+                >
+                  <strong>
+                    Versión {correction.version} desde versión{" "}
+                    {correction.baseVersion}
+                  </strong>
+                  <small>
+                    {new Date(correction.submittedAt).toLocaleString("es-CO")}
+                  </small>
+                  <p>{correction.correctionSummary}</p>
+                  <div className="correction-differences">
+                    {correction.changes.map((change) => (
+                      <article key={change.field}>
+                        <strong>{change.label}</strong>
+                        <div>
+                          <span>
+                            <small>Valor anterior</small>
+                            {displayCorrectionValue(change.previous)}
+                          </span>
+                          <span>
+                            <small>Valor nuevo</small>
+                            {displayCorrectionValue(change.next)}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </article>
+              ))}
+          </section>
+        )}
+
+        {request.area === "VICTIMAS" && item.approvedRequestData && (
+          <section className="detail-section approved-data">
+            <h3>Datos aprobados utilizados para el reparto</h3>
+            <dl className="detail-facts compact-detail-facts">
+              <div>
+                <dt>Versión aprobada</dt>
+                <dd>{item.approvedSubmissionVersion}</dd>
+              </div>
+              <div>
+                <dt>Identificador</dt>
+                <dd>{item.approvedRequestData.externalId}</dd>
+              </div>
+              <div>
+                <dt>Proceso</dt>
+                <dd>
+                  {item.approvedRequestData.caseData?.processReference ||
+                    "Sin dato"}
+                </dd>
+              </div>
+              <div>
+                <dt>Audiencia</dt>
+                <dd>
+                  {item.approvedRequestData.caseData?.hearingApplies
+                    ? item.approvedRequestData.caseData.hearingDate ||
+                      "Fecha pendiente"
+                    : "No aplica"}
+                </dd>
+              </div>
+              <div>
+                <dt>Hechos</dt>
+                <dd>
+                  {item.approvedRequestData.caseData?.facts || "Sin dato"}
+                </dd>
+              </div>
+              <div>
+                <dt>Personas</dt>
+                <dd>{item.approvedRequestData.persons?.length || 0}</dd>
+              </div>
+              <div>
+                <dt>Servicio</dt>
+                <dd>{approvedItem?.service || "Sin dato"}</dd>
+              </div>
+              <div>
+                <dt>Cobertura</dt>
+                <dd>{approvedItem?.region || "Sin dato"}</dd>
+              </div>
+              <div>
+                <dt>Ley o programa</dt>
+                <dd>{approvedItem?.law || "Sin dato"}</dd>
+              </div>
+              <div>
+                <dt>Documentos</dt>
+                <dd>{item.approvedRequestData.documents?.length || 0}</dd>
+              </div>
+            </dl>
+            <ul className="document-list">
+              {(item.approvedRequestData.persons || []).map((person, index) => (
+                <li key={`approved-person-${person.alias}-${index}`}>
+                  <strong>{person.alias}</strong>
+                  <span>
+                    {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
+                    {person.relationship || "Sin parentesco"} ·{" "}
+                    {person.familyGroup}
+                  </span>
+                  <small>
+                    Contacto: {person.contact?.phone || person.contact?.email}
+                  </small>
+                </li>
+              ))}
+              {(item.approvedRequestData.documents || []).map(
+                (document, index) => (
+                  <li
+                    key={`approved-document-${document.type}-${document.reference}-${index}`}
+                  >
+                    <strong>{document.type}</strong>
+                    <span>{document.reference}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          </section>
         )}
 
         <section className="detail-section">

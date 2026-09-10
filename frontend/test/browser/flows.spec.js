@@ -50,7 +50,7 @@ async function submitInvestigation(page, spoa, configureServices) {
   await page.getByRole("button", { name: "Radicar solicitud" }).click();
 }
 
-async function submitVictims(page, externalId) {
+async function submitVictims(page, externalId, configureServices) {
   const roleField = page.getByRole("textbox", { name: "Rol", exact: true });
   await expect(roleField).toHaveValue("Representante judicial de víctimas");
   await expect(roleField).toHaveAttribute("readonly", "");
@@ -60,6 +60,7 @@ async function submitVictims(page, externalId) {
   await expect(page.getByLabel("Identificación persona 1")).toBeVisible();
   await expect(page.getByLabel("Identificación persona 2")).toBeVisible();
   await page.getByRole("button", { name: "Siguiente" }).click();
+  if (configureServices) await configureServices();
   await page.getByRole("button", { name: "Siguiente" }).click();
   await page.getByLabel("Confirmo el envío a aprobación previa").check();
   await page
@@ -86,7 +87,11 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
   await expect(
     page.getByLabel(/perito asignado|funcionario responsable/i),
   ).toHaveCount(0);
-  await submitVictims(page, externalId);
+  await submitVictims(page, externalId, async () => {
+    await page
+      .getByLabel("Liquidación de daño material y perjuicios económicos")
+      .check();
+  });
   await expect(
     page.getByText("Solicitud de Víctimas enviada a aprobación previa"),
   ).toBeVisible();
@@ -100,10 +105,26 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
     userId: "demo-pag-victimas",
   });
   const pagCard = requestCard(page, externalId);
-  await pagCard
+  const approvedSibling = pagCard.locator(".item-card").filter({
+    hasText: "Liquidación de daño material y perjuicios económicos",
+  });
+  await approvedSibling
+    .getByRole("button", { name: "Aprobar solicitud" })
+    .click();
+  await expect(
+    requestCard(page, externalId).locator(".item-card").filter({
+      hasText: "Liquidación de daño material y perjuicios económicos",
+    }),
+  ).toContainText("Asignada");
+  const returnedItem = requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({ hasText: "Evaluación psicológica pericial" });
+  await returnedItem
     .getByLabel("Observación para devolución")
     .fill("Adjuntar soporte de parentesco");
-  await pagCard.getByRole("button", { name: "Devolver solicitud" }).click();
+  await returnedItem
+    .getByRole("button", { name: "Devolver solicitud" })
+    .click();
   await expect(
     page.getByText("Solicitud devuelta al RJV para corrección"),
   ).toBeVisible();
@@ -113,13 +134,69 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
 
   await logout(page);
   await chooseProfile(page, { area: "VICTIMAS", userId: "demo-rjv" });
-  const returnedCard = requestCard(page, externalId);
+  const returnedCard = requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({ hasText: "Evaluación psicológica pericial" });
   await returnedCard
-    .getByLabel("Corrección realizada")
-    .fill("Soporte incorporado");
-  await returnedCard
-    .getByRole("button", { name: "Corregir y reenviar" })
+    .getByRole("button", { name: "Abrir asistente de corrección" })
     .click();
+  const correctionDialog = page.getByRole("dialog");
+  await expect(correctionDialog).toContainText(
+    "Adjuntar soporte de parentesco",
+  );
+  await expect(
+    correctionDialog.getByLabel("Identificador externo corregido"),
+  ).toHaveValue(externalId);
+  await expect(correctionDialog.getByLabel("Proceso corregido")).toHaveValue(
+    "Proceso de reparación 2026-0004",
+  );
+
+  await correctionDialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(
+    correctionDialog.getByLabel("Identificación persona 1"),
+  ).toHaveValue("Persona vinculada A");
+  await expect(
+    correctionDialog.getByLabel("Referencia documental 1"),
+  ).toHaveValue("REF-FORM-2026-0004");
+  await correctionDialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(
+    correctionDialog.getByText("No hay cambios reales para reenviar."),
+  ).toBeVisible();
+  await expect(
+    correctionDialog.getByRole("button", {
+      name: "Reenviar corrección al PAG",
+    }),
+  ).toBeDisabled();
+
+  await correctionDialog.getByRole("button", { name: "Anterior" }).click();
+  await correctionDialog.getByLabel("Teléfono").first().fill("3000000099");
+  await correctionDialog
+    .getByLabel("Referencia documental 1")
+    .fill("REF-FORM-2026-0004-CORREGIDO");
+  await correctionDialog.getByRole("button", { name: "Anterior" }).click();
+  await correctionDialog
+    .getByLabel("Proceso corregido")
+    .fill("Proceso de reparación 2026-0004 corregido");
+  await correctionDialog
+    .getByLabel("Hechos corregidos")
+    .fill("Hechos corregidos con el soporte familiar verificado.");
+  await correctionDialog.getByRole("button", { name: "Siguiente" }).click();
+  await correctionDialog.getByRole("button", { name: "Siguiente" }).click();
+  await expect(
+    correctionDialog.getByText("Versión que será creada"),
+  ).toBeVisible();
+  await expect(correctionDialog).toContainText("Valor anterior");
+  await expect(correctionDialog).toContainText("Valor nuevo");
+  await expect(correctionDialog).toContainText("REF-FORM-2026-0004-CORREGIDO");
+  const resendButton = correctionDialog.getByRole("button", {
+    name: "Reenviar corrección al PAG",
+  });
+  await expect(resendButton).toBeDisabled();
+  await correctionDialog
+    .getByLabel("Descripción obligatoria de la corrección")
+    .fill("Se corrigieron caso, contacto y referencia documental");
+  await expect(resendButton).toBeEnabled();
+  await resendButton.click();
   await expect(
     page.getByText("Solicitud corregida y reenviada al PAG"),
   ).toBeVisible();
@@ -127,6 +204,8 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
     "Pendiente aprobación PAG",
   );
   await requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({ hasText: "Evaluación psicológica pericial" })
     .getByRole("button", { name: "Ver detalle del caso" })
     .click();
   await expect(page.getByText("Versión 2", { exact: true })).toBeVisible();
@@ -134,6 +213,29 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
   await expect(
     page.getByText(/DEVUELTA \(Adjuntar soporte de parentesco\)/),
   ).toBeVisible();
+  await expect(
+    page.getByText("Historial de correcciones y diferencias"),
+  ).toBeVisible();
+  await expect(page.getByText("3000000099")).toBeVisible();
+  await expect(
+    page.getByText("REF-FORM-2026-0004-CORREGIDO", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar detalle" }).click();
+
+  const siblingAfterCorrection = requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({
+      hasText: "Liquidación de daño material y perjuicios económicos",
+    });
+  await expect(siblingAfterCorrection).toContainText("Asignada");
+  await siblingAfterCorrection
+    .getByRole("button", { name: "Ver detalle del caso" })
+    .click();
+  const approvedData = page.getByRole("dialog").locator(".approved-data");
+  await expect(approvedData).toContainText("Proceso de reparación 2026-0004");
+  await expect(approvedData).toContainText("3000000001");
+  await expect(approvedData).toContainText("REF-FORM-2026-0004");
+  await expect(approvedData).not.toContainText("3000000099");
   await page.getByRole("button", { name: "Cerrar detalle" }).click();
 
   await logout(page);
@@ -141,7 +243,23 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
     area: "VICTIMAS",
     userId: "demo-pag-victimas",
   });
+  const correctedForPag = requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({ hasText: "Evaluación psicológica pericial" });
+  await correctedForPag
+    .getByRole("button", { name: "Ver detalle del caso" })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Proceso de reparación 2026-0004 corregido",
+  );
+  await expect(page.getByRole("dialog")).toContainText("3000000099");
+  await expect(page.getByRole("dialog")).toContainText(
+    "REF-FORM-2026-0004-CORREGIDO",
+  );
+  await page.getByRole("button", { name: "Cerrar detalle" }).click();
   await requestCard(page, externalId)
+    .locator(".item-card")
+    .filter({ hasText: "Evaluación psicológica pericial" })
     .getByRole("button", { name: "Aprobar solicitud" })
     .click();
   await expect(
@@ -378,6 +496,60 @@ test("el recorrido principal permanece utilizable en viewport móvil", async ({
   );
   await expect(dialog.getByText("Oportunidad", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Cerrar detalle" }).click();
+});
+
+test("el asistente de corrección de Víctimas funciona en viewport móvil", async ({
+  page,
+}) => {
+  const externalId = "RAD-MOVIL-CORRECCION-01";
+  await chooseProfile(page, { area: "VICTIMAS", userId: "demo-rjv" });
+  await submitVictims(page, externalId);
+  await logout(page);
+  await chooseProfile(page, {
+    area: "VICTIMAS",
+    userId: "demo-pag-victimas",
+  });
+  const pagItem = requestCard(page, externalId).locator(".item-card");
+  await pagItem
+    .getByLabel("Observación para devolución")
+    .fill("Precisar contacto y soporte");
+  await pagItem.getByRole("button", { name: "Devolver solicitud" }).click();
+  await logout(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await chooseProfile(page, { area: "VICTIMAS", userId: "demo-rjv" });
+  await requestCard(page, externalId)
+    .getByRole("button", { name: "Abrir asistente de corrección" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Precisar contacto y soporte");
+  await dialog
+    .getByLabel("Hechos corregidos")
+    .fill("Hechos precisados desde el asistente móvil.");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog.getByLabel("Teléfono").first().fill("3000000088");
+  await dialog
+    .getByLabel("Referencia documental 1")
+    .fill("REF-FORM-MOVIL-CORREGIDO");
+  await dialog.getByRole("button", { name: "Siguiente" }).click();
+  await dialog
+    .getByLabel("Descripción obligatoria de la corrección")
+    .fill("Corrección verificada en viewport móvil");
+
+  const overflow = await dialog.evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+  await dialog
+    .getByRole("button", { name: "Reenviar corrección al PAG" })
+    .click();
+  await expect(
+    page.getByText("Solicitud corregida y reenviada al PAG"),
+  ).toBeVisible();
+  await expect(requestCard(page, externalId)).toContainText(
+    "Pendiente aprobación PAG",
+  );
 });
 
 test("el catálogo resulta visible por alcance sin exponer acciones o textos internos", async ({

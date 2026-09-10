@@ -110,8 +110,24 @@ $victimsReturned = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victim
   observation = "Completar soporte del grupo familiar"
 } | ConvertTo-Json)
 $victimsResent = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/corregir-reenviar" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
-  correctionSummary = "Soporte incorporado"
-} | ConvertTo-Json)
+  correctionSummary = "Se precisaron los hechos, el contacto y la referencia documental"
+  externalId = "RAD-2026-0077"
+  law = "LEY_1448"
+  service = "SVC_VIC_EVALUACION_PSICOLOGICA"
+  region = "BOGOTA"
+  caseData = @{
+    processReference = "Proceso de reparación de verificación"
+    hearingApplies = $true
+    hearingDate = "2026-10-20"
+    facts = "Hechos corregidos luego de revisar el soporte del grupo familiar"
+  }
+  persons = @(
+    @{ alias = "Persona vinculada A"; type = "DIRECTA"; relationship = "Víctima directa"; familyGroup = "Núcleo A"; contact = @{ phone = "3000000099"; email = "persona.a@example.invalid"; preferredChannel = "Correo" } },
+    @{ alias = "Persona vinculada B"; type = "INDIRECTA"; relationship = "Familiar"; familyGroup = "Núcleo A"; contact = @{ phone = "3000000002"; email = "persona.b@example.invalid"; preferredChannel = "Teléfono" } }
+  )
+  documents = @(@{ type = "FORMATO_SOLICITUD"; reference = "REF-FORM-SMOKE-001-CORREGIDO" })
+} | ConvertTo-Json -Depth 8)
+Assert-Value $victimsResent.request.versions.Count 2 "Nueva versión de corrección de Víctimas"
 $victimsAssigned = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims)
 $expert = Login-Demo "demo-perito-psicologia"
 Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/iniciar" -Method Post -Headers (Auth-Headers $expert) | Out-Null

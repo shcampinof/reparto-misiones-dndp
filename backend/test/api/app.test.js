@@ -459,38 +459,123 @@ test("PAG devuelve una solicitud de Víctimas y el RJV corrige y reenvía conser
     .send({})
     .expect(400);
 
+  const unchanged = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({ correctionSummary: "Se revisó la información" })
+    .expect(400);
+  assert.match(unchanged.body.error.message, /al menos un cambio/i);
+
+  const changedPersons = structuredClone(victimsPayload().persons);
+  changedPersons[0].contact.phone = "3000000099";
+  const changedCaseData = {
+    ...victimsPayload().caseData,
+    processReference: "Proceso de reparación corregido",
+    facts: "Hechos corregidos luego de verificar el soporte de parentesco.",
+  };
+  const changedDocuments = [
+    { type: "FORMATO_SOLICITUD", reference: "REF-FORM-VIC-001-CORREGIDO" },
+  ];
+
+  const missingDescription = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({ caseData: changedCaseData })
+    .expect(400);
+  assert.match(missingDescription.body.error.message, /descripci/i);
+
+  const missingServiceDocument = await request(app)
+    .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({
+      correctionSummary: "Se corrigieron los hechos sin adjuntar el formato",
+      caseData: changedCaseData,
+      documents: [
+        { type: "SOPORTE_RELACION", reference: "REF-PARENTESCO-CORREGIDO" },
+      ],
+    })
+    .expect(400);
+  assert.match(
+    missingServiceDocument.body.error.message,
+    /adjunte|documento|formato/i,
+  );
+
+  const afterRejectedCorrection = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  const unchangedRequest = afterRejectedCorrection.body.requests.find(
+    (entry) => entry.externalId === "RAD-2026-0088",
+  );
+  assert.equal(unchangedRequest.versions.length, 1);
+  assert.equal(
+    unchangedRequest.items.find((entry) => entry.id === itemId).status,
+    "DEVUELTA",
+  );
+
   const resent = await request(app)
     .post(`/api/demo/victimas/items/${itemId}/corregir-reenviar`)
     .set(auth(rjv))
     .send({
       correctionSummary: "Soporte incorporado y grupo familiar actualizado",
-      persons: [
-        ...victimsPayload().persons,
-        {
-          alias: "Persona vinculada C",
-          type: "INDIRECTA",
-          relationship: "Familiar",
-          familyGroup: "Núcleo B",
-          contact: {
-            phone: "3000000003",
-            email: null,
-            preferredChannel: "Teléfono",
-          },
-        },
-      ],
+      caseData: changedCaseData,
+      persons: changedPersons,
+      documents: changedDocuments,
     })
     .expect(200);
   assert.equal(itemFrom(resent).status, "PENDIENTE_APROBACION_PAG");
-  assert.equal(resent.body.request.persons.length, 3);
+  assert.equal(resent.body.request.persons[0].contact.phone, "3000000099");
+  assert.equal(
+    resent.body.request.caseData.processReference,
+    "Proceso de reparación corregido",
+  );
+  assert.equal(
+    resent.body.request.documents[0].reference,
+    "REF-FORM-VIC-001-CORREGIDO",
+  );
   assert.equal(resent.body.request.versions.length, 2);
-  assert.equal(resent.body.request.versions[0].data.persons.length, 2);
-  assert.equal(resent.body.request.versions[1].data.persons.length, 3);
-  assert.equal(resent.body.request.persons[2].relationship, "Familiar");
-  assert.equal(resent.body.request.persons[2].familyGroup, "Núcleo B");
+  assert.equal(
+    resent.body.request.versions[0].data.persons[0].contact.phone,
+    "3000000001",
+  );
+  assert.equal(
+    resent.body.request.versions[1].data.persons[0].contact.phone,
+    "3000000099",
+  );
+  assert.equal(resent.body.request.versions[1].correction.baseVersion, 1);
+  assert.equal(resent.body.request.versions[1].correction.itemId, itemId);
+  assert.deepEqual(
+    resent.body.request.versions[1].correction.changes.map(
+      (change) => change.field,
+    ),
+    ["caseData.processReference", "caseData.facts", "persons", "documents"],
+  );
   assert.match(
     itemFrom(resent).timeline.at(-1).message,
     /corregida y reenviada/i,
   );
+
+  const pagView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(pag))
+    .expect(200);
+  const pagRequest = pagView.body.requests.find(
+    (entry) => entry.externalId === "RAD-2026-0088",
+  );
+  const pagItem = pagRequest.items.find((entry) => entry.id === itemId);
+  assert.equal(
+    pagRequest.caseData.processReference,
+    "Proceso de reparación corregido",
+  );
+  assert.equal(pagRequest.persons[0].contact.phone, "3000000099");
+  assert.equal(pagRequest.documents[0].reference, "REF-FORM-VIC-001-CORREGIDO");
+  assert.equal(pagItem.submissionVersion, 2);
+  assert.equal(
+    pagItem.pagObservations[0].observation,
+    "Adjuntar soporte de parentesco",
+  );
+  assert.equal(pagItem.correctionHistory[0].version, 2);
+  assert.equal(pagItem.correctionHistory[0].changes.length, 4);
 
   const approved = await request(app)
     .post(`/api/demo/victimas/items/${itemId}/aprobar-y-repartir`)
@@ -1310,13 +1395,22 @@ test("la corrección parcial de Víctimas conserva el snapshot del ítem ya apro
       },
     },
   ];
+  const correctedCaseData = {
+    ...victimsPayload().caseData,
+    facts: "Hechos precisados únicamente para el segundo ítem.",
+  };
+  const correctedDocuments = [
+    { type: "FORMATO_SOLICITUD", reference: "REF-MULTIITEM-CORREGIDO" },
+  ];
   const corrected = await request(app)
     .post(`/api/demo/victimas/items/${secondId}/corregir-reenviar`)
     .set(auth(rjv))
     .send({
       correctionSummary: "Se precisó la relación familiar",
       externalId: "CASO-VIC-MULTIITEM-CORREGIDO",
+      caseData: correctedCaseData,
       persons: correctedPeople,
+      documents: correctedDocuments,
     })
     .expect(200);
   const firstAfter = corrected.body.request.items.find(
@@ -1330,9 +1424,25 @@ test("la corrección parcial de Víctimas conserva el snapshot del ítem ya apro
   assert.equal(firstAfter.approvedSubmissionVersion, 1);
   assert.equal(firstAfter.approvedRequestData.externalId, "CASO-VIC-MULTIITEM");
   assert.equal(firstAfter.approvedRequestData.persons.length, 2);
+  assert.equal(
+    firstAfter.approvedRequestData.caseData.facts,
+    victimsPayload().caseData.facts,
+  );
+  assert.equal(
+    firstAfter.approvedRequestData.documents[0].reference,
+    "REF-FORM-VIC-001",
+  );
   assert.equal(secondAfter.submissionVersion, 2);
   assert.equal(secondAfter.approvedSubmissionVersion, null);
   assert.equal(corrected.body.request.persons.length, 3);
+  assert.equal(
+    corrected.body.request.caseData.facts,
+    "Hechos precisados únicamente para el segundo ítem.",
+  );
+  assert.equal(
+    corrected.body.request.documents[0].reference,
+    "REF-MULTIITEM-CORREGIDO",
+  );
   assert.equal(corrected.body.request.versions[0].reviews.length, 2);
   assert.equal(corrected.body.request.versions[1].reviews.length, 0);
 

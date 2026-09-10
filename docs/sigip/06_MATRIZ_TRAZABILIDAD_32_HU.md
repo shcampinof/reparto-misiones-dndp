@@ -120,4 +120,17 @@ Las 32 HU son una buena base de alcance y confirman varias decisiones estructura
 | HU-28, HU-30 | actuaciones sin porcentaje subjetivo; estado, plazo, semáforo y oportunidad separados; métricas temporales visibles sólo con regla vigente |
 | HU-05, HU-17, HU-21, HU-31 | navegación conservadora para gestor regional, gestor central de excepciones y defensor regional; actuaciones operativas pendientes sin habilitar |
 
+## 8. Impacto de integridad de flujos y reglas
+
+| Historias afectadas | Implementado y verificable | Parametrizable o pendiente |
+|---|---|---|
+| HU-10 | regionales consumidas desde catálogo versionado y ampliable; no existe cantidad fija en el dominio | fuente maestra, cobertura y vigencia institucional pendientes |
+| HU-11, HU-12, HU-14, HU-15, HU-18, HU-24 | versión sometida y aprobada por ítem de Víctimas; devolución, corrección y aprobación parciales con historial acumulativo; otros ítems conservan su snapshot aprobado | combinaciones institucionales de servicios y carga masiva pendientes |
+| HU-20, HU-21, HU-26 | falta inicial de candidato diferenciada de reasignación y transferencia; contratos permanecen separados y bloqueados | RACI de excepción manual, novedad, reasignación y transferencia pendiente |
+| HU-22, HU-23 | `PENDIENTE_EXCEPCION` coherente en ambas áreas y explicación del reparto preservada | autoridad operativa receptora de problemas de Víctimas pendiente |
+| HU-28, HU-29 | problema trazable sin cambio de estado; informe investigativo y F-171 versionados; devolución investigativa crea una entrega posterior | improcedencia y actualización posterior del F-171 pendientes; Víctimas no recibe aprobación final PAG |
+| HU-06, HU-07, HU-08 | requisitos documentales de la versión del servicio validados por cada ítem; servicio continúa separado de especialidad/disciplina | contenido definitivo de servicios, requisitos, plazos y catálogos pendiente de aprobación |
+
+Este incremento no cambia la clasificación ni completa la aprobación de ninguna HU. “Implementado” describe el contrato ejecutable pre-Oracle; “parametrizable” exige catálogo o política vigente; “pendiente” no habilita una acción.
+
 Este impacto no cambia la clasificación documental de las HU ni llena sus aprobaciones vacías. Describe comportamiento verificable del incremento, no aceptación institucional.

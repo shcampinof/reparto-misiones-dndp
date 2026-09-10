@@ -4,6 +4,7 @@ import {
   apiCreateVictims,
   apiDemoBootstrap,
   apiInvestigationAction,
+  apiRegisterOperation,
   apiResetDemo,
   apiVictimsAction,
 } from "../api";
@@ -15,7 +16,7 @@ const STATUS_LABELS = {
   DEVUELTA: "Devuelta para corrección",
   APROBADA_REPARTO: "Aprobada para reparto",
   PENDIENTE_EXCEPCION: "Pendiente de excepción",
-  PENDIENTE_REASIGNACION: "Sin candidato / pendiente",
+  PENDIENTE_REASIGNACION: "Pendiente de reasignación",
   ASIGNADA: "Asignada",
   EN_EJECUCION: "En ejecución",
   INFORME_ENTREGADO: "Informe entregado",
@@ -58,6 +59,7 @@ const CAPABILITIES = {
   APPROVE_VICTIMS: "AVALAR_SOLICITUD_VICTIMAS",
   CORRECT_VICTIMS: "CORREGIR_SOLICITUD_VICTIMAS",
   EXECUTE_VICTIMS: "EJECUTAR_ITEM_VICTIMAS",
+  REPORT_PROBLEM: "REPORTAR_PROBLEMA",
 };
 
 export default function PortalPage() {
@@ -466,6 +468,23 @@ function InvestigationRoleWorkspace({ profile, requests }) {
             </small>
           </article>
         </div>
+        {problems.length > 0 && (
+          <div className="role-problem-list">
+            {problems.map((problem) => (
+              <article key={problem.id}>
+                <strong>
+                  {problem.itemId} · {problem.reason}
+                </strong>
+                <span>{problem.description}</span>
+                <small>
+                  Soporte: {problem.supportReference} · Estado conservado:{" "}
+                  {STATUS_LABELS[problem.primaryStatusSnapshot] ||
+                    problem.primaryStatusSnapshot}
+                </small>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     );
   }
@@ -985,7 +1004,7 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
         {step === 1 && (
           <div className="wizard-fields full-width">
             <label>
-              Número de radicado
+              Identificador o radicado
               <input value={form.externalId} onChange={update("externalId")} />
             </label>
             <label>
@@ -1562,6 +1581,16 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
               run={run}
             />
           )}
+        {profileHas(profile, CAPABILITIES.REPORT_PROBLEM, area) &&
+          ["ASIGNADA", "EN_EJECUCION"].includes(item.status) && (
+            <ProblemReportAction
+              item={item}
+              area={area}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
+          )}
         {area === "VICTIMAS" &&
           profileHas(profile, CAPABILITIES.CORRECT_VICTIMS, area) &&
           item.status === "DEVUELTA" && (
@@ -1611,6 +1640,31 @@ function ItemCard({ item, area, profile, token, busy, run, onOpenDetail }) {
 
       {item.assignment && (
         <AssignmentExplanation assignment={item.assignment} />
+      )}
+      {(item.operations || []).some(
+        (operation) => operation.type === "PROBLEMA",
+      ) && (
+        <details className="reported-problems">
+          <summary>
+            Problemas reportados ·{" "}
+            {
+              item.operations.filter(
+                (operation) => operation.type === "PROBLEMA",
+              ).length
+            }
+          </summary>
+          <ul>
+            {item.operations
+              .filter((operation) => operation.type === "PROBLEMA")
+              .map((operation) => (
+                <li key={operation.id}>
+                  <strong>{operation.reason}</strong>
+                  <span>{operation.description}</span>
+                  <small>Soporte: {operation.supportReference}</small>
+                </li>
+              ))}
+          </ul>
+        </details>
       )}
       <details className="timeline">
         <summary>Línea de tiempo · {item.timeline.length} evento(s)</summary>
@@ -1881,6 +1935,18 @@ function CaseDetail({ request, item, onClose }) {
             <dt>Especialidad o disciplina elegible</dt>
             <dd>{item.specialtyLabels?.join(", ") || "Sin dato"}</dd>
           </div>
+          {request.area === "VICTIMAS" && item.submissionVersion && (
+            <div>
+              <dt>Versión sometida por este ítem</dt>
+              <dd>{item.submissionVersion}</dd>
+            </div>
+          )}
+          {request.area === "VICTIMAS" && item.approvedSubmissionVersion && (
+            <div>
+              <dt>Versión aprobada y usada</dt>
+              <dd>{item.approvedSubmissionVersion}</dd>
+            </div>
+          )}
         </dl>
 
         {item.tracking?.configured && (
@@ -1893,15 +1959,22 @@ function CaseDetail({ request, item, onClose }) {
         </section>
 
         <section className="detail-section">
-          <h3>Documentos</h3>
+          <h3>Productos y versiones</h3>
           {item.documents?.length ? (
             <ul className="document-list">
               {item.documents.map((document) => (
                 <li key={document.id}>
                   <strong>{document.type}</strong>
                   <span>
-                    {document.reference} · Versión {document.version}
+                    {document.reference} · Versión {document.version} ·{" "}
+                    {document.status}
                   </span>
+                  <small>
+                    Autor: {document.author || "No disponible"}
+                    {document.createdAt
+                      ? ` · ${new Date(document.createdAt).toLocaleString("es-CO")}`
+                      : ""}
+                  </small>
                 </li>
               ))}
             </ul>
@@ -1925,9 +1998,12 @@ function CaseDetail({ request, item, onClose }) {
                     </small>
                     <p>
                       {version.correctionSummary || "Radicación inicial"}
-                      {version.review?.observation
-                        ? ` · Devuelta: ${version.review.observation}`
-                        : ""}
+                      {(version.reviews || [])
+                        .map(
+                          (review) =>
+                            ` · Ítem ${review.itemId}: ${review.decision}${review.observation ? ` (${review.observation})` : ""}`,
+                        )
+                        .join("")}
                     </p>
                   </li>
                 ))}
@@ -2044,6 +2120,63 @@ function ExecutorActions({ item, token, busy, run, area }) {
   );
 }
 
+function ProblemReportAction({ item, token, busy, run, area }) {
+  const [reason, setReason] = useState("");
+  const [description, setDescription] = useState("");
+  const [supportReference, setSupportReference] = useState("");
+  const complete =
+    reason.trim() && description.trim() && supportReference.trim();
+  return (
+    <details className="problem-report">
+      <summary>Reportar problema</summary>
+      <div className="review-actions">
+        <label>
+          Causal
+          <input
+            aria-label="Causal del problema"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </label>
+        <label>
+          Descripción
+          <textarea
+            aria-label="Descripción del problema"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </label>
+        <label>
+          Soporte o referencia
+          <input
+            aria-label="Soporte o referencia del problema"
+            value={supportReference}
+            onChange={(event) => setSupportReference(event.target.value)}
+          />
+        </label>
+        <button
+          className="primary-demo"
+          disabled={busy || !complete}
+          onClick={() =>
+            run(
+              item.id,
+              () =>
+                apiRegisterOperation(token, area, item.id, "PROBLEMA", {
+                  reason,
+                  description,
+                  supportReference,
+                }),
+              "Problema registrado sin alterar el estado del ítem",
+            )
+          }
+        >
+          Enviar reporte
+        </button>
+      </div>
+    </details>
+  );
+}
+
 function AssignmentExplanation({ assignment }) {
   const included =
     assignment.evaluated?.filter((candidate) => candidate.eligible) || [];
@@ -2123,6 +2256,7 @@ function processFor(area, status) {
           DEVUELTA: 0,
           PENDIENTE_APROBACION_PAG: 1,
           APROBADA_REPARTO: 2,
+          PENDIENTE_EXCEPCION: 2,
           PENDIENTE_REASIGNACION: 2,
           ASIGNADA: 3,
           EN_EJECUCION: 3,
@@ -2174,9 +2308,13 @@ function nextActionFor(area, status) {
       action: "Ejecutar reparto automático",
       role: "Sistema",
     },
+    PENDIENTE_EXCEPCION: {
+      action: "Consultar la excepción por falta de candidato",
+      role: "Autoridad operativa pendiente de RACI",
+    },
     PENDIENTE_REASIGNACION: {
-      action: "Gestionar excepción por falta de candidato",
-      role: "PAG / Supervisor Víctimas",
+      action: "Consultar la reasignación pendiente",
+      role: "Autoridad operativa pendiente de RACI",
     },
     ASIGNADA: {
       action: "Iniciar servicio pericial",

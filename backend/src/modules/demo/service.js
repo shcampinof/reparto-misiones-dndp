@@ -16,37 +16,6 @@ const ACTIVE_STATES = new Set([
   "EN_EJECUCION",
   "INFORME_ENTREGADO",
 ]);
-const REFERENCE_CATALOGS = Object.freeze({
-  regions: [
-    { id: "BOGOTA", label: "Bogotá" },
-    { id: "CUNDINAMARCA", label: "Cundinamarca" },
-  ],
-  laws: [
-    { id: "LEY_1448", label: "Ley 1448" },
-    { id: "LEY_975", label: "Ley 975" },
-  ],
-  proceduralStages: [
-    { id: "INDAGACION", label: "Indagación" },
-    { id: "INVESTIGACION", label: "Investigación" },
-    { id: "JUICIO", label: "Juicio" },
-    { id: "EJECUCION_SENTENCIA", label: "Ejecución de sentencia" },
-  ],
-  priorityTypes: [
-    { id: "ORDINARIA", label: "Ordinaria" },
-    { id: "URGENTE", label: "Urgente" },
-    { id: "UTILIDAD_PUBLICA", label: "Utilidad pública" },
-  ],
-  investigationDocumentTypes: [
-    { id: "SOLICITUD_DEFENSA", label: "Solicitud de la defensa" },
-    { id: "SOPORTE_PROCESAL", label: "Soporte procesal" },
-    { id: "SOPORTE_PRIORIDAD", label: "Soporte de prioridad" },
-  ],
-  victimDocumentTypes: [
-    { id: "FORMATO_SOLICITUD", label: "Formato de solicitud" },
-    { id: "SOPORTE_PROCESAL", label: "Soporte procesal" },
-    { id: "SOPORTE_RELACION", label: "Soporte de relación o parentesco" },
-  ],
-});
 
 export function createDemoService({
   repository,
@@ -116,14 +85,20 @@ export function createDemoService({
       ownerUserId: auth.sub,
     });
     rejectClientAssignee(payload);
-    const intake = normalizeInvestigationIntake(payload);
-
     return repository.transaction((state) => {
       const at = clock();
+      const intake = normalizeInvestigationIntake(state, payload, at);
       const requestedItems = normalizeRequestedItems(
         state,
         "INVESTIGACION",
         payload,
+        at,
+      );
+      validateServiceRequirements(
+        state,
+        "INVESTIGACION",
+        requestedItems,
+        intake.documents,
         at,
       );
       const sequence = state.counters.investigation++;
@@ -161,7 +136,9 @@ export function createDemoService({
             termSnapshot: structuredClone(service.termPolicy),
             activities: [],
             reportReference: null,
+            products: [],
             assignment: null,
+            exception: null,
             operations: [],
             timeline: [
               timelineEvent(
@@ -243,7 +220,13 @@ export function createDemoService({
         const reference = text(payload.reference);
         if (!reference)
           throw businessError("La referencia del informe es obligatoria");
-        item.reportReference = reference;
+        addProductVersion(item, {
+          type: "INFORME_INVESTIGACION",
+          reference,
+          author: auth.sub,
+          at,
+          status: "ENTREGADO",
+        });
         transition(
           item,
           "INFORME_ENTREGADO",
@@ -265,12 +248,18 @@ export function createDemoService({
         region: item.region,
       });
       assertState(item, ["INFORME_ENTREGADO"]);
+      const at = clock();
+      updateLatestProduct(item, "INFORME_INVESTIGACION", {
+        status: "APROBADO",
+        approvedAt: at,
+        approvedBy: auth.sub,
+      });
       transition(
         item,
         "CERRADA",
         auth.sub,
         "Entrega aprobada por PAG Investigación",
-        clock(),
+        at,
       );
       return presentRequestForAuth(state, request, auth);
     });
@@ -290,12 +279,19 @@ export function createDemoService({
         region: item.region,
       });
       assertState(item, ["INFORME_ENTREGADO"]);
+      const at = clock();
+      updateLatestProduct(item, "INFORME_INVESTIGACION", {
+        status: "DEVUELTO",
+        returnedAt: at,
+        returnedBy: auth.sub,
+        returnObservation: observation,
+      });
       transition(
         item,
         "EN_EJECUCION",
         auth.sub,
         `Informe devuelto para corrección · ${observation}`,
-        clock(),
+        at,
       );
       return presentRequestForAuth(state, request, auth);
     });
@@ -307,14 +303,21 @@ export function createDemoService({
       ownerUserId: auth.sub,
     });
     rejectClientAssignee(payload);
-    const intake = normalizeVictimsIntake(payload);
-
     return repository.transaction((state) => {
       const at = clock();
+      const intake = normalizeVictimsIntake(state, payload, at);
+      assertUniqueVictimsExternalId(state, intake.externalId);
       const requestedItems = normalizeRequestedItems(
         state,
         "VICTIMAS",
         payload,
+        at,
+      );
+      validateServiceRequirements(
+        state,
+        "VICTIMAS",
+        requestedItems,
+        intake.documents,
         at,
       );
       const sequence = state.counters.victims++;
@@ -355,8 +358,13 @@ export function createDemoService({
             termSnapshot: structuredClone(service.termPolicy),
             activities: [],
             reportReference: null,
+            products: [],
             assignment: null,
+            exception: null,
             operations: [],
+            submissionVersion: 1,
+            approvedSubmissionVersion: null,
+            approval: null,
             timeline: [
               timelineEvent(
                 at,
@@ -394,6 +402,26 @@ export function createDemoService({
       });
       assertState(item, ["PENDIENTE_APROBACION_PAG"]);
       const at = clock();
+      ensureVictimsVersions(request);
+      const approvedVersion =
+        item.submissionVersion || request.versions.at(-1).version;
+      const approvedSnapshot = request.versions.find(
+        (version) => version.version === approvedVersion,
+      );
+      if (!approvedSnapshot) {
+        throw businessError(
+          "No existe la versión de solicitud sometida a aprobación",
+        );
+      }
+      item.approvedSubmissionVersion = approvedVersion;
+      item.approval = { at, actor: auth.sub, requestVersion: approvedVersion };
+      approvedSnapshot.reviews ||= [];
+      approvedSnapshot.reviews.push({
+        itemId: item.id,
+        decision: "APROBADA",
+        at,
+        actor: auth.sub,
+      });
       transition(
         item,
         "APROBADA_REPARTO",
@@ -411,14 +439,21 @@ export function createDemoService({
       });
       item.assignment = assignment;
       if (!assignment.selectedId) {
+        item.exception = {
+          type: "FALTA_CANDIDATO",
+          createdAt: at,
+          assignmentPolicyVersion: assignment.policyVersion,
+          reason: assignment.selectedReason,
+        };
         transition(
           item,
-          "PENDIENTE_REASIGNACION",
+          "PENDIENTE_EXCEPCION",
           "motor-reparto",
           assignment.selectedReason,
           at,
         );
       } else {
+        item.exception = null;
         item.assigneeId = assignment.selectedId;
         item.dueDate = null;
         recordAssignmentInstant(state, assignment.selectedId, at);
@@ -451,13 +486,15 @@ export function createDemoService({
       assertState(item, ["PENDIENTE_APROBACION_PAG"]);
       ensureVictimsVersions(request);
       const at = clock();
-      const currentVersion = request.versions.at(-1);
-      currentVersion.review = {
+      const currentVersion = versionForVictimsItem(request, item);
+      currentVersion.reviews ||= [];
+      currentVersion.reviews.push({
+        itemId: item.id,
         decision: "DEVUELTA",
         observation,
         at,
         actor: auth.sub,
-      };
+      });
       transition(
         item,
         "DEVUELTA",
@@ -488,6 +525,7 @@ export function createDemoService({
 
       const at = clock();
       const corrected = correctedVictimsData(state, request, item, payload, at);
+      assertUniqueVictimsExternalId(state, corrected.externalId, request.id);
       const service = serviceFromState(
         state,
         "VICTIMAS",
@@ -507,12 +545,30 @@ export function createDemoService({
       item.law = corrected.law;
       item.assigneeId = null;
       item.assignment = null;
+      item.exception = null;
       item.dueDate = null;
-
+      validateServiceRequirements(
+        state,
+        "VICTIMAS",
+        [
+          {
+            service: corrected.service,
+            region: corrected.region,
+            law: corrected.law,
+          },
+        ],
+        corrected.documents,
+        at,
+      );
+      const newVersion =
+        Math.max(...request.versions.map((entry) => entry.version)) + 1;
+      item.submissionVersion = newVersion;
+      item.approvedSubmissionVersion = null;
+      item.approval = null;
       request.versions.push(
         victimsSubmissionVersion({
           request,
-          version: request.versions.length + 1,
+          version: newVersion,
           at,
           actor: auth.sub,
           correctionSummary,
@@ -562,10 +618,15 @@ export function createDemoService({
       ["EN_EJECUCION"],
       (item, at) => {
         const reference = text(payload.f171Reference);
-        if (!/^F171-\d{4}-[A-Z0-9-]+$/.test(reference)) {
-          throw businessError("Use una referencia con formato F171-AAAA-NNNN");
-        }
-        item.reportReference = reference;
+        if (!reference)
+          throw businessError("La referencia del F-171 es obligatoria");
+        addProductVersion(item, {
+          type: "F171",
+          reference,
+          author: auth.sub,
+          at,
+          status: "REGISTRADO",
+        });
         transition(
           item,
           "CERRADA",
@@ -628,9 +689,12 @@ export function createDemoService({
         status: "REGISTRADO",
         reason: text(payload.reason),
         description: text(payload.description),
+        supportReference: text(payload.supportReference),
         actor: auth.sub,
         createdAt: at,
         decisionCode: null,
+        primaryStatusSnapshot: item.status,
+        routing: problemRouting(state, request, item, at),
       };
       item.operations ||= [];
       item.operations.push(operation);
@@ -757,6 +821,12 @@ function attemptInvestigationAssignment(state, item, at) {
   if (!assignment.selectedId) {
     item.assigneeId = null;
     item.dueDate = null;
+    item.exception = {
+      type: "FALTA_CANDIDATO",
+      createdAt: at,
+      assignmentPolicyVersion: assignment.policyVersion,
+      reason: assignment.selectedReason,
+    };
     transition(
       item,
       "PENDIENTE_EXCEPCION",
@@ -768,6 +838,7 @@ function attemptInvestigationAssignment(state, item, at) {
   }
   item.assigneeId = assignment.selectedId;
   item.dueDate = null;
+  item.exception = null;
   recordAssignmentInstant(state, assignment.selectedId, at);
   transition(item, "ASIGNADA", "motor-reparto", assignment.selectedReason, at);
 }
@@ -836,24 +907,19 @@ function presentRequest(state, request) {
           state.catalogs.specialties.find((entry) => entry.id === id)?.name ||
           id,
       ),
-      regionLabel: catalogLabel(REFERENCE_CATALOGS.regions, item.region),
-      lawLabel: item.law
-        ? catalogLabel(REFERENCE_CATALOGS.laws, item.law)
-        : null,
+      regionLabel: catalogLabel(state.catalogs.regions, item.region),
+      lawLabel: item.law ? catalogLabel(state.catalogs.laws, item.law) : null,
       tracking: trackingFor(item),
-      documents: item.reportReference
-        ? [
-            {
-              id: `doc-${item.id}-v1`,
-              type:
-                request.area === "VICTIMAS"
-                  ? "F-171"
-                  : "Informe de investigación",
-              reference: item.reportReference,
-              version: 1,
-            },
-          ]
-        : [],
+      products: presentedProducts(request.area, item),
+      documents: presentedProducts(request.area, item),
+      approvedRequestData:
+        request.area === "VICTIMAS" && item.approvedSubmissionVersion
+          ? structuredClone(
+              request.versions?.find(
+                (version) => version.version === item.approvedSubmissionVersion,
+              )?.data || null,
+            )
+          : null,
     })),
   };
 }
@@ -876,16 +942,28 @@ function presentRequestForAuth(state, request, auth) {
 }
 
 function ensureVictimsVersions(request) {
-  if (request.versions?.length) return;
-  request.versions = [
-    victimsSubmissionVersion({
-      request,
-      version: 1,
-      at: request.createdAt,
-      actor: request.ownerUserId,
-      correctionSummary: null,
-    }),
-  ];
+  if (!request.versions?.length) {
+    request.versions = [
+      victimsSubmissionVersion({
+        request,
+        version: 1,
+        at: request.createdAt,
+        actor: request.ownerUserId,
+        correctionSummary: null,
+      }),
+    ];
+  }
+  for (const item of request.items) {
+    item.submissionVersion ||= 1;
+    item.approvedSubmissionVersion ||= [
+      "APROBADA_REPARTO",
+      "ASIGNADA",
+      "EN_EJECUCION",
+      "CERRADA",
+    ].includes(item.status)
+      ? 1
+      : null;
+  }
 }
 
 function victimsSubmissionVersion({
@@ -900,6 +978,7 @@ function victimsSubmissionVersion({
     submittedAt: at,
     submittedBy: actor,
     correctionSummary,
+    reviews: [],
     data: {
       externalId: request.externalId,
       persons: structuredClone(request.persons || []),
@@ -928,17 +1007,26 @@ function correctedVictimsData(state, request, item, payload, at) {
     ? normalizeVictimsCaseData(payload.caseData)
     : structuredClone(request.caseData || {});
   const documents = payload.documents
-    ? normalizeDocuments(
-        payload.documents,
-        REFERENCE_CATALOGS.victimDocumentTypes,
-      )
+    ? normalizeDocuments(state, payload.documents, "VICTIMAS", at)
     : structuredClone(request.documents || []);
-  if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
-    throw businessError("Use un número de radicado con formato RAD-AAAA-NNNN");
-  }
-  requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
+  validateExternalIdPolicy(state, "VICTIMAS", externalId, at);
+  requireReference(
+    state,
+    "laws",
+    law,
+    "VICTIMAS",
+    at,
+    "Ley o programa no válido",
+  );
   serviceFromState(state, "VICTIMAS", service, at);
-  requireCatalog(region, REFERENCE_CATALOGS.regions, "Cobertura no válida");
+  requireReference(
+    state,
+    "regions",
+    region,
+    "VICTIMAS",
+    at,
+    "Cobertura no válida",
+  );
   if (persons.length < 1) {
     throw businessError("Registre al menos una persona vinculada");
   }
@@ -966,12 +1054,32 @@ function catalogsFor(state, auth, at) {
       label: name,
     })),
     victimServices: victims.map(({ id, name }) => ({ id, label: name })),
-    regions: REFERENCE_CATALOGS.regions,
-    laws: REFERENCE_CATALOGS.laws,
-    proceduralStages: REFERENCE_CATALOGS.proceduralStages,
-    priorityTypes: REFERENCE_CATALOGS.priorityTypes,
-    investigationDocumentTypes: REFERENCE_CATALOGS.investigationDocumentTypes,
-    victimDocumentTypes: REFERENCE_CATALOGS.victimDocumentTypes,
+    regions: publishedReferences(state, "regions", "AMBAS", at),
+    laws: publishedReferences(state, "laws", "VICTIMAS", at),
+    proceduralStages: publishedReferences(
+      state,
+      "proceduralStages",
+      "INVESTIGACION",
+      at,
+    ),
+    priorityTypes: publishedReferences(
+      state,
+      "priorityTypes",
+      "INVESTIGACION",
+      at,
+    ),
+    investigationDocumentTypes: publishedReferences(
+      state,
+      "documentTypes",
+      "INVESTIGACION",
+      at,
+    ),
+    victimDocumentTypes: publishedReferences(
+      state,
+      "documentTypes",
+      "VICTIMAS",
+      at,
+    ),
   };
 }
 
@@ -987,15 +1095,22 @@ function normalizeRequestedItems(state, area, payload, at) {
     const region = text(raw.region || payload.region);
     const law = text(raw.law || payload.law) || null;
     serviceFromState(state, area, service, at);
-    requireCatalog(region, REFERENCE_CATALOGS.regions, "Cobertura no válida");
+    requireReference(state, "regions", region, area, at, "Cobertura no válida");
     if (area === "VICTIMAS") {
-      requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
+      requireReference(
+        state,
+        "laws",
+        law,
+        area,
+        at,
+        "Ley o programa no válido",
+      );
     }
     return { service, region, law };
   });
 }
 
-function normalizeInvestigationIntake(payload) {
+function normalizeInvestigationIntake(state, payload, at) {
   const identifierType = text(payload.identifierType || "SPOA").toUpperCase();
   const externalId = text(payload.spoa || payload.externalId);
   const conduct = text(payload.delito || payload.conduct);
@@ -1010,9 +1125,11 @@ function normalizeInvestigationIntake(payload) {
   if (!persons.length)
     throw businessError("Registre al menos una persona relacionada");
   const caseData = normalizeInvestigationCaseData(
+    state,
     payload,
     identifierType,
     conduct,
+    at,
   );
   const differentialApproach = {
     applies: Boolean(payload.differentialApproach?.applies),
@@ -1026,9 +1143,12 @@ function normalizeInvestigationIntake(payload) {
     reason: text(payload.priority?.reason) || null,
     support: text(payload.priority?.support) || null,
   };
-  requireCatalog(
+  requireReference(
+    state,
+    "priorityTypes",
     priority.type,
-    REFERENCE_CATALOGS.priorityTypes,
+    "INVESTIGACION",
+    at,
     "Prioridad no válida",
   );
   if (
@@ -1038,8 +1158,10 @@ function normalizeInvestigationIntake(payload) {
     throw businessError("La prioridad requiere causal y soporte");
   }
   const documents = normalizeDocuments(
+    state,
     payload.documents,
-    REFERENCE_CATALOGS.investigationDocumentTypes,
+    "INVESTIGACION",
+    at,
   );
   return {
     externalId,
@@ -1052,11 +1174,20 @@ function normalizeInvestigationIntake(payload) {
   };
 }
 
-function normalizeInvestigationCaseData(payload, identifierType, conduct) {
+function normalizeInvestigationCaseData(
+  state,
+  payload,
+  identifierType,
+  conduct,
+  at,
+) {
   const stage = text(payload.proceduralStage).toUpperCase();
-  requireCatalog(
+  requireReference(
+    state,
+    "proceduralStages",
     stage,
-    REFERENCE_CATALOGS.proceduralStages,
+    "INVESTIGACION",
+    at,
     "Etapa procesal no válida",
   );
   const caseData = {
@@ -1099,13 +1230,18 @@ function normalizeInvestigationPersons(persons) {
   });
 }
 
-function normalizeVictimsIntake(payload) {
+function normalizeVictimsIntake(state, payload, at) {
   const externalId = text(payload.externalId);
   const law = text(payload.law);
-  if (!/^RAD-\d{4}-\d{4}$/.test(externalId)) {
-    throw businessError("Use un número de radicado con formato RAD-AAAA-NNNN");
-  }
-  requireCatalog(law, REFERENCE_CATALOGS.laws, "Ley o programa no válido");
+  validateExternalIdPolicy(state, "VICTIMAS", externalId, at);
+  requireReference(
+    state,
+    "laws",
+    law,
+    "VICTIMAS",
+    at,
+    "Ley o programa no válido",
+  );
   const persons = normalizeVictimsPersons(payload.persons);
   if (!persons.length)
     throw businessError("Registre al menos una persona vinculada");
@@ -1114,10 +1250,7 @@ function normalizeVictimsIntake(payload) {
     law,
     persons,
     caseData: normalizeVictimsCaseData(payload.caseData || payload),
-    documents: normalizeDocuments(
-      payload.documents,
-      REFERENCE_CATALOGS.victimDocumentTypes,
-    ),
+    documents: normalizeDocuments(state, payload.documents, "VICTIMAS", at),
   };
 }
 
@@ -1172,18 +1305,243 @@ function normalizeVictimsPersons(persons) {
   });
 }
 
-function normalizeDocuments(documents, catalog) {
+function normalizeDocuments(state, documents, area, at) {
   if (!Array.isArray(documents) || !documents.length) {
     throw businessError("Registre al menos un documento o formato aplicable");
   }
   return documents.map((document) => {
     const type = text(document.type).toUpperCase();
     const reference = text(document.reference);
-    requireCatalog(type, catalog, "Tipo de documento no válido");
+    requireReference(
+      state,
+      "documentTypes",
+      type,
+      area,
+      at,
+      "Tipo de documento no válido",
+    );
     if (!reference)
       throw businessError("La referencia documental es obligatoria");
     return { type, reference };
   });
+}
+
+function publishedReferences(state, catalogName, area, at) {
+  const date = at.slice(0, 10);
+  return (state.catalogs[catalogName] || [])
+    .filter(
+      (entry) =>
+        (entry.area === area || entry.area === "AMBAS" || area === "AMBAS") &&
+        entry.status === "PUBLICADO" &&
+        (!entry.validFrom || entry.validFrom <= date) &&
+        (!entry.validTo || date < entry.validTo),
+    )
+    .map(({ id, label }) => ({ id, label }));
+}
+
+function requireReference(state, catalogName, value, area, at, message) {
+  if (
+    !publishedReferences(state, catalogName, area, at).some(
+      (entry) => entry.id === value,
+    )
+  ) {
+    throw businessError(message);
+  }
+}
+
+function validateExternalIdPolicy(state, area, value, at) {
+  const date = at.slice(0, 10);
+  const policy = (state.catalogs.identifierPolicies || []).find(
+    (entry) =>
+      entry.area === area &&
+      entry.field === "externalId" &&
+      entry.status === "PUBLICADO" &&
+      (!entry.validFrom || entry.validFrom <= date) &&
+      (!entry.validTo || date < entry.validTo),
+  );
+  if (!value && (policy?.requireNonEmpty ?? true)) {
+    throw businessError(
+      "El identificador del proceso o radicado es obligatorio",
+    );
+  }
+  if (value && policy?.approved && policy.pattern) {
+    let matches = false;
+    try {
+      matches = new RegExp(policy.pattern).test(value);
+    } catch {
+      throw new AppError(
+        500,
+        "INVALID_IDENTIFIER_POLICY",
+        "La política configurada para el identificador no es válida",
+      );
+    }
+    if (!matches) {
+      throw businessError(
+        policy.validationMessage ||
+          "El identificador no cumple la política vigente",
+      );
+    }
+  }
+}
+
+function assertUniqueVictimsExternalId(
+  state,
+  externalId,
+  currentRequestId = null,
+) {
+  if (
+    state.requests.some(
+      (request) =>
+        request.area === "VICTIMAS" &&
+        request.externalId === externalId &&
+        request.id !== currentRequestId,
+    )
+  ) {
+    throw businessError(
+      "El identificador de la solicitud de Víctimas ya existe",
+    );
+  }
+}
+
+function validateServiceRequirements(
+  state,
+  area,
+  requestedItems,
+  documents,
+  at,
+) {
+  const suppliedTypes = new Set(documents.map((document) => document.type));
+  const documentCatalog = publishedReferences(state, "documentTypes", area, at);
+  const errors = requestedItems.flatMap((requested, index) => {
+    const service = serviceFromState(state, area, requested.service, at);
+    const missing = (service.requiredDocumentTypes || []).filter(
+      (type) => !suppliedTypes.has(type),
+    );
+    if (!missing.length) return [];
+    return [
+      {
+        item: index + 1,
+        serviceId: service.id,
+        serviceName: service.name,
+        missingDocumentTypes: missing.map((type) => ({
+          id: type,
+          label: catalogLabel(documentCatalog, type) || type,
+        })),
+      },
+    ];
+  });
+  if (errors.length) {
+    const message = errors
+      .map(
+        (error) =>
+          `Ítem ${error.item} — ${error.serviceName}: adjunte ${error.missingDocumentTypes
+            .map((entry) => entry.label)
+            .join(", ")}`,
+      )
+      .join(". ");
+    throw businessError(message, { items: errors });
+  }
+}
+
+function versionForVictimsItem(request, item) {
+  ensureVictimsVersions(request);
+  const versionNumber =
+    item.submissionVersion || request.versions.at(-1).version;
+  const version = request.versions.find(
+    (candidate) => candidate.version === versionNumber,
+  );
+  if (!version) {
+    throw businessError("No existe la versión de solicitud vinculada al ítem");
+  }
+  return version;
+}
+
+function addProductVersion(item, { type, reference, author, at, status }) {
+  item.products ||= [];
+  const version =
+    item.products.filter((product) => product.type === type).length + 1;
+  const product = {
+    id: `PROD-${item.id}-${type}-${version}`,
+    itemId: item.id,
+    type,
+    reference,
+    version,
+    author,
+    createdAt: at,
+    status,
+  };
+  item.products.push(product);
+  item.reportReference = reference;
+  return product;
+}
+
+function updateLatestProduct(item, type, changes) {
+  item.products ||= [];
+  if (!item.products.length && item.reportReference) {
+    item.products.push({
+      id: `PROD-${item.id}-${type}-1`,
+      itemId: item.id,
+      type,
+      reference: item.reportReference,
+      version: 1,
+      author: null,
+      createdAt: null,
+      status: "ENTREGADO",
+    });
+  }
+  const product = [...item.products]
+    .reverse()
+    .find((candidate) => candidate.type === type);
+  if (!product) {
+    throw businessError("No existe un producto entregado para esta decisión");
+  }
+  Object.assign(product, changes);
+}
+
+function presentedProducts(area, item) {
+  if (item.products?.length) return structuredClone(item.products);
+  if (!item.reportReference) return [];
+  return [
+    {
+      id: `PROD-${item.id}-LEGACY-1`,
+      itemId: item.id,
+      type: area === "VICTIMAS" ? "F171" : "INFORME_INVESTIGACION",
+      reference: item.reportReference,
+      version: 1,
+      author: null,
+      createdAt: null,
+      status: item.status === "CERRADA" ? "APROBADO" : "ENTREGADO",
+    },
+  ];
+}
+
+function problemRouting(state, request, item, at) {
+  const date = at.slice(0, 10);
+  const route = (state.catalogs.problemRoutes || []).find(
+    (candidate) =>
+      candidate.area === request.area &&
+      (candidate.region === "*" || candidate.region === item.region) &&
+      candidate.status === "PUBLICADO" &&
+      (!candidate.validFrom || candidate.validFrom <= date) &&
+      (!candidate.validTo || date < candidate.validTo),
+  );
+  return route
+    ? {
+        routeId: route.id,
+        routeVersion: route.version,
+        status: "EN_BANDEJA",
+        scopeType: route.scopeType,
+        region: item.region,
+        recipientRole: route.recipientRole,
+      }
+    : {
+        routeId: null,
+        routeVersion: null,
+        status: "PENDIENTE_CONFIGURACION",
+        scopeType: null,
+        region: item.region,
+        recipientRole: null,
+      };
 }
 
 function serviceFromState(state, area, id, at) {
@@ -1336,10 +1694,6 @@ function rejectClientAssignee(payload) {
   }
 }
 
-function requireCatalog(value, catalog, message) {
-  if (!catalog.some((item) => item.id === value)) throw businessError(message);
-}
-
 function catalogLabel(catalog, value) {
   return catalog.find((item) => item.id === value)?.label || null;
 }
@@ -1352,6 +1706,6 @@ function timelineEvent(at, from, to, actor, message) {
   return { at, from, to, actor, message };
 }
 
-function businessError(message) {
-  return new AppError(400, "DEMO_VALIDATION_ERROR", message);
+function businessError(message, details = undefined) {
+  return new AppError(400, "DEMO_VALIDATION_ERROR", message, details);
 }

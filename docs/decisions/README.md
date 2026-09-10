@@ -1,11 +1,12 @@
 # Registro de decisiones funcionales pendientes — SIGIP-DP
 
-Fecha de corte: 9 de septiembre de 2026. Una entrada `PENDIENTE` no es una regla autorizada para producción.
+Fecha de corte: 10 de septiembre de 2026. Una entrada `PENDIENTE` no es una regla autorizada para producción.
 
 | Código | Estado | Decisión requerida | Comportamiento pre-Oracle |
 |---|---|---|---|
 | DEC-RACI-INV | PENDIENTE | revisión previa, actor, alcance y efecto en Investigación | no se agrega aprobación previa; la radicación dispara reparto ordinario automático |
 | DEC-RACI-VIC | PENDIENTE | alcance territorial y suplencia del PAG de Víctimas | solo se usa el PAG del perfil demostrativo |
+| DEC-RACI-PROBLEMAS-VIC | PENDIENTE | autoridad operativa receptora y tratamiento de problemas reportados por peritos | el reporte se conserva con estado `PENDIENTE_CONFIGURACION`; no habilita decisión operativa |
 | DEC-RACI-OPERACIONES | PENDIENTE | responsable de reasignación y continuidad operativa | perfiles de presentación consultan bandejas; las actuaciones permanecen bloqueadas |
 | DEC-RACI-TRANSFERENCIA | PENDIENTE | actor, causal y efecto de transferir titularidad | operación bloqueada |
 | DEC-CAT-GOB | PENDIENTE | responsables de proponer, aprobar, publicar y retirar catálogos | perfiles propuestos deshabilitados |
@@ -18,6 +19,8 @@ Fecha de corte: 9 de septiembre de 2026. Una entrada `PENDIENTE` no es una regla
 | DEC-NOV-001 | PENDIENTE | tipos, autorizador y efecto sobre asignaciones activas | novedad bloqueada |
 | DEC-AMP-001 | PENDIENTE | punto de corte, plazo y continuidad en ampliaciones | ampliación bloqueada |
 | DEC-VIC-F171 | PENDIENTE | ajuste o devolución posterior del F-171 | cierre ordinario directo; no se inventa revisión final |
+| DEC-VIC-IMPROCEDENCIA | PENDIENTE | causales, soporte, notificación y autoridad para declarar improcedencia | no se habilita la acción |
+| DEC-VIC-RADICADO | PENDIENTE | formato institucional, fuente y vigencia del identificador de Víctimas | se exige únicamente valor no vacío y unicidad mediante política configurable |
 | DEC-VIC-MASIVA | PENDIENTE | plantilla, validaciones y gobierno de carga masiva | no se habilita carga masiva |
 | DEC-IND-001 | PENDIENTE | fórmulas oficiales y dimensiones de indicadores | solo conteos operativos no contractuales |
 | DEC-HU-033 | PENDIENTE | existencia, versión y aprobación de HU-33 | no se infieren requisitos |

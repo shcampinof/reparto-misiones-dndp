@@ -38,6 +38,12 @@ function Assert-Forbidden([scriptblock]$Operation) {
   }
 }
 
+function Assert-Value($Actual, $Expected, [string]$Label) {
+  if ($Actual -ne $Expected) {
+    throw "$Label`: esperado '$Expected', obtenido '$Actual'."
+  }
+}
+
 $health = Invoke-RestMethod "$BaseUrl/api/health" -Headers (Gateway-Headers)
 $ready = Invoke-RestMethod "$BaseUrl/api/ready" -Headers (Gateway-Headers)
 $homeResponse = Invoke-WebRequest "$BaseUrl/" -Headers (Gateway-Headers) -UseBasicParsing
@@ -69,6 +75,12 @@ Assert-Forbidden {
 
 $investigator = Login-Demo "demo-investigador"
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/iniciar" -Method Post -Headers (Auth-Headers $investigator) | Out-Null
+$investigationProblem = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/operaciones/problema" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{
+  reason = "Insumo incompleto"
+  description = "Se requiere una referencia adicional para continuar"
+  supportReference = "ANEXO-INV-SMOKE-001"
+} | ConvertTo-Json)
+Assert-Value $investigationProblem.request.items[0].status "EN_EJECUCION" "Estado tras reporte de Investigación"
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/avance" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ observation = "Actuación registrada" } | ConvertTo-Json) | Out-Null
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/entregar" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ reference = "INF-2026-SMOKE-001" } | ConvertTo-Json) | Out-Null
 $pagInvestigation = Login-Demo "demo-pag-investigacion"
@@ -103,8 +115,32 @@ $victimsResent = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsI
 $victimsAssigned = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims)
 $expert = Login-Demo "demo-perito-psicologia"
 Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/iniciar" -Method Post -Headers (Auth-Headers $expert) | Out-Null
+$victimsProblem = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/operaciones/problema" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{
+  reason = "Soporte ilegible"
+  description = "El soporte requiere una referencia legible"
+  supportReference = "ANEXO-VIC-SMOKE-001"
+} | ConvertTo-Json)
+Assert-Value $victimsProblem.request.items[0].status "EN_EJECUCION" "Estado tras reporte de Víctimas"
 Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/avance" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ observation = "Actuación registrada" } | ConvertTo-Json) | Out-Null
 $victimsClosed = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/finalizar" -Method Post -Headers (Auth-Headers $expert) -ContentType "application/json" -Body (@{ f171Reference = "F171-2026-SMOKE-001" } | ConvertTo-Json)
+
+$victimsNoCandidate = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
+  externalId = "SMOKE-VIC-SIN-CANDIDATO"
+  law = "LEY_1448"
+  service = "SVC_VIC_EVALUACION_PSICOLOGICA"
+  region = "ANTIOQUIA"
+  caseData = @{
+    processReference = "Proceso sin candidato"
+    hearingApplies = $false
+    facts = "Hechos de verificación sin información personal real"
+  }
+  persons = @(
+    @{ alias = "Persona vinculada C"; type = "DIRECTA"; relationship = "Víctima directa"; familyGroup = "Núcleo C"; contact = @{ phone = "3000000003"; email = "persona.c@example.invalid"; preferredChannel = "Correo" } }
+  )
+  documents = @(@{ type = "FORMATO_SOLICITUD"; reference = "REF-FORM-SMOKE-002" })
+} | ConvertTo-Json -Depth 8)
+$victimsNoCandidateResult = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsNoCandidate.request.items[0].id)/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims)
+Assert-Value $victimsNoCandidateResult.request.items[0].status "PENDIENTE_EXCEPCION" "Excepción inicial de Víctimas"
 
 $admin = Login-Demo "demo-admin"
 $regionalManager = Login-Demo "demo-gestor-regional-investigacion"
@@ -129,10 +165,15 @@ $reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth
   InvestigationAssigned = $investigation.request.items[0].status
   DefenderRetryDenied = $true
   InvestigationFinal = $investigationClosed.request.items[0].status
+  InvestigationProblemState = $investigationProblem.request.items[0].status
+  InvestigationProductVersions = $investigationClosed.request.items[0].products.Count
   VictimsReturned = $victimsReturned.request.items[0].status
   VictimsResent = $victimsResent.request.items[0].status
   VictimsAssigned = $victimsAssigned.request.items[0].status
   VictimsFinal = $victimsClosed.request.items[0].status
+  VictimsProblemState = $victimsProblem.request.items[0].status
+  VictimsProductVersions = $victimsClosed.request.items[0].products.Count
+  VictimsNoCandidate = $victimsNoCandidateResult.request.items[0].status
   AdminOperationalDenied = $true
   RegionalManagerRequests = $regionalManagerView.requests.Count
   CentralExceptionRequests = $centralManagerView.requests.Count

@@ -1,6 +1,6 @@
 # Brechas funcionales y matrices RACI — SIGIP-DP
 
-**Fecha de corte:** 8 de septiembre de 2026  
+**Fecha de corte:** 10 de septiembre de 2026  
 **Estado:** análisis técnico-funcional para taller; no reemplaza aprobación institucional  
 **Repositorio canónico:** `https://github.com/shcampinof/reparto-misiones-dndp`  
 **Space canónico:** `https://huggingface.co/spaces/shcampinof/reparto-misiones-dndp`  
@@ -49,6 +49,11 @@ Precedencia: acto o procedimiento vigente aprobado, HU aceptada, decisión forma
 | BF-17 | La interfaz mostraba expresiones propias del entorno de presentación en mensajes de acceso y reparto. | confirmado | La interfaz evita “demo”, “sintético”, “semilla” y “temporal”; las advertencias técnicas permanecen en configuración y documentación. |
 | BF-18 | Nombres de paquetes, README y despliegue todavía conservaban destinos anteriores. | confirmado | Se alinean exclusivamente con `reparto-misiones-dndp` y el Space canónico verificado. |
 | BF-19 | El Space canónico estaba operativo, pero al inicio de este trabajo no incluía devolución previa de Víctimas ni la restricción completa del administrador. | confirmado | Se actualiza solo después de pruebas verdes y autenticación local disponible; el despliegue no constituye aprobación funcional. |
+| BF-20 | Un problema reportado por investigador o perito debe conservar el estado principal y aportar evidencia mínima. | confirmado | Se exige causal, descripción y soporte/referencia. Investigación usa ruta regional versionada; el receptor operativo de Víctimas permanece pendiente. |
+| BF-21 | La ausencia inicial de candidato no es una reasignación y transferir titularidad tampoco sustituye al ejecutor. | confirmado | Ambas áreas usan `PENDIENTE_EXCEPCION` ante el primer reparto fallido. Reasignación y transferencia continúan como contratos separados e inactivos. |
+| BF-22 | Una corrección multiítem de Víctimas puede alterar datos comunes ya usados para aprobar otro ítem. | confirmado | Cada ítem conserva la versión sometida y la versión aprobada; una corrección parcial crea una versión nueva solo para el ítem devuelto y preserva el snapshot de los demás. |
+| BF-23 | Regionales, leyes/programas, etapas y tipos documentales estaban rígidos en el servicio de dominio. | parametrizable | Se trasladan a catálogos versionados, ampliables y con datos iniciales de presentación. El radicado de Víctimas usa política configurable, no una expresión fija no aprobada. |
+| BF-24 | El informe investigativo y el F-171 requieren trazabilidad de versiones, pero la actualización posterior del F-171 no tiene aprobador confirmado. | confirmado / pendiente | Se versionan ambos productos. Se permite devolución y nueva versión investigativa; el contrato de actualización del F-171 queda bloqueado y Víctimas no recibe aprobación final PAG. |
 
 ## 4. RACI actual — Investigación
 

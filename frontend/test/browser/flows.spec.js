@@ -55,7 +55,7 @@ async function submitVictims(page, externalId) {
   await expect(roleField).toHaveValue("Representante judicial de víctimas");
   await expect(roleField).toHaveAttribute("readonly", "");
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await page.getByLabel("Número de radicado").fill(externalId);
+  await page.getByLabel("Identificador o radicado").fill(externalId);
   await page.getByRole("button", { name: "Siguiente" }).click();
   await expect(page.getByLabel("Identificación persona 1")).toBeVisible();
   await expect(page.getByLabel("Identificación persona 2")).toBeVisible();
@@ -132,7 +132,7 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
   await expect(page.getByText("Versión 2", { exact: true })).toBeVisible();
   await expect(page.getByText("Versión 1", { exact: true })).toBeVisible();
   await expect(
-    page.getByText(/Devuelta: Adjuntar soporte de parentesco/),
+    page.getByText(/DEVUELTA \(Adjuntar soporte de parentesco\)/),
   ).toBeVisible();
   await page.getByRole("button", { name: "Cerrar detalle" }).click();
 
@@ -161,13 +161,31 @@ test("Víctimas permite devolver, corregir, reenviar, aprobar y completar", asyn
     .click();
   await page.getByRole("button", { name: "En ejecución" }).click();
   const executionCard = requestCard(page, externalId);
+  await executionCard.getByText("Reportar problema", { exact: true }).click();
   await executionCard
+    .getByLabel("Causal del problema")
+    .fill("Soporte ilegible");
+  await executionCard
+    .getByLabel("Descripción del problema")
+    .fill("El anexo remitido requiere una referencia legible");
+  await executionCard
+    .getByLabel("Soporte o referencia del problema")
+    .fill("ANEXO-VIC-E2E-98");
+  await executionCard.getByRole("button", { name: "Enviar reporte" }).click();
+  await expect(
+    page.getByText("Problema registrado sin alterar el estado del ítem"),
+  ).toBeVisible();
+  await expect(requestCard(page, externalId)).toContainText("En ejecución");
+  const reloadedExecutionCard = requestCard(page, externalId);
+  await reloadedExecutionCard.getByText(/Problemas reportados · 1/).click();
+  await expect(reloadedExecutionCard).toContainText("ANEXO-VIC-E2E-98");
+  await reloadedExecutionCard
     .getByRole("button", { name: "Registrar actuación" })
     .click();
-  await executionCard
+  await reloadedExecutionCard
     .getByLabel("Referencia del F-171")
     .fill("F171-2026-E2E-98");
-  await executionCard
+  await reloadedExecutionCard
     .getByRole("button", { name: "Finalizar con F-171" })
     .click();
   await page.getByRole("button", { name: "Cerrados" }).click();
@@ -197,13 +215,33 @@ test("Investigación completa reparto, ejecución y aprobación PAG", async ({
     .click();
   await page.getByRole("button", { name: "En ejecución" }).click();
   const executionCard = requestCard(page, spoa);
+  await executionCard.getByText("Reportar problema", { exact: true }).click();
   await executionCard
+    .getByLabel("Causal del problema")
+    .fill("Insumo incompleto");
+  await executionCard
+    .getByLabel("Descripción del problema")
+    .fill("Falta una referencia para continuar la labor");
+  await executionCard
+    .getByLabel("Soporte o referencia del problema")
+    .fill("ANEXO-INV-E2E-98");
+  await executionCard.getByRole("button", { name: "Enviar reporte" }).click();
+  await expect(
+    page.getByText("Problema registrado sin alterar el estado del ítem"),
+  ).toBeVisible();
+  await expect(requestCard(page, spoa)).toContainText("En ejecución");
+  const reloadedExecutionCard = requestCard(page, spoa);
+  await reloadedExecutionCard.getByText(/Problemas reportados · 1/).click();
+  await expect(reloadedExecutionCard).toContainText("ANEXO-INV-E2E-98");
+  await reloadedExecutionCard
     .getByRole("button", { name: "Registrar actuación" })
     .click();
-  await executionCard
+  await reloadedExecutionCard
     .getByLabel("Referencia del informe")
     .fill("INF-2026-E2E-98");
-  await executionCard.getByRole("button", { name: "Entregar informe" }).click();
+  await reloadedExecutionCard
+    .getByRole("button", { name: "Entregar informe" })
+    .click();
 
   await logout(page);
   await chooseProfile(page, { userId: "demo-pag-investigacion" });
@@ -213,6 +251,16 @@ test("Investigación completa reparto, ejecución y aprobación PAG", async ({
     .click();
   await page.getByRole("button", { name: "Cerrados" }).click();
   await expect(requestCard(page, spoa)).toContainText("Cerrada");
+
+  await logout(page);
+  await chooseProfile(page, { userId: "demo-gestor-regional-investigacion" });
+  const reportedProblem = page
+    .locator(".role-problem-list article")
+    .filter({ hasText: "ANEXO-INV-E2E-98" });
+  await expect(reportedProblem).toBeVisible();
+  await expect(reportedProblem).toContainText(
+    "Estado conservado: En ejecución",
+  );
 });
 
 test("el administrador conserva consulta y restablecimiento sin acciones operativas", async ({

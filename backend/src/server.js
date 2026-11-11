@@ -10,6 +10,7 @@ loadEnvFile(path.resolve(process.cwd(), ".env"));
 const config = createConfig();
 const logger = createLogger({ level: config.logLevel });
 const app = createApp({ config, logger });
+app.locals.backups.start();
 
 const server = app.listen(config.port, config.host, () => {
   logger.info(
@@ -28,8 +29,10 @@ const server = app.listen(config.port, config.host, () => {
 });
 
 function shutdown(signal) {
+  app.locals.backups.stop();
   logger.info({ signal }, "service_stopping");
   server.close((error) => {
+    app.locals.demoRepository.close?.();
     if (error) {
       logger.error(
         { errorName: error.name, errorMessage: error.message },

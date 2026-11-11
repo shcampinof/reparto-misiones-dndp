@@ -1,5 +1,7 @@
 # Reglas de negocio consolidadas — SIGIP-DP
 
+Actualización de implementación del 16-oct-2026: el usuario autorizó decisiones **D provisionales para pruebas** sobre términos y prórrogas separados por área, remisión regional directa y continuaciones de Víctimas al mismo perito. Véase [informe 30](30_INCREMENTO_FUNCIONAL_PERSISTENTE_2026_10_16.md). No cambia las marcas históricas P/C/B de ratificación institucional; las cifras se configuran por versión/vigencia y los snapshots existentes se conservan. No se unifican los flujos por compartir procedimiento.
+
 Versión propuesta: 1.0  
 Fecha de corte: 1 de septiembre de 2026
 
@@ -242,7 +244,7 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 
 | ID | Regla | Estado |
 |---|---|---|
-| RN-VIC-040 | El plazo estándar no se fijará todavía en 40 días hábiles. La reunión mencionó 30 hábiles o 45 calendario según procedimiento; debe confirmarse el evento de inicio. | P |
+| RN-VIC-040 | SD-P06-I14 v1 (2019), §3.2.4, sí contiene 40 días hábiles para ambas disciplinas; §3.2.3 inicia términos con radicación completa. Sus referencias de un mes/45 días y los 30 hábiles/45 calendario de la reunión requieren reconciliación y verificación de vigencia SGC. No se activa aún un plazo fijo. | B/P |
 | RN-VIC-041 | La anticipación de la audiencia y la fecha requerida se capturarán y generarán alerta cuando el plazo disponible sea insuficiente. | C/D |
 | RN-VIC-042 | Una solicitud tardía no se rechazará automáticamente salvo regla aprobada; deberá registrar gestión/aceptación de fecha excepcional. | D/P |
 | RN-VIC-043 | Si aparece una nueva víctima antes del punto de corte y el trabajo no ha iniciado, se modificará la solicitud conservando el mismo plazo. | C/P |
@@ -277,33 +279,42 @@ Las marcas reflejan la evidencia disponible, no sustituyen la aprobación instit
 | RN-VIC-063 | El F-170 conservará la evidencia de asistencia/acopio según el procedimiento; el sistema almacenará la referencia que corresponda. | C |
 | RN-VIC-064 | Los formatos F-173/F-174 estadísticos no se convertirán automáticamente en solicitudes; se usarán para consolidación/reportes si el área confirma el mapeo. | C/P |
 
-## 6. Máquinas de estados propuestas
+## 6. Máquinas de estados ejecutables de la presentación
+
+Actualización 7-oct-2026: estas secuencias describen el contrato pre-Oracle implementado y no aprueban los estados adicionales de propuestas anteriores. Ninguna transición bloqueada se habilita por aparecer en un diagrama histórico.
 
 ### 6.1 Investigación
 
-`BORRADOR → RADICADA → EN_REVISION → APROBADA_REPARTO → ASIGNADA → EN_EJECUCION → INFORME_ENTREGADO → PENDIENTE_APROBACION_PAG → COMPLETADA → CERRADA`
+`RADICADA → ASIGNADA → EN_EJECUCION → INFORME_ENTREGADO → APROBADO_PENDIENTE_ENVIO → CERRADA`
+
+Actualización 16-oct-2026: aprobar exige confirmación y constancia del formulario de verificación; cerrar exige constancia de envío al defensor registrada por el investigador asignado. Es interacción B/D solicitada en Ajustes §3.6, sin inventar checklist oficial ni firma digital. Ver [informe 27](27_AJUSTES_INVESTIGACION_2026_10_16.md).
 
 Ramas:
 
-- `EN_REVISION → DEVUELTA → RADICADA`.
 - `RADICADA → PENDIENTE_EXCEPCION` cuando el reparto automático no encuentra candidato.
-- `EN_EJECUCION → SOLICITUD_AMPLIACION → AMPLIACION_APROBADA/RECHAZADA`.
-- Cualquier estado permitido → `ANULADA`, con autorización y motivo.
+- `INFORME_ENTREGADO → EN_EJECUCION` por devolución PAG con observación y nueva versión en la siguiente entrega.
+- La revisión previa y su responsable permanecen en `DEC-RACI-INV`. La solicitud de prórroga no cambia el estado principal y queda trazada; aprobar/rechazar exige política vigente con evidencia. Ampliación de actividades del defensor y anulación siguen bloqueadas.
+- Una remisión derivada usa `PENDIENTE_ENRUTAMIENTO → ASIGNADA/PENDIENTE_EXCEPCION`; crear/enrutar exige política de remisión aprobada. Sin ella no se activa la ruta propuesta central.
 
 ### 6.2 Víctimas
 
-`BORRADOR → RADICADA → PENDIENTE_APROBACION_PAG → APROBADA_REPARTO → ASIGNADA → EN_EJECUCION → COMPLETADA → CERRADA`
+`PENDIENTE_APROBACION_PAG → APROBADA_REPARTO → ASIGNADA → EN_EJECUCION → CERRADA`
 
 Ramas:
 
-- `PENDIENTE_APROBACION_PAG → DEVUELTA → RADICADA`.
+- `PENDIENTE_APROBACION_PAG → DEVUELTA → PENDIENTE_APROBACION_PAG`, con nueva versión al corregir y reenviar.
 - `APROBADA_REPARTO → PENDIENTE_EXCEPCION` cuando el reparto inicial no encuentra candidato.
 - `ASIGNADA → PENDIENTE_REASIGNACION → ASIGNADA` queda reservada para un cambio posterior de ejecutor y no se activa sin RACI.
-- `ASIGNADA/EN_EJECUCION → IMPROCEDENTE` con constancia.
-- `COMPLETADA → AMPLIACION` como nuevo ítem hijo al mismo perito.
-- `COMPLETADA → ACTUALIZACION_INFORME → COMPLETADA` con nueva versión.
+- `ASIGNADA/EN_EJECUCION → IMPROCEDENTE`: habilitada el 8-oct-2026 con causal, constancia y soporte, exclusivamente por el perito asignado. Fuente: respuesta escrita `DEFENSORIA DEL PUEBLO.docx`, C.4. Constancia en bandeja del RJV; correo pendiente de integración.
+- Ampliación y actualización posterior del F-171 permanecen bloqueadas. La entrega ordinaria con F-171 cierra directamente.
+
+Actualización documental de Víctimas del 8-oct-2026: el F171 se reserva al RJV titular y al perito asignado; PAG y administración reciben metadatos sin referencia, enlace, nombre de archivo ni descarga (respuesta escrita C.6). Datos adicionales F163/F168/F169 se capturan sin inventar obligatoriedades. El detalle de fuentes, requisitos y pendientes está en `23_VALIDACION_DOCUMENTAL_VICTIMAS_2026_10_08.md`. No se altera el flujo de Investigación.
 
 Los nombres finales deben alinearse con catálogos institucionales; lo esencial es que las transiciones sean diferentes por área.
+
+### 6.3 Consulta de datos por ítem
+
+RN-COM-003/005 (D), RN-COM-016/022 (C) y RN-VIC-020/021 (C) sustentan la proyección en servidor. La consulta y las respuestas de acciones filtran también ítems dentro de versiones y snapshots. Cada snapshot aplicable a un encargo contiene sólo ese ítem. El ejecutor de Víctimas recibe exclusivamente la versión aprobada de cada encargo: la API omite los campos comunes actuales, correcciones y versiones no aprobadas que podrían provenir de otro ítem. El RJV titular y el PAG con consulta de toda el área conservan la información actual y el historial autorizado. Los conteos y el estado agregado de la solicitud se conservan como metadatos de seguimiento; no exponen contenidos ni identificadores de ítems ajenos.
 
 ## 7. Eventos mínimos de notificación
 
@@ -384,3 +395,7 @@ El incremento `feat/integridad-flujos-y-reglas` agrega integridad sin aprobar re
 - la actualización posterior del F-171 tiene contrato interno bloqueado y no agrega aprobación final PAG a Víctimas.
 
 El detalle contractual y la evidencia esperada están en `17_CONTRATO_FUNCIONAL_PRE_ORACLE.md`; las decisiones abiertas se centralizan en `docs/decisions/README.md`.
+
+## 11. Mejoras técnicas de prueba sin integración institucional
+
+RN-COM-010 y 060–067: borradores privados con revisión optimista, soportes documentales por ítem con versiones inmutables, consulta autorizada, avisos leídos y recuperación de fallos. Decisión D del usuario del 19-oct-2026; [Informe 33](33_MEJORAS_AUTONOMAS_HUGGING_FACE.md). Los documentos adicionales no alteran la versión radicada ni los estados. Las constancias son registros del aplicativo y no equivalen a firma digital o recepción de correo. Los límites son técnicos y configurables. Se conservan reserva F171, aprobaciones distintas y decisiones pendientes.

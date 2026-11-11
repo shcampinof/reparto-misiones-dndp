@@ -20,3 +20,13 @@ Documentos Fuente/
 *.wav
 *.vtt
 *.srt
+/tmp/analisis_sigip/
+/tmp/video_peritos/
+/tmp/victimas_20261008/
+/tmp/pm2-sigip/
+/tmp/
+__pycache__/
+**/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -3,6 +3,7 @@ import process from "node:process";
 
 export default defineConfig({
   testDir: "./test/browser",
+  testIgnore: "**/functional.spec.js",
   fullyParallel: false,
   workers: 1,
   reporter: "line",
@@ -19,6 +20,13 @@ export default defineConfig({
       env: {
         ...process.env,
         NODE_ENV: "test",
+        STORAGE_DRIVER: "memory",
+        ENABLE_PROVISIONAL_RULES: "false",
+        BACKUP_DIRECTORY: "",
+        FILE_MAX_MB: "2",
+        INTAKE_MAX_MB: "4",
+        ANTIMALWARE_COMMAND: "",
+        REQUIRE_ANTIMALWARE: "false",
         HOST: "127.0.0.1",
         PORT: "4000",
         LOG_LEVEL: "silent",

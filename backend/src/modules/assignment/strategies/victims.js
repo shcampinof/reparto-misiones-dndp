@@ -8,6 +8,12 @@ export function assignVictims(context) {
     now: context.now,
     exclusionRules: [
       (candidate) =>
+        exclusion(
+          "Continuidad: encargo vinculado al perito original",
+          Boolean(context.continuationAssigneeId) &&
+            candidate.id !== context.continuationAssigneeId,
+        ),
+      (candidate) =>
         exclusion("Área incompatible", candidate.area !== "VICTIMAS"),
       (candidate) =>
         exclusion(

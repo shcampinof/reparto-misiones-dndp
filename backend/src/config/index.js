@@ -95,6 +95,29 @@ export function createConfig(env = process.env) {
     logLevel,
     staticDir: String(env.STATIC_DIR || "").trim() || null,
     demoResetOnStart: booleanValue(env.DEMO_RESET_ON_START, true),
+    storage: {
+      driver:
+        env.STORAGE_DRIVER || (environment === "test" ? "memory" : "sqlite"),
+      filename: env.SQLITE_PATH || "./data/sigip.sqlite",
+    },
+    files: {
+      version: env.FILE_POLICY_VERSION || "TECHNICAL-2026-10-19-v1",
+      maxFileBytes: Number(env.FILE_MAX_MB || 2) * 1024 * 1024,
+      maxIntakeBytes: Number(env.INTAKE_MAX_MB || 4) * 1024 * 1024,
+      maxItemBytes: Number(env.ITEM_FILES_MAX_MB || 50) * 1024 * 1024,
+      maxRequestBytes: Number(env.JSON_MAX_MB || 48) * 1024 * 1024,
+      antimalwareCommand: String(env.ANTIMALWARE_COMMAND || "").trim(),
+      requireAntimalware: booleanValue(env.REQUIRE_ANTIMALWARE, false),
+    },
+    backups: {
+      directory: String(env.BACKUP_DIRECTORY || "").trim(),
+      intervalMinutes: Number(env.BACKUP_INTERVAL_MINUTES || 360),
+      keep: Number(env.BACKUP_KEEP || 3),
+    },
+    provisionalRules: booleanValue(
+      env.ENABLE_PROVISIONAL_RULES,
+      environment !== "test",
+    ),
     corsOrigins: listValue(
       env.CORS_ORIGINS,
       environment === "production"
@@ -109,6 +132,44 @@ export function createConfig(env = process.env) {
     },
   };
 
+  if (!["sqlite", "memory"].includes(config.storage.driver))
+    issues.push("STORAGE_DRIVER debe ser sqlite o memory");
+  if (
+    !Number.isInteger(config.backups.intervalMinutes) ||
+    config.backups.intervalMinutes < 1 ||
+    !Number.isInteger(config.backups.keep) ||
+    config.backups.keep < 1 ||
+    config.backups.keep > 30
+  )
+    issues.push("Configuración de copias no válida");
+  for (const key of [
+    "maxFileBytes",
+    "maxIntakeBytes",
+    "maxItemBytes",
+    "maxRequestBytes",
+  ]) {
+    if (
+      !Number.isSafeInteger(config.files[key]) ||
+      config.files[key] < 1024 ||
+      config.files[key] > 128 * 1024 * 1024
+    )
+      issues.push(`Límite documental no válido: ${key}`);
+  }
+  if (
+    config.files.maxIntakeBytes < config.files.maxFileBytes ||
+    config.files.maxItemBytes < config.files.maxFileBytes ||
+    config.files.maxRequestBytes <
+      Math.ceil((config.files.maxIntakeBytes * 4) / 3) + 65536
+  )
+    issues.push("Los límites de archivo, radicación y JSON no son coherentes");
+  if (
+    config.storage.driver === "memory" &&
+    environment !== "test" &&
+    !productionDemoMode
+  )
+    issues.push(
+      "La persistencia en memoria sólo se admite en pruebas o demostración explícita",
+    );
   if (issues.length) throw new ConfigurationError(issues);
   return Object.freeze(config);
 }

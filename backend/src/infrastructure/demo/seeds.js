@@ -1,5 +1,8 @@
 import { grantsForRole } from "../../modules/core/auth/capabilities.js";
 import { createCatalogSeed } from "./catalog-seeds.js";
+import { createInvestigationTeam } from "./investigation-team.js";
+import { sampleF171Attachment } from "./sample-f171.js";
+import { enqueueWorkflowNotifications } from "../../modules/core/notifications/outbox.js";
 
 export const DEMO_PARAMETERS = Object.freeze({
   version: "PRE-ORACLE-2026-09",
@@ -15,24 +18,33 @@ export function createDemoSeed() {
     catalogs: createCatalogSeed(),
     operations: [seedProblem(now)],
     audit: [],
+    investigationPolicies: [],
+    calendars: [],
+    outbox: [],
+    investigationTextPolicy: {
+      version: "DEMO-TEXTO-1",
+      maxLength: 10000,
+      kind: "LIMITE_TECNICO_DEMO",
+      approvalEvidence: null,
+    },
     users: [
       demoUser(
         "demo-admin",
-        "Administrador del sistema",
+        "Andrés Molina",
         "administrador",
         "Administrador del sistema",
         "AMBAS",
       ),
       demoUser(
         "demo-defensor",
-        "Defensor/a solicitante",
+        "Laura Méndez",
         "defensor",
         "Defensor/a solicitante",
         "INVESTIGACION",
       ),
       demoUser(
         "demo-investigador",
-        "Investigador/a de campo 01",
+        "Julián Rojas",
         "investigador",
         "Investigador/a",
         "INVESTIGACION",
@@ -40,14 +52,14 @@ export function createDemoSeed() {
       ),
       demoUser(
         "demo-pag-investigacion",
-        "PAG Investigación",
+        "Paula Serrano",
         "pag_investigacion",
         "PAG Investigación",
         "INVESTIGACION",
       ),
       demoUser(
         "demo-gestor-regional-investigacion",
-        "Gestor operativo regional Bogotá",
+        "Camila Duarte",
         "gestor_operativo_regional",
         "Gestor operativo regional",
         "INVESTIGACION",
@@ -56,14 +68,14 @@ export function createDemoSeed() {
       ),
       demoUser(
         "demo-gestor-central-excepciones",
-        "Gestor central de excepciones",
+        "Felipe Cárdenas",
         "gestor_central_excepciones",
         "Gestor central de excepciones",
         "INVESTIGACION",
       ),
       demoUser(
         "demo-defensor-regional",
-        "Defensor regional Bogotá",
+        "Diana Salcedo",
         "defensor_regional",
         "Defensor regional",
         "INVESTIGACION",
@@ -72,31 +84,31 @@ export function createDemoSeed() {
       ),
       demoUser(
         "demo-rjv",
-        "Representante judicial de víctimas",
+        "Natalia Pardo",
         "rjv",
         "Representante judicial de víctimas",
         "VICTIMAS",
       ),
       demoUser(
         "demo-pag-victimas",
-        "PAG Víctimas",
+        "Ricardo Beltrán",
         "pag_victimas",
         "PAG Víctimas",
         "VICTIMAS",
       ),
       demoUser(
         "demo-perito-psicologia",
-        "Perito Psicología 01",
+        "Mariana Torres",
         "perito",
-        "Perito Psicología 01",
+        "Perito/a en psicología",
         "VICTIMAS",
         "per-demo-psi-01",
       ),
       demoUser(
         "demo-perito-financiero",
-        "Perito Financiero 01",
+        "Santiago Acosta",
         "perito",
-        "Perito Financiero 01",
+        "Perito/a financiero",
         "VICTIMAS",
         "per-demo-fin-01",
       ),
@@ -105,7 +117,7 @@ export function createDemoSeed() {
       {
         id: "inv-demo-01",
         area: "INVESTIGACION",
-        displayName: "Investigador/a de campo 01",
+        displayName: "Mateo Herrera",
         specialties: ["ESP_INV_CAMPO", "ESP_INV_BALISTICA"],
         coverages: ["BOGOTA"],
         laws: [],
@@ -116,7 +128,7 @@ export function createDemoSeed() {
       {
         id: "inv-demo-02",
         area: "INVESTIGACION",
-        displayName: "Profesional de investigación 02",
+        displayName: "Julián Rojas",
         specialties: ["ESP_INV_CAMPO", "ESP_INV_ANALISIS_INFO"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
         laws: [],
@@ -127,7 +139,7 @@ export function createDemoSeed() {
       {
         id: "inv-demo-03",
         area: "INVESTIGACION",
-        displayName: "Profesional de investigación 03",
+        displayName: "Valeria Castro",
         specialties: [
           "ESP_INV_CAMPO",
           "ESP_INV_BALISTICA",
@@ -142,10 +154,19 @@ export function createDemoSeed() {
       {
         id: "per-demo-psi-01",
         area: "VICTIMAS",
-        displayName: "Perito Psicología 01",
+        displayName: "Mariana Torres",
         specialties: ["DISC_VIC_PSICOLOGIA"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
-        laws: ["LEY_1448", "LEY_975"],
+        laws: [
+          "LEY_1448",
+          "LEY_975",
+          "LEY_1098",
+          "LEY_1257",
+          "LEY_1719",
+          "LEY_1761",
+          "LEY_1773",
+          "LEY_985",
+        ],
         available: true,
         demoBaseLoad: 0,
         lastAssignmentAt: "2026-08-12T10:00:00.000Z",
@@ -153,7 +174,7 @@ export function createDemoSeed() {
       {
         id: "per-demo-psi-02",
         area: "VICTIMAS",
-        displayName: "Perito Psicología 02",
+        displayName: "Elena Vargas",
         specialties: ["DISC_VIC_PSICOLOGIA"],
         coverages: ["BOGOTA"],
         laws: ["LEY_975"],
@@ -164,10 +185,19 @@ export function createDemoSeed() {
       {
         id: "per-demo-fin-01",
         area: "VICTIMAS",
-        displayName: "Perito Financiero 01",
+        displayName: "Santiago Acosta",
         specialties: ["DISC_VIC_FINANCIERA"],
         coverages: ["BOGOTA", "CUNDINAMARCA"],
-        laws: ["LEY_1448", "LEY_975"],
+        laws: [
+          "LEY_1448",
+          "LEY_975",
+          "LEY_1098",
+          "LEY_1257",
+          "LEY_1719",
+          "LEY_1761",
+          "LEY_1773",
+          "LEY_985",
+        ],
         available: true,
         demoBaseLoad: 0,
         lastAssignmentAt: "2026-08-15T10:00:00.000Z",
@@ -175,7 +205,7 @@ export function createDemoSeed() {
       {
         id: "per-demo-fin-02",
         area: "VICTIMAS",
-        displayName: "Perito Financiero 02",
+        displayName: "Tomás Medina",
         specialties: ["DISC_VIC_FINANCIERA"],
         coverages: ["BOGOTA"],
         laws: ["LEY_1448"],
@@ -212,11 +242,7 @@ export function createDemoSeed() {
               },
             ],
             reportReference: null,
-            assignment: seedAssignment(
-              "inv-demo-01",
-              "Investigador/a de campo 01",
-              now,
-            ),
+            assignment: seedAssignment("inv-demo-01", "Mateo Herrera", now),
             operations: [seedProblem(now)],
             timeline: [
               event(
@@ -307,7 +333,7 @@ export function createDemoSeed() {
             reportReference: "F171-2026-0001",
             assignment: seedAssignment(
               "per-demo-fin-01",
-              "Perito Financiero 01",
+              "Santiago Acosta",
               now,
             ),
             operations: [],
@@ -374,7 +400,7 @@ export function createDemoSeed() {
             reportReference: "INF-2026-0002",
             assignment: seedAssignment(
               "inv-demo-02",
-              "Profesional de investigación 02",
+              "Julián Rojas",
               "2026-08-28T15:10:00.000Z",
             ),
             operations: [],
@@ -434,7 +460,7 @@ export function createDemoSeed() {
             reportReference: "INF-2026-0003",
             assignment: seedAssignment(
               "inv-demo-01",
-              "Investigador/a de campo 01",
+              "Mateo Herrera",
               "2026-08-12T14:05:00.000Z",
             ),
             operations: [],
@@ -530,7 +556,7 @@ export function createDemoSeed() {
             reportReference: null,
             assignment: seedAssignment(
               "per-demo-fin-01",
-              "Perito Financiero 01",
+              "Santiago Acosta",
               "2026-09-01T15:10:00.000Z",
             ),
             operations: [],
@@ -584,7 +610,7 @@ export function createDemoSeed() {
             reportReference: null,
             assignment: seedAssignment(
               "per-demo-psi-01",
-              "Perito Psicología 01",
+              "Mariana Torres",
               "2026-08-30T14:10:00.000Z",
             ),
             operations: [],
@@ -616,13 +642,205 @@ export function createDemoSeed() {
       },
     ],
   };
+  const team = createInvestigationTeam();
+  seed.users.push(
+    demoUser(
+      "demo-investigador-mateo",
+      "Mateo Herrera",
+      "investigador",
+      "Investigador/a",
+      "INVESTIGACION",
+      "inv-demo-01",
+    ),
+  );
+  seed.professionals.push(...team);
+  seed.users.push(
+    ...team.map((professional) =>
+      demoUser(
+        `demo-${professional.id}`,
+        professional.displayName,
+        "investigador",
+        "Investigador/a · especialista",
+        "INVESTIGACION",
+        professional.id,
+      ),
+    ),
+  );
+  for (const professional of seed.professionals) {
+    professional.baseRegion ??= professional.coverages[0];
+    professional.jobTitle ??=
+      professional.area === "INVESTIGACION"
+        ? "Profesional de investigación"
+        : "Profesional pericial";
+    professional.availabilityLabel ??= professional.available
+      ? "Disponible"
+      : "No disponible por novedad";
+  }
+  const scenarios = [
+    [
+      "fotografia",
+      "SVC_INV_FOTO_VIDEO",
+      "BOGOTA",
+      "EN_EJECUCION",
+      "Registro audiovisual del lugar de los hechos",
+      "Luis Sandoval",
+    ],
+    [
+      "digital",
+      "SVC_INV_DIGITAL",
+      "BOGOTA",
+      "INFORME_ENTREGADO",
+      "Análisis de mensajes aportados por la defensa",
+      "Carolina Durán",
+    ],
+    [
+      "campo-medellin",
+      "SVC_INV_VERIFICACION_TERRENO",
+      "ANTIOQUIA",
+      "ASIGNADA",
+      "Entrevistas y verificación de ubicación en Medellín",
+      "Manuel Restrepo",
+    ],
+    [
+      "documentologia",
+      "SVC_INV_GRAFOLOGIA",
+      "VALLE_CAUCA",
+      "CERRADA",
+      "Verificación documental de una firma cuestionada",
+      "Beatriz Campos",
+    ],
+    [
+      "ambiental",
+      "SVC_INV_AMBIENTAL",
+      "META",
+      "ASIGNADA",
+      "Análisis de informes sobre afectación ambiental",
+      "Pablo Montero",
+    ],
+  ];
+  for (const [
+    index,
+    [specialist, serviceId, region, status, summary, person],
+  ] of scenarios.entries()) {
+    const number = String(101 + index).padStart(4, "0");
+    const at = `2026-10-0${index + 1}T14:00:00.000Z`;
+    const professional = team.find(
+      (entry) => entry.id === `inv-presentacion-${specialist}`,
+    );
+    const service = seed.catalogs.services.find(
+      (entry) => entry.id === serviceId,
+    );
+    const stages = [
+      "RADICADA",
+      "ASIGNADA",
+      ...(["EN_EJECUCION", "INFORME_ENTREGADO", "CERRADA"].includes(status)
+        ? ["EN_EJECUCION"]
+        : []),
+      ...(["INFORME_ENTREGADO", "CERRADA"].includes(status)
+        ? ["INFORME_ENTREGADO"]
+        : []),
+      ...(status === "CERRADA" ? ["CERRADA"] : []),
+    ];
+    seed.requests.push({
+      id: `INV-2026-${number}`,
+      area: "INVESTIGACION",
+      ownerUserId: "demo-defensor",
+      externalId: `1100160000492026${String(101 + index).padStart(5, "0")}`,
+      summary,
+      createdAt: at,
+      persons: [
+        {
+          alias: person,
+          relationship: "Procesado/a",
+          notes: "Persona vinculada al caso de presentación",
+        },
+      ],
+      documents: [
+        {
+          type: "SOLICITUD_DEFENSA",
+          reference: `Solicitud de misión ${number}`,
+        },
+      ],
+      caseData: {
+        processReference: `Proceso penal 2026-${number}`,
+        conduct: summary,
+        facts: summary,
+        hypothesis:
+          "Contrastar la información aportada para apoyar la teoría de la defensa.",
+        requiredWork: summary,
+        hearingApplies: false,
+      },
+      items: [
+        {
+          id: `MT-2026-${number}`,
+          service: serviceId,
+          serviceVersion: service.version,
+          specialtyIds: seed.catalogs.serviceSpecialtyRelations
+            .filter((entry) => entry.serviceId === serviceId)
+            .map((entry) => entry.specialtyId),
+          region,
+          law: null,
+          status,
+          assigneeId: professional.id,
+          dueDate: null,
+          termSnapshot: pendingTermPolicy(),
+          activities: [],
+          reportReference: ["INFORME_ENTREGADO", "CERRADA"].includes(status)
+            ? `Informe técnico ${number}`
+            : null,
+          assignment: seedAssignment(
+            professional.id,
+            professional.displayName,
+            at,
+          ),
+          operations: [],
+          timeline: stages.map((stage, position) =>
+            event(
+              at,
+              position ? stages[position - 1] : null,
+              stage,
+              stage === "CERRADA"
+                ? "demo-pag-investigacion"
+                : stage === "RADICADA"
+                  ? "demo-defensor"
+                  : `demo-${professional.id}`,
+              "Actividad registrada en la misión",
+            ),
+          ),
+        },
+      ],
+    });
+  }
+  seed.counters.investigation = 106;
   migratePresentationRecords(seed, now);
+  for (const request of seed.requests)
+    enqueueWorkflowNotifications(seed, request, request.createdAt);
   return seed;
 }
 
 function migratePresentationRecords(seed, at) {
   for (const request of seed.requests) {
+    if (request.area === "INVESTIGACION") {
+      const user = seed.users.find((entry) => entry.id === request.ownerUserId);
+      request.requester ||= {
+        userId: request.ownerUserId,
+        fullName: user?.fullName || "Solicitante",
+        email: user?.accounts[0]?.email || null,
+        role: "defensor",
+      };
+      request.documents ||= [
+        {
+          type: "SOLICITUD_DEFENSA",
+          reference: `Solicitud de referencia ${request.id}`,
+        },
+      ];
+    }
     for (const item of request.items) {
+      if (
+        request.area === "INVESTIGACION" &&
+        item.termSnapshot?.status !== "APROBADA"
+      )
+        item.dueDate = null;
       item.products = item.reportReference
         ? [
             seedProduct(
@@ -682,6 +900,7 @@ function seedProduct(area, item, status, at) {
     itemId: item.id,
     type,
     reference: item.reportReference,
+    ...(area === "VICTIMAS" ? { attachment: sampleF171Attachment(item) } : {}),
     version: 1,
     author:
       item.timeline.find((entry) =>
@@ -746,7 +965,11 @@ function demoUser(
     accounts: [
       {
         id: `account-${id}`,
-        email: `${id}@demo.invalid`,
+        email: `${fullName
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replaceAll(" ", ".")}@sigip.example`,
         role,
         roleLabel,
         area,

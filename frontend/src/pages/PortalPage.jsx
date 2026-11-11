@@ -1,9 +1,39 @@
+import { MaintenancePanel } from "../components/MaintenancePanel.jsx";
+import { DraftPanel } from "../components/DraftPanel.jsx";
+import { useServerDraft } from "../components/use-server-draft.js";
+import { WorkspaceDocuments } from "../components/WorkspaceDocuments.jsx";
+import {
+  FilePolicyContext,
+  useFilePolicy,
+  megabytes,
+} from "../components/file-policy.js";
+import { RequestFilters } from "../components/RequestFilters.jsx";
+import { matchesRequestFilters } from "../components/request-filters.js";
+import { VictimsFollowUp } from "../components/VictimsFollowUp.jsx";
+import { IntakeDocumentLink } from "../components/IntakeDocumentLink.jsx";
+import {
+  InvestigationOperations,
+  InvestigationControl,
+  ExportInvestigation,
+  NotificationTray,
+} from "../components/InvestigationAdjustments.jsx";
+import {
+  VictimsCaseFields,
+  VictimsPersonFields,
+  F171Guidance,
+  VictimsFormatSummary,
+} from "../components/VictimsFormatFields.jsx";
+import {
+  victimsCaseForm,
+  victimsPersonForm,
+} from "../components/victims-form-values.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   apiCreateInvestigation,
   apiCreateVictims,
   apiDemoBootstrap,
   apiInvestigationAction,
+  apiDownloadProduct,
   apiRegisterOperation,
   apiResetDemo,
   apiVictimsAction,
@@ -20,7 +50,11 @@ const STATUS_LABELS = {
   ASIGNADA: "Asignada",
   EN_EJECUCION: "En ejecución",
   INFORME_ENTREGADO: "Informe entregado",
+  APROBADO_PENDIENTE_ENVIO: "Aprobado · pendiente envío al defensor",
+  PENDIENTE_ENRUTAMIENTO: "Pendiente de recepción y reparto",
   CERRADA: "Cerrada",
+  IMPROCEDENTE: "Improcedente",
+  FINALIZADA_CON_IMPROCEDENCIA: "Finalizada con improcedencia",
   EN_TRAMITE: "En trámite",
   PARCIALMENTE_CERRADA: "Parcialmente cerrada",
   SIN_ITEMS: "Sin ítems",
@@ -59,6 +93,7 @@ const CAPABILITIES = {
   APPROVE_VICTIMS: "AVALAR_SOLICITUD_VICTIMAS",
   CORRECT_VICTIMS: "CORREGIR_SOLICITUD_VICTIMAS",
   EXECUTE_VICTIMS: "EJECUTAR_ITEM_VICTIMAS",
+  DECLARE_IMPROCEDENCE: "DECLARAR_IMPROCEDENCIA_VICTIMAS",
   REPORT_PROBLEM: "REPORTAR_PROBLEMA",
 };
 
@@ -74,6 +109,7 @@ export default function PortalPage() {
   const [error, setError] = useState("");
   const [tray, setTray] = useState("");
   const [detail, setDetail] = useState(null);
+  const [filters, setFilters] = useState({});
   const detailOpenerRef = useRef(null);
 
   useEffect(() => {
@@ -108,6 +144,7 @@ export default function PortalPage() {
 
   useEffect(() => {
     setTray("");
+    setFilters({});
     setDetail(null);
   }, [area]);
 
@@ -120,13 +157,14 @@ export default function PortalPage() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [detail, closeDetail]);
 
-  async function run(key, action, successMessage) {
+  async function run(key, action, successMessage, onCommitted) {
     if (busy) return;
     setBusy(key);
     setMessage("");
     setError("");
     try {
-      await action();
+      const result = await action();
+      onCommitted?.(result);
       await reload();
       setMessage(successMessage);
     } catch (requestError) {
@@ -160,7 +198,9 @@ export default function PortalPage() {
     .map((request) => ({
       ...request,
       items: request.items.filter(
-        (item) => trayForStatus(item.status) === activeTray,
+        (item) =>
+          trayForStatus(item.status) === activeTray &&
+          matchesRequestFilters(request, item, filters),
       ),
     }))
     .filter((request) => request.items.length > 0);
@@ -183,210 +223,246 @@ export default function PortalPage() {
   const canUseArea = (target) => data.allowedAreas.includes(target);
 
   return (
-    <div
-      className="demo-portal"
-      style={{ "--area-accent": AREA_META[area].accent }}
-    >
-      <header className="demo-header">
-        <div className="demo-brand">
-          <div>
-            <strong>Defensoría del Pueblo</strong>
-            <span>SIGIP-DP</span>
-            <small>
-              Gestión investigativa y pericial de la Defensoría del Pueblo
-            </small>
-          </div>
-        </div>
-        <nav className="portal-area-tabs" aria-label="Módulos del portal">
-          {Object.entries(AREA_META).map(([id, meta]) => (
-            <button
-              type="button"
-              key={id}
-              className={area === id ? "active" : ""}
-              disabled={!canUseArea(id)}
-              aria-current={area === id ? "page" : undefined}
-              title={
-                canUseArea(id)
-                  ? `Abrir módulo de ${meta.label}`
-                  : `${meta.label}: no habilitada para esta cuenta`
-              }
-              onClick={() => setArea(id)}
-            >
-              {meta.label}
-            </button>
-          ))}
-        </nav>
-        <div className="demo-profile">
-          <span>{profile?.initials || "DE"}</span>
-          <div>
-            <strong>{profile?.fullName || "Usuario"}</strong>
-            <small>{profile?.roleLabel || profile?.role}</small>
-          </div>
-          <button onClick={logout}>Cerrar sesión</button>
-        </div>
-      </header>
-
-      <main className="demo-content">
-        <section className="area-heading">
-          <div>
-            <small>Área activa</small>
-            <h1>{AREA_META[area].label}</h1>
-            <p>{AREA_META[area].subtitle}</p>
-          </div>
-          {profileHas(profile, CAPABILITIES.RESET, area) && (
-            <button
-              className="reset-demo"
-              disabled={Boolean(busy)}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "¿Restablecer la información inicial? Se descartarán los cambios realizados en esta sesión.",
-                  )
-                ) {
-                  run(
-                    "reset",
-                    () => apiResetDemo(token),
-                    "Información inicial restablecida correctamente",
-                  );
-                }
-              }}
-            >
-              Restablecer información inicial
-            </button>
-          )}
-        </section>
-
-        {(message || error) && (
-          <div
-            className={error ? "notice error" : "notice success"}
-            role={error ? "alert" : "status"}
-            aria-live="polite"
-          >
-            {error || message}
-          </div>
-        )}
-
-        <section className="demo-kpis">
-          <Kpi
-            label="Solicitudes visibles"
-            value={dashboard.requestCount}
-            tone="blue"
-          />
-          <Kpi
-            label="Ítems pendientes"
-            value={dashboard.pendingItemCount}
-            tone="amber"
-          />
-          <Kpi
-            label="Ítems en gestión"
-            value={dashboard.activeItemCount}
-            tone="purple"
-          />
-          <Kpi
-            label="Ítems cerrados"
-            value={dashboard.closedItemCount}
-            tone="green"
-          />
-        </section>
-
-        {area === "INVESTIGACION" &&
-          profileHas(profile, CAPABILITIES.CREATE_INVESTIGATION, area) && (
-            <InvestigationForm
-              catalogs={data.catalogs}
-              profile={profile}
-              token={token}
-              run={run}
-              busy={Boolean(busy)}
-            />
-          )}
-        {area === "VICTIMAS" &&
-          profileHas(profile, CAPABILITIES.CREATE_VICTIMS, area) && (
-            <VictimsForm
-              catalogs={data.catalogs}
-              profile={profile}
-              token={token}
-              run={run}
-              busy={Boolean(busy)}
-            />
-          )}
-
-        {area === "INVESTIGACION" && (
-          <InvestigationRoleWorkspace
-            profile={profile}
-            requests={requests}
-            area={area}
-          />
-        )}
-
-        <ServiceCatalog
-          area={area}
-          services={data.serviceCatalog?.services || []}
-          specialties={data.serviceCatalog?.specialties || []}
-        />
-
-        <section className="request-section">
-          <div className="section-title">
+    <FilePolicyContext.Provider value={data.filePolicy}>
+      <div
+        className="demo-portal"
+        style={{ "--area-accent": AREA_META[area].accent }}
+      >
+        <header className="demo-header">
+          <div className="demo-brand">
             <div>
-              <small>Bandeja del rol</small>
-              <h2>Solicitudes y encargos</h2>
+              <strong>Defensoría del Pueblo</strong>
+              <span>SIGIP-DP</span>
+              <small>
+                Gestión investigativa y pericial de la Defensoría del Pueblo
+              </small>
             </div>
-            <span>{requests.length} caso(s) visibles</span>
           </div>
-          <nav className="role-trays" aria-label="Bandejas del rol">
-            {TRAYS.map((entry) => (
+          <nav className="portal-area-tabs" aria-label="Módulos del portal">
+            {Object.entries(AREA_META).map(([id, meta]) => (
               <button
                 type="button"
-                key={entry.id}
-                className={activeTray === entry.id ? "active" : ""}
-                aria-pressed={activeTray === entry.id}
-                onClick={() => setTray(entry.id)}
+                key={id}
+                className={area === id ? "active" : ""}
+                disabled={!canUseArea(id)}
+                aria-current={area === id ? "page" : undefined}
+                title={
+                  canUseArea(id)
+                    ? `Abrir módulo de ${meta.label}`
+                    : `${meta.label}: no habilitada para esta cuenta`
+                }
+                onClick={() => setArea(id)}
               >
-                <span>{entry.label}</span>
-                <strong>{trayCounts[entry.id]}</strong>
+                {meta.label}
               </button>
             ))}
           </nav>
-          {visibleRequests.length === 0 ? (
-            <div className="presentable-empty">
-              <strong>Sin casos en esta bandeja</strong>
-              <p>
-                El rol no tiene registros en la etapa seleccionada. Puede
-                consultar otra bandeja sin cambiar sus permisos.
-              </p>
+          <div className="demo-profile">
+            <span>{profile?.initials || "DE"}</span>
+            <div>
+              <strong>{profile?.fullName || "Usuario"}</strong>
+              <small>{profile?.roleLabel || profile?.role}</small>
             </div>
-          ) : (
-            <div className="request-grid">
-              {visibleRequests.map((request) => (
-                <RequestCard
-                  key={request.id}
-                  request={request}
-                  profile={profile}
-                  token={token}
-                  busy={busy}
-                  run={run}
-                  catalogs={data.catalogs}
-                  onOpenDetail={(itemId, opener) =>
-                    openDetail(request.id, itemId, opener)
-                  }
-                />
-              ))}
+            <button onClick={logout}>Cerrar sesión</button>
+            <NotificationTray
+              notifications={data.notifications || []}
+              token={token}
+              onChanged={reload}
+            />
+          </div>
+        </header>
+
+        <main className="demo-content">
+          <section className="area-heading">
+            <div>
+              <small>Área activa</small>
+              <h1>{AREA_META[area].label}</h1>
+              <p>{AREA_META[area].subtitle}</p>
+            </div>
+            {data.storage?.resettable !== false &&
+              profileHas(profile, CAPABILITIES.RESET, area) && (
+                <button
+                  className="reset-demo"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "¿Restablecer la información inicial? Se descartarán los cambios realizados en esta sesión.",
+                      )
+                    ) {
+                      run(
+                        "reset",
+                        () => apiResetDemo(token),
+                        "Información inicial restablecida correctamente",
+                      );
+                    }
+                  }}
+                >
+                  Restablecer información inicial
+                </button>
+              )}
+          </section>
+
+          {(message || error) && (
+            <div
+              className={error ? "notice error" : "notice success"}
+              role={error ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {error || message}
             </div>
           )}
-        </section>
 
-        <footer className="demo-disclaimer">
-          SIGIP-DP — Gestión investigativa y pericial de la Defensoría del
-          Pueblo
-        </footer>
-      </main>
-      {detailRecord && (
-        <CaseDetail
-          request={detailRecord.request}
-          item={detailRecord.item}
-          onClose={closeDetail}
-        />
-      )}
-    </div>
+          <section className="demo-kpis">
+            <Kpi
+              label="Solicitudes visibles"
+              value={dashboard.requestCount}
+              tone="blue"
+            />
+            <Kpi
+              label="Ítems pendientes"
+              value={dashboard.pendingItemCount}
+              tone="amber"
+            />
+            <Kpi
+              label="Ítems en gestión"
+              value={dashboard.activeItemCount}
+              tone="purple"
+            />
+            <Kpi
+              label="Ítems cerrados"
+              value={dashboard.closedItemCount}
+              tone="green"
+            />
+          </section>
+
+          {area === "INVESTIGACION" && data.supervision && (
+            <InvestigationSupervision
+              supervision={data.supervision}
+              token={token}
+            />
+          )}
+
+          {area === "INVESTIGACION" &&
+            profileHas(profile, CAPABILITIES.CREATE_INVESTIGATION, area) && (
+              <InvestigationForm
+                catalogs={data.catalogs}
+                profile={profile}
+                token={token}
+                run={run}
+                busy={Boolean(busy)}
+              />
+            )}
+          {area === "VICTIMAS" &&
+            profileHas(profile, CAPABILITIES.CREATE_VICTIMS, area) && (
+              <VictimsForm
+                catalogs={data.catalogs}
+                profile={profile}
+                token={token}
+                run={run}
+                busy={Boolean(busy)}
+              />
+            )}
+
+          {area === "INVESTIGACION" && (
+            <InvestigationRoleWorkspace
+              profile={profile}
+              requests={requests}
+              area={area}
+            />
+          )}
+
+          {profileHas(profile, "ADMINISTRAR_PLATAFORMA", area) && (
+            <MaintenancePanel token={token} />
+          )}
+          <ServiceCatalog
+            area={area}
+            services={data.serviceCatalog?.services || []}
+            specialties={data.serviceCatalog?.specialties || []}
+          />
+
+          {area === "INVESTIGACION" &&
+            profileHas(profile, "EXPORTAR_INVESTIGACION", area) && (
+              <InvestigationControl
+                requests={requests}
+                token={token}
+                catalogs={data.catalogs}
+              />
+            )}
+
+          <section className="request-section">
+            <div className="section-title">
+              <div>
+                <small>Bandeja del rol</small>
+                <h2>Solicitudes y encargos</h2>
+              </div>
+              <span>{requests.length} caso(s) visibles</span>
+            </div>
+            <RequestFilters
+              statusLabels={STATUS_LABELS}
+              requests={requests}
+              filters={filters}
+              setFilters={setFilters}
+            />
+            <nav className="role-trays" aria-label="Bandejas del rol">
+              {TRAYS.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.id}
+                  className={activeTray === entry.id ? "active" : ""}
+                  aria-pressed={activeTray === entry.id}
+                  onClick={() => setTray(entry.id)}
+                >
+                  <span>{entry.label}</span>
+                  <strong>{trayCounts[entry.id]}</strong>
+                </button>
+              ))}
+            </nav>
+            {visibleRequests.length === 0 ? (
+              <div className="presentable-empty">
+                <strong>Sin casos en esta bandeja</strong>
+                <p>
+                  El rol no tiene registros en la etapa seleccionada. Puede
+                  consultar otra bandeja sin cambiar sus permisos.
+                </p>
+              </div>
+            ) : (
+              <div className="request-grid">
+                {visibleRequests.map((request) => (
+                  <RequestCard
+                    key={request.id}
+                    request={request}
+                    profile={profile}
+                    token={token}
+                    busy={busy}
+                    run={run}
+                    catalogs={data.catalogs}
+                    onOpenDetail={(itemId, opener) =>
+                      openDetail(request.id, itemId, opener)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <footer className="demo-disclaimer">
+            SIGIP-DP. Gestión investigativa y pericial de la Defensoría del
+            Pueblo
+          </footer>
+        </main>
+        {detailRecord && (
+          <CaseDetail
+            token={token}
+            request={detailRecord.request}
+            item={detailRecord.item}
+            profile={profile}
+            catalogs={data.catalogs}
+            onClose={closeDetail}
+          />
+        )}
+      </div>
+    </FilePolicyContext.Provider>
   );
 }
 
@@ -405,8 +481,8 @@ function InvestigationRoleWorkspace({ profile, requests }) {
     request.items.map((item) => ({ ...item, requestId: request.id })),
   );
   if (profileHas(profile, CAPABILITIES.VIEW_EXCEPTIONS, "INVESTIGACION")) {
-    const exceptions = items.filter(
-      (item) => item.status === "PENDIENTE_EXCEPCION",
+    const exceptions = items.filter((item) =>
+      ["PENDIENTE_EXCEPCION", "PENDIENTE_ENRUTAMIENTO"].includes(item.status),
     );
     return (
       <section className="role-workspace">
@@ -428,6 +504,13 @@ function InvestigationRoleWorkspace({ profile, requests }) {
             </strong>
             <span>{item.regionLabel}</span>
             <small>{item.assignment?.selectedReason}</small>
+            {item.referral && (
+              <small>
+                Derivada de {item.originItemId}:{" "}
+                {item.referral.pendingActivities}. Consulte la acción en su
+                tarjeta de la bandeja.
+              </small>
+            )}
           </article>
         ))}
       </section>
@@ -456,6 +539,20 @@ function InvestigationRoleWorkspace({ profile, requests }) {
           <span>{requests.length} solicitud(es)</span>
         </div>
         <div className="role-workspace-columns">
+          <article>
+            <strong>Solicitudes de ampliación de términos</strong>
+            <span>
+              {
+                items
+                  .flatMap((item) => item.termExtensions || [])
+                  .filter((entry) => entry.status === "SOLICITADA").length
+              }
+            </span>
+            <small>
+              Revise las tarjetas de En ejecución. Decidir requiere política
+              aprobada.
+            </small>
+          </article>
           <article>
             <strong>Problemas reportados</strong>
             <span>{problems.length}</span>
@@ -489,7 +586,10 @@ function InvestigationRoleWorkspace({ profile, requests }) {
       </section>
     );
   }
-  if (profileHas(profile, CAPABILITIES.VIEW_INDICATORS, "INVESTIGACION")) {
+  if (
+    profileHas(profile, CAPABILITIES.VIEW_INDICATORS, "INVESTIGACION") &&
+    !profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, "INVESTIGACION")
+  ) {
     return (
       <section className="role-workspace">
         <div className="section-title">
@@ -509,10 +609,254 @@ function InvestigationRoleWorkspace({ profile, requests }) {
   return null;
 }
 
+function InvestigationSupervision({ supervision, token }) {
+  const [region, setRegion] = useState("");
+  const [search, setSearch] = useState("");
+  const [availability, setAvailability] = useState("");
+  const [personnelRegion, setPersonnelRegion] = useState("");
+  const overview =
+    supervision.regions.find((entry) => entry.id === region)?.overview ||
+    supervision.overview;
+  const normalize = (value) =>
+    value
+      .toLocaleLowerCase("es")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  const personnel = supervision.personnel.filter(
+    (person) =>
+      normalize(
+        `${person.name} ${person.jobTitle} ${person.specialties.join(" ")}`,
+      ).includes(normalize(search)) &&
+      (!availability || String(person.available) === availability) &&
+      (!personnelRegion ||
+        person.coverages.some((coverage) => coverage.id === personnelRegion)),
+  );
+  const territories = [
+    ...new Map(
+      supervision.personnel
+        .flatMap((person) => person.coverages)
+        .map((entry) => [entry.id, entry]),
+    ).values(),
+  ];
+  const max = Math.max(1, ...overview.bySpecialty.map((entry) => entry.count));
+  return (
+    <section
+      className="supervision-panel"
+      aria-label="Supervisión de Investigación"
+    >
+      <div className="section-title">
+        <div>
+          <small>{supervision.scope} · consulta</small>
+          <h2>Tablero de supervisión de Investigación</h2>
+        </div>
+        <label>
+          Territorio del tablero
+          <select
+            value={region}
+            onChange={(event) => setRegion(event.target.value)}
+          >
+            <option value="">Todo mi alcance</option>
+            {supervision.regions.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <ExportInvestigation token={token} filters={{ region }} />
+      <div className="supervision-metrics">
+        <Kpi
+          label="Pendientes de envío al defensor"
+          value={overview.awaitingDispatch || 0}
+          tone="purple"
+        />
+        <Kpi
+          label="Vencidas con plazo configurado"
+          value={overview.overdue || 0}
+          tone="amber"
+        />
+        {[
+          ["Solicitudes", overview.requests],
+          ["Misiones en curso", overview.active],
+          ["Informes por revisar", overview.awaitingReview],
+          ["Sin candidato", overview.exceptions],
+          ["Misiones cerradas", overview.closed],
+        ].map(([label, value]) => (
+          <article key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </div>
+      <div className="supervision-columns">
+        <article>
+          <h3>Misiones por especialidad</h3>
+          {overview.bySpecialty.map((entry) => (
+            <div className="supervision-bar" key={entry.id}>
+              <span>{entry.label}</span>
+              <div>
+                <i style={{ width: `${(100 * entry.count) / max}%` }} />
+              </div>
+              <strong>{entry.count}</strong>
+            </div>
+          ))}
+          <small>
+            Un ítem puede estar relacionado con varias especialidades.
+          </small>
+        </article>
+        <article>
+          <h3>Distribución por estado</h3>
+          {overview.byStatus.map((entry) => (
+            <p key={entry.status}>
+              {STATUS_LABELS[entry.status] || entry.status}
+              <strong>{entry.count}</strong>
+            </p>
+          ))}
+          {!overview.items && <p>No hay misiones en este alcance.</p>}
+        </article>
+      </div>
+      <details className="supervision-recent">
+        <summary>Actividad reciente · {overview.recent.length} eventos</summary>
+        {overview.recent.map((entry, index) => (
+          <article key={`${entry.itemId}-${index}`}>
+            <strong>
+              {entry.requestId} · {entry.service}
+            </strong>
+            <span>
+              {STATUS_LABELS[entry.status] || entry.status} · {entry.region}
+            </span>
+            <small>
+              {new Date(entry.at).toLocaleString("es-CO", {
+                timeZone: "America/Bogota",
+              })}
+            </small>
+          </article>
+        ))}
+      </details>
+      <details className="supervision-personnel" open>
+        <summary>
+          Investigadores y especialistas · {supervision.personnel.length}{" "}
+          personas
+        </summary>
+        <ExportInvestigation
+          token={token}
+          filters={{
+            region,
+            personnelSearch: search,
+            availability,
+            personnelRegion,
+          }}
+          label="Descargar Excel de investigadores"
+        />
+        <div className="supervision-filters">
+          <label>
+            Buscar investigador
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Nombre, cargo o especialidad"
+            />
+          </label>
+          <label>
+            Disponibilidad
+            <select
+              aria-label="Disponibilidad"
+              value={availability}
+              onChange={(event) => setAvailability(event.target.value)}
+            >
+              <option value="">Todos los estados</option>
+              <option value="true">Disponible</option>
+              <option value="false">No disponible</option>
+            </select>
+          </label>
+          <label>
+            Cobertura del investigador
+            <select
+              value={personnelRegion}
+              onChange={(event) => setPersonnelRegion(event.target.value)}
+            >
+              <option value="">Todos los territorios autorizados</option>
+              {territories.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="supervision-table-scroll">
+          <table>
+            <caption>
+              Personal y misiones dentro del alcance de consulta
+            </caption>
+            <thead>
+              <tr>
+                <th>Nombre y cargo</th>
+                <th>Sede territorial</th>
+                <th>Especialidades</th>
+                <th>Cobertura</th>
+                <th>Disponibilidad</th>
+                <th>En gestión</th>
+                <th>Cerradas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {personnel.map((person) => (
+                <tr key={person.id}>
+                  <td>
+                    <strong>{person.name}</strong>
+                    <small>{person.jobTitle}</small>
+                  </td>
+                  <td>{person.baseRegionLabel}</td>
+                  <td>{person.specialties.join(", ")}</td>
+                  <td>
+                    {person.coverages
+                      .map((coverage) => coverage.label)
+                      .join(", ")}
+                  </td>
+                  <td>
+                    <span
+                      className={
+                        person.available
+                          ? "person-available"
+                          : "person-unavailable"
+                      }
+                    >
+                      {person.availabilityLabel}
+                    </span>
+                  </td>
+                  <td>{person.activeAssignments}</td>
+                  <td>{person.closedAssignments}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!personnel.length && (
+          <p>No hay investigadores que coincidan con estos filtros.</p>
+        )}
+      </details>
+    </section>
+  );
+}
+
 function ServiceCatalog({ area, services, specialties }) {
-  const areaServices = services.filter((service) => service.area === area);
-  const specialtyNames = new Map(
+  const [search, setSearch] = useState("");
+  const normalize = (value) =>
+    value
+      .toLocaleLowerCase("es")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  const names = new Map(
     specialties.map((specialty) => [specialty.id, specialty.name]),
+  );
+  const areaServices = services.filter((service) => service.area === area);
+  const filtered = areaServices.filter((service) =>
+    normalize(
+      `${service.name} ${service.specialtyIds.map((id) => names.get(id)).join(" ")}`,
+    ).includes(normalize(search)),
   );
   return (
     <section className="service-catalog">
@@ -525,69 +869,98 @@ function ServiceCatalog({ area, services, specialties }) {
       </div>
       <details>
         <summary>Consultar alcance, requisitos y producto</summary>
+        <label className="catalog-search">
+          Buscar en el catálogo
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Servicio o especialidad"
+          />
+        </label>
         <div className="service-catalog-grid">
-          {areaServices.map((service) => (
+          {filtered.map((service) => (
             <article key={service.id}>
-              <header>
-                <div>
+              <details className="catalog-service-detail">
+                <summary>
+                  <strong>{service.name}</strong>
                   <small>
-                    Versión {service.version} · vigente desde{" "}
-                    {service.validFrom}
-                  </small>
-                  <h3>{service.name}</h3>
-                </div>
-                <span>{service.status}</span>
-              </header>
-              <p>{service.description}</p>
-              <dl>
-                <div>
-                  <dt>Especialidad o disciplina</dt>
-                  <dd>
                     {service.specialtyIds
-                      .map((id) => specialtyNames.get(id) || id)
-                      .join(", ")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Alcance</dt>
-                  <dd>{service.scope.join("; ")}</dd>
-                </div>
-                {service.activities?.length > 0 && (
+                      .map((id) => names.get(id) || id)
+                      .join(" · ")}
+                  </small>
+                </summary>
+                <p>{service.description}</p>
+                <dl>
+                  <div>
+                    <dt>Especialidad o disciplina</dt>
+                    <dd>
+                      {service.specialtyIds
+                        .map((id) => names.get(id) || id)
+                        .join(", ")}
+                    </dd>
+                  </div>
                   <div>
                     <dt>Servicios o actividades incluidas</dt>
-                    <dd>{service.activities.join("; ")}</dd>
+                    <dd>
+                      <ul>
+                        {service.activities.map((activity) => (
+                          <li key={activity}>{activity}</li>
+                        ))}
+                      </ul>
+                    </dd>
                   </div>
-                )}
-                <div>
-                  <dt>Exclusiones</dt>
-                  <dd>{service.exclusions.join("; ")}</dd>
-                </div>
-                <div>
-                  <dt>Requisitos</dt>
-                  <dd>{service.requirements.join("; ")}</dd>
-                </div>
-                <div>
-                  <dt>Producto esperado</dt>
-                  <dd>{service.product}</dd>
-                </div>
-                <div>
-                  <dt>Cobertura</dt>
-                  <dd>{service.coverage.label}</dd>
-                </div>
-                <div>
-                  <dt>Plazo</dt>
-                  <dd>Plazo parametrizable por servicio</dd>
-                </div>
-              </dl>
+                  <div>
+                    <dt>Requisitos</dt>
+                    <dd>
+                      <ul>
+                        {service.requirements.map((requirement) => (
+                          <li key={requirement}>{requirement}</li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Exclusiones</dt>
+                    <dd>
+                      <ul>
+                        {service.exclusions.map((exclusion) => (
+                          <li key={exclusion}>{exclusion}</li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Producto esperado</dt>
+                    <dd>{service.product}</dd>
+                  </div>
+                  <div>
+                    <dt>Cobertura y plazo</dt>
+                    <dd>
+                      {service.coverage.label}. Plazo parametrizable por
+                      servicio
+                    </dd>
+                  </div>
+                </dl>
+                <small>
+                  Versión {service.version} · vigente desde {service.validFrom}
+                </small>
+              </details>
             </article>
           ))}
         </div>
+        {!filtered.length && (
+          <p className="catalog-search">
+            No hay servicios que coincidan con la búsqueda.
+          </p>
+        )}
       </details>
     </section>
   );
 }
 
 function InvestigationForm({ catalogs, profile, token, run, busy }) {
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
   const steps = [
     "Solicitante",
     "Proceso",
@@ -597,31 +970,55 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
   ];
   const [step, setStep] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
+  const [receipt, setReceipt] = useState(null);
   const [form, setForm] = useState({
     identifierType: "SPOA",
     spoa: "110016000049202600099",
-    processReference: "Proceso penal 2026-0099",
-    delito: "Conducta asociada al proceso",
+    processReference: "Juzgado penal municipal · Caso 2026-0099",
+    delito: "Hurto",
     proceduralStage: "INVESTIGACION",
     hearingApplies: true,
     hearingDate: "2026-10-15",
-    facts: "Hechos relevantes informados por la defensa.",
-    hypothesis: "Hipótesis de trabajo que orienta la verificación.",
-    requiredWork: "Ubicar fuentes y verificar las circunstancias indicadas.",
+    facts:
+      "Se investiga la sustracción de una bicicleta en un establecimiento de Bogotá. Hay dos personas que presenciaron los hechos y una cámara en el acceso.",
+    hypothesis:
+      "La ubicación de la persona defendida y la secuencia del registro audiovisual podrían diferir de lo narrado en la denuncia.",
+    requiredWork:
+      "Ubicar y entrevistar a los testigos, verificar el lugar e identificar los registros disponibles para contrastar la secuencia de los hechos.",
     region: "BOGOTA",
-    differentialApplies: true,
-    differentialDetail: "Medidas de acceso y comunicación pertinentes.",
+    differentialApplies: false,
+    differentialDetail: "",
     priorityType: "ORDINARIA",
     priorityReason: "",
     prioritySupport: "",
   });
   const [persons, setPersons] = useState([
-    { alias: "Persona relacionada A", relationship: "Procesado/a", notes: "" },
+    {
+      alias: "Daniel Álvarez",
+      relationship: "Procesado/a",
+      notes: "Verificar ubicación al momento de los hechos.",
+    },
   ]);
   const [documents, setDocuments] = useState([
     { type: "SOLICITUD_DEFENSA", reference: "REF-SOL-2026-0099" },
   ]);
   const [services, setServices] = useState(["SVC_INV_VERIFICACION_TERRENO"]);
+  const [serviceRegions, setServiceRegions] = useState({});
+  const draft = useServerDraft(
+    token,
+    "INVESTIGACION",
+    { form, persons, documents, services, serviceRegions, step, submissionId },
+    (data) => {
+      if (data.form) setForm(data.form);
+      if (data.persons) setPersons(data.persons);
+      if (data.documents) setDocuments(data.documents);
+      if (data.services) setServices(data.services);
+      setServiceRegions(data.serviceRegions || {});
+      setStep(Math.min(4, Math.max(0, Number(data.step) || 0)));
+      setSubmissionId(data.submissionId || crypto.randomUUID());
+      setConfirmed(false);
+    },
+  );
   const update = (key) => (event) =>
     setForm((current) => ({
       ...current,
@@ -636,6 +1033,57 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
         ? current.filter((id) => id !== serviceId)
         : [...current, serviceId],
     );
+  const startAnother = () => {
+    draft.reset();
+    setSubmissionId(crypto.randomUUID());
+    setServiceRegions({});
+    setReceipt(null);
+    setStep(0);
+    setConfirmed(false);
+    setForm((current) => ({
+      ...current,
+      spoa: "",
+      processReference: "",
+      delito: "",
+      facts: "",
+      hypothesis: "",
+      requiredWork: "",
+      hearingApplies: false,
+      hearingDate: "",
+      differentialApplies: false,
+      differentialDetail: "",
+      priorityType: "ORDINARIA",
+      priorityReason: "",
+      prioritySupport: "",
+    }));
+    setPersons([{ alias: "", relationship: "Procesado/a", notes: "" }]);
+    setDocuments([{ type: "SOLICITUD_DEFENSA", reference: "" }]);
+    setServices(["SVC_INV_VERIFICACION_TERRENO"]);
+  };
+  if (receipt)
+    return (
+      <section
+        className="creation-panel wizard-panel"
+        aria-label="Confirmación de radicación"
+      >
+        <div className="panel-copy">
+          <small>Radicación confirmada</small>
+          <h2>Solicitud {receipt.id} radicada</h2>
+          <p>
+            Identificador del proceso: {receipt.externalId}. Consulte el
+            resultado del reparto de cada servicio en la bandeja de solicitudes.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="primary-demo"
+          disabled={busy}
+          onClick={startAnother}
+        >
+          Radicar una nueva solicitud
+        </button>
+      </section>
+    );
   return (
     <section className="creation-panel wizard-panel">
       <div className="panel-copy">
@@ -648,8 +1096,10 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
           separado.
         </p>
       </div>
+      <DraftPanel draft={draft} />
       <WizardProgress steps={steps} current={step} />
       <form
+        onChangeCapture={() => setSubmissionId(crypto.randomUUID())}
         onSubmit={(event) => {
           event.preventDefault();
           if (step < steps.length - 1) return setStep(step + 1);
@@ -657,6 +1107,7 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
             "create-inv",
             () =>
               apiCreateInvestigation(token, {
+                submissionId,
                 identifierType: form.identifierType,
                 spoa: form.spoa,
                 processReference: form.processReference,
@@ -680,10 +1131,14 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
                 documents,
                 items: services.map((service) => ({
                   service,
-                  region: form.region,
+                  region: serviceRegions[service] || form.region,
                 })),
               }),
             "Solicitud radicada; el reparto automático fue procesado por ítem",
+            (result) => {
+              setReceipt(result.request);
+              draft.complete();
+            },
           );
         }}
       >
@@ -716,6 +1171,14 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
               SPOA u otro identificador
               <input
                 aria-label="SPOA u otro identificador"
+                type="text"
+                inputMode={form.identifierType === "SPOA" ? "numeric" : "text"}
+                pattern={
+                  form.identifierType === "SPOA" ? "[0-9]{21}" : undefined
+                }
+                minLength={form.identifierType === "SPOA" ? 21 : undefined}
+                maxLength={form.identifierType === "SPOA" ? 21 : 200}
+                required
                 value={form.spoa}
                 onChange={update("spoa")}
               />
@@ -768,12 +1231,28 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
           <div className="wizard-fields full-width">
             <label>
               Hechos
-              <textarea value={form.facts} onChange={update("facts")} />
+              <textarea
+                aria-label="Hechos"
+                value={form.facts}
+                maxLength={catalogs.investigationTextLimit}
+                onChange={update("facts")}
+              />
+              <small>
+                {form.facts.length.toLocaleString("es-CO", {
+                  timeZone: "America/Bogota",
+                })}{" "}
+                /{" "}
+                {catalogs.investigationTextLimit?.toLocaleString("es-CO", {
+                  timeZone: "America/Bogota",
+                })}{" "}
+                caracteres · resuma los hechos relevantes
+              </small>
             </label>
             <label>
               Hipótesis
               <textarea
                 value={form.hypothesis}
+                maxLength={catalogs.investigationTextLimit}
                 onChange={update("hypothesis")}
               />
             </label>
@@ -781,6 +1260,7 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
               Labores requeridas
               <textarea
                 value={form.requiredWork}
+                maxLength={catalogs.investigationTextLimit}
                 onChange={update("requiredWork")}
               />
             </label>
@@ -845,14 +1325,84 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
             />
             <label>
               Cobertura
-              <select value={form.region} onChange={update("region")}>
+              <select
+                aria-label="Cobertura"
+                value={form.region}
+                onChange={update("region")}
+              >
                 {catalogs.regions.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {entry.label}
                   </option>
                 ))}
               </select>
+              <small>
+                Lugar requerido para la labor. El reparto verifica la cobertura
+                de cada especialidad.
+              </small>
             </label>
+            {form.hearingApplies && (
+              <p className="notice" role="note">
+                Tenga en cuenta los términos de cada actividad y la fecha de
+                audiencia. Sin una política de plazo aprobada no es posible
+                garantizar la entrega antes de la audiencia; la fecha informada
+                no reduce automáticamente el término.
+              </p>
+            )}
+            {services.map((serviceId) => (
+              <div className="execution-panel" key={serviceId}>
+                <label>
+                  Cobertura de{" "}
+                  {
+                    catalogs.investigationServices.find(
+                      (entry) => entry.id === serviceId,
+                    )?.label
+                  }
+                  <select
+                    value={serviceRegions[serviceId] || form.region}
+                    onChange={(event) =>
+                      setServiceRegions((current) => ({
+                        ...current,
+                        [serviceId]: event.target.value,
+                      }))
+                    }
+                  >
+                    {catalogs.regions.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <details>
+                  <summary>Consultar alcance del servicio</summary>
+                  <p>
+                    {
+                      catalogs.investigationServices.find(
+                        (entry) => entry.id === serviceId,
+                      )?.description
+                    }
+                  </p>
+                  <ul>
+                    {(
+                      catalogs.investigationServices.find(
+                        (entry) => entry.id === serviceId,
+                      )?.activities || []
+                    ).map((activity) => (
+                      <li key={activity}>{activity}</li>
+                    ))}
+                  </ul>
+                  <p>
+                    Exclusiones:{" "}
+                    {(
+                      catalogs.investigationServices.find(
+                        (entry) => entry.id === serviceId,
+                      )?.exclusions || []
+                    ).join("; ")}
+                  </p>
+                </details>
+              </div>
+            ))}
             <DocumentsEditor
               documents={documents}
               setDocuments={setDocuments}
@@ -869,6 +1419,24 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
             serviceCount={services.length}
             area="INVESTIGACION"
           >
+            <ul>
+              {services.map((service) => (
+                <li key={service}>
+                  {
+                    catalogs.investigationServices.find(
+                      (entry) => entry.id === service,
+                    )?.label
+                  }{" "}
+                  ·{" "}
+                  {
+                    catalogs.regions.find(
+                      (entry) =>
+                        entry.id === (serviceRegions[service] || form.region),
+                    )?.label
+                  }
+                </li>
+              ))}
+            </ul>
             <label className="check-field">
               <input
                 type="checkbox"
@@ -895,9 +1463,12 @@ function InvestigationForm({ catalogs, profile, token, run, busy }) {
 }
 
 function VictimsForm({ catalogs, profile, token, run, busy }) {
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
   const steps = ["RJV", "Proceso", "Personas", "Servicios", "Confirmación"];
   const [step, setStep] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
+  const [receipt, setReceipt] = useState(null);
+  const [documentError, setDocumentError] = useState("");
   const [form, setForm] = useState({
     externalId: "RAD-2026-0004",
     law: "LEY_1448",
@@ -928,9 +1499,23 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
     },
   ]);
   const [documents, setDocuments] = useState([
-    { type: "FORMATO_SOLICITUD", reference: "REF-FORM-2026-0004" },
+    { type: "F163", reference: "REF-FORM-2026-0004" },
   ]);
   const [services, setServices] = useState(["SVC_VIC_EVALUACION_PSICOLOGICA"]);
+  const draft = useServerDraft(
+    token,
+    "VICTIMAS",
+    { form, persons, documents, services, step, submissionId },
+    (data) => {
+      if (data.form) setForm(data.form);
+      if (data.persons) setPersons(data.persons);
+      if (data.documents) setDocuments(data.documents);
+      if (data.services) setServices(data.services);
+      setStep(Math.min(4, Math.max(0, Number(data.step) || 0)));
+      setSubmissionId(data.submissionId || crypto.randomUUID());
+      setConfirmed(false);
+    },
+  );
   const update = (key) => (event) =>
     setForm((current) => ({
       ...current,
@@ -945,6 +1530,60 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
         ? current.filter((id) => id !== serviceId)
         : [...current, serviceId],
     );
+  function startAnother() {
+    draft.reset();
+    setSubmissionId(crypto.randomUUID());
+    setForm({
+      externalId: "",
+      law: "LEY_1448",
+      processReference: "",
+      hearingApplies: false,
+      hearingDate: "",
+      facts: "",
+      region: "BOGOTA",
+    });
+    setPersons([
+      {
+        alias: "",
+        type: "DIRECTA",
+        relationship: "",
+        familyGroup: "",
+        phone: "",
+        email: "",
+        preferredChannel: "Correo",
+      },
+    ]);
+    setDocuments([{ type: "F163", reference: "" }]);
+    setServices(["SVC_VIC_EVALUACION_PSICOLOGICA"]);
+    setConfirmed(false);
+    setDocumentError("");
+    setStep(0);
+    setReceipt(null);
+  }
+  if (receipt)
+    return (
+      <section
+        className="creation-panel victims"
+        aria-label="Confirmación de solicitud de Víctimas"
+      >
+        <div className="panel-copy">
+          <small>Envío confirmado</small>
+          <h2>Solicitud {receipt.id} registrada</h2>
+          <p>
+            Radicado: {receipt.externalId}. La solicitud está pendiente de
+            aprobación previa del PAG; el reparto se ejecutará después del aval.
+          </p>
+          <button
+            type="button"
+            className="primary-demo"
+            onClick={startAnother}
+            disabled={busy}
+          >
+            Crear una nueva solicitud
+          </button>
+        </div>
+      </section>
+    );
   return (
     <section className="creation-panel victims wizard-panel">
       <div className="panel-copy">
@@ -957,24 +1596,44 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
           reparto.
         </p>
       </div>
+      <DraftPanel draft={draft} />
       <WizardProgress steps={steps} current={step} />
       <form
+        onChangeCapture={() => setSubmissionId(crypto.randomUUID())}
         onSubmit={(event) => {
           event.preventDefault();
+          if (
+            step >= 3 &&
+            !documents.some(
+              (document) =>
+                ["F163", "FORMATO_SOLICITUD"].includes(document.type) &&
+                document.reference?.trim(),
+            )
+          ) {
+            setDocumentError(
+              "Falta el F163: seleccione un archivo o registre su URL o referencia en el campo Formato de solicitud F163.",
+            );
+            setStep(3);
+            return;
+          }
+          setDocumentError("");
           if (step < steps.length - 1) return setStep(step + 1);
           run(
             "create-vic",
             () =>
               apiCreateVictims(token, {
+                submissionId,
                 externalId: form.externalId,
                 law: form.law,
                 caseData: {
+                  ...victimsCaseForm(form),
                   processReference: form.processReference,
                   hearingApplies: form.hearingApplies,
                   hearingDate: form.hearingDate,
                   facts: form.facts,
                 },
                 persons: persons.map((person) => ({
+                  ...victimsPersonForm(person),
                   alias: person.alias,
                   type: person.type,
                   relationship: person.relationship,
@@ -983,6 +1642,9 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
                     phone: person.phone,
                     email: person.email,
                     preferredChannel: person.preferredChannel,
+                    address: person.address,
+                    municipality: person.municipality,
+                    department: person.department,
                   },
                 })),
                 documents,
@@ -993,6 +1655,10 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
                 })),
               }),
             "Solicitud de Víctimas enviada a aprobación previa",
+            (result) => {
+              setReceipt(result.request);
+              draft.complete();
+            },
           );
         }}
       >
@@ -1019,8 +1685,9 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
               </select>
             </label>
             <label>
-              Proceso
+              Referencia del proceso judicial
               <input
+                aria-label="Proceso"
                 value={form.processReference}
                 onChange={update("processReference")}
               />
@@ -1047,6 +1714,7 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
               Hechos
               <textarea value={form.facts} onChange={update("facts")} />
             </label>
+            <VictimsCaseFields form={form} update={update} />
           </div>
         )}
         {step === 2 && (
@@ -1067,7 +1735,11 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
             />
             <label>
               Cobertura
-              <select value={form.region} onChange={update("region")}>
+              <select
+                aria-label="Cobertura"
+                value={form.region}
+                onChange={update("region")}
+              >
                 {catalogs.regions.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {entry.label}
@@ -1075,7 +1747,8 @@ function VictimsForm({ catalogs, profile, token, run, busy }) {
                 ))}
               </select>
             </label>
-            <DocumentsEditor
+            {documentError && <p role="alert">{documentError}</p>}
+            <VictimsDocumentsEditor
               documents={documents}
               setDocuments={setDocuments}
               catalog={catalogs.victimDocumentTypes}
@@ -1199,7 +1872,7 @@ function PersonsEditor({ persons, setPersons, mode }) {
       {persons.map((person, index) => (
         <div className="person-row" key={`person-${index}`}>
           <label>
-            Identificación de presentación
+            Nombre o identificación
             <input
               aria-label={`Identificación persona ${index + 1}`}
               value={person.alias}
@@ -1245,6 +1918,10 @@ function PersonsEditor({ persons, setPersons, mode }) {
                   }
                 />
               </label>
+              <VictimsPersonFields
+                person={person}
+                update={(field, value) => updatePerson(index, field, value)}
+              />
               <label>
                 Teléfono
                 <input
@@ -1309,21 +1986,73 @@ function PersonsEditor({ persons, setPersons, mode }) {
   );
 }
 
-function DocumentsEditor({ documents, setDocuments, catalog }) {
+function VictimsDocumentsEditor({ documents, setDocuments, catalog }) {
+  useEffect(() => {
+    const index = documents.findIndex((document) =>
+      ["F163", "FORMATO_SOLICITUD"].includes(document.type),
+    );
+    if (index === 0) return;
+    setDocuments((current) => {
+      const required = current.find((document) =>
+        ["F163", "FORMATO_SOLICITUD"].includes(document.type),
+      );
+      const annexes = current.filter(
+        (document) => !["F163", "FORMATO_SOLICITUD"].includes(document.type),
+      );
+      return [required || { type: "F163", reference: "" }, ...annexes];
+    });
+  }, [documents, setDocuments]);
+  return (
+    <DocumentsEditor
+      documents={documents}
+      setDocuments={setDocuments}
+      catalog={catalog}
+      allowFiles
+      lockRequestFormat
+    />
+  );
+}
+
+function DocumentsEditor({
+  documents,
+  setDocuments,
+  catalog,
+  allowFiles = true,
+  lockRequestFormat = false,
+}) {
+  const filePolicy = useFilePolicy();
+  const [fileError, setFileError] = useState("");
   const updateDocument = (index, field, value) =>
     setDocuments((current) =>
       current.map((document, position) =>
-        position === index ? { ...document, [field]: value } : document,
+        position === index
+          ? {
+              ...document,
+              [field]: value,
+              ...(field === "reference"
+                ? {
+                    file: undefined,
+                    attachment: undefined,
+                    selectedFileName: undefined,
+                  }
+                : {}),
+            }
+          : document,
       ),
     );
   return (
     <fieldset className="documents-editor">
       <legend>Documentos y formatos aplicables</legend>
+      {fileError && <p role="alert">{fileError}</p>}
       {documents.map((document, index) => (
         <div className="document-row" key={`document-${index}`}>
           <label>
-            Tipo
+            {lockRequestFormat && index === 0
+              ? "Formato de solicitud F163 (obligatorio)"
+              : "Tipo"}
             <select
+              aria-label={`Tipo documental ${index + 1}`}
+              disabled={lockRequestFormat && index === 0}
               value={document.type}
               onChange={(event) =>
                 updateDocument(index, "type", event.target.value)
@@ -1346,7 +2075,85 @@ function DocumentsEditor({ documents, setDocuments, catalog }) {
               }
             />
           </label>
-          {documents.length > 1 && (
+          {allowFiles && (
+            <>
+              <label>
+                Cargar archivo
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  aria-label={`Cargar archivo documental ${index + 1}`}
+                  onChange={async (event) => {
+                    const selected = event.target.files?.[0];
+                    if (!selected) return;
+                    setFileError("");
+                    if (
+                      selected.size > filePolicy.maxFileBytes ||
+                      !/\.pdf$/i.test(selected.name)
+                    ) {
+                      setFileError(
+                        `Seleccione un PDF de hasta ${megabytes(filePolicy.maxFileBytes)}.`,
+                      );
+                      return;
+                    }
+                    try {
+                      const contentBase64 = await new Promise(
+                        (resolve, reject) => {
+                          const reader = new FileReader();
+                          reader.onload = () =>
+                            resolve(String(reader.result).split(",")[1]);
+                          reader.onerror = () =>
+                            reject(new Error("No fue posible leer el archivo"));
+                          reader.readAsDataURL(selected);
+                        },
+                      );
+                      setDocuments((current) =>
+                        current.map((entry, position) =>
+                          position === index
+                            ? {
+                                ...entry,
+                                reference: selected.name,
+                                selectedFileName: selected.name,
+                                attachment: undefined,
+                                file: {
+                                  name: selected.name,
+                                  mimeType: selected.type || "application/pdf",
+                                  contentBase64,
+                                },
+                              }
+                            : entry,
+                        ),
+                      );
+                    } catch (error) {
+                      setFileError(error.message);
+                    }
+                  }}
+                />
+              </label>
+              {document.selectedFileName && (
+                <p role="status">
+                  Archivo seleccionado: {document.selectedFileName}
+                </p>
+              )}
+              <label>
+                URL de SharePoint
+                <input
+                  type="url"
+                  aria-label={`URL de SharePoint documental ${index + 1}`}
+                  placeholder="https://entidad.sharepoint.com/..."
+                  value={
+                    document.reference.startsWith("https://")
+                      ? document.reference
+                      : ""
+                  }
+                  onChange={(event) =>
+                    updateDocument(index, "reference", event.target.value)
+                  }
+                />
+              </label>
+            </>
+          )}
+          {documents.length > 1 && !(lockRequestFormat && index === 0) && (
             <button
               type="button"
               onClick={() =>
@@ -1376,12 +2183,37 @@ function DocumentsEditor({ documents, setDocuments, catalog }) {
 }
 
 function ServiceSelector({ title, hint, catalog, selected, toggle }) {
+  const [query, setQuery] = useState("");
+  const filtered = catalog.filter((item) =>
+    item.label
+      .toLocaleLowerCase("es")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .includes(
+        query
+          .toLocaleLowerCase("es")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, ""),
+      ),
+  );
   return (
     <fieldset className="service-selector">
       <legend>{title}</legend>
       <small>{hint}</small>
+      {catalog.length > 10 && (
+        <label>
+          Buscar servicio
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Por ejemplo: medicina, fotografía, financiera"
+          />
+        </label>
+      )}
+      <small>{selected.length} servicio(s) seleccionado(s)</small>
       <div>
-        {catalog.map((item) => (
+        {filtered.map((item) => (
           <label key={item.id}>
             <input
               type="checkbox"
@@ -1392,6 +2224,9 @@ function ServiceSelector({ title, hint, catalog, selected, toggle }) {
           </label>
         ))}
       </div>
+      {!filtered.length && (
+        <p>No hay servicios que coincidan con la búsqueda.</p>
+      )}
     </fieldset>
   );
 }
@@ -1450,6 +2285,9 @@ function RequestCard({
   catalogs,
   onOpenDetail,
 }) {
+  const showCurrentRequestInformation =
+    request.area !== "VICTIMAS" ||
+    canViewCurrentVictimsInformation(profile, request.area);
   return (
     <article className="request-card">
       <header>
@@ -1459,17 +2297,28 @@ function RequestCard({
               ? "Misión de trabajo"
               : "Solicitud pericial"}
           </small>
-          <h3>{request.id}</h3>
+          <h3>{request.displayNumber || request.id}</h3>
+          {request.displayNumber && (
+            <small>Referencia interna: {request.id}</small>
+          )}
         </div>
-        <span className="external-id">{request.externalId}</span>
+        <span className="external-id">
+          {showCurrentRequestInformation
+            ? request.externalId
+            : "Información aprobada por ítem"}
+        </span>
       </header>
-      <p className="request-summary">{request.summary || "Caso registrado"}</p>
+      {showCurrentRequestInformation && (
+        <p className="request-summary">
+          {request.summary || "Caso registrado"}
+        </p>
+      )}
       <p className="request-aggregate-status">
         <strong>Estado agregado de la solicitud:</strong>{" "}
         {STATUS_LABELS[request.aggregateStatus] || request.aggregateStatus}
         {` · ${request.aggregateCounts.closedItems}/${request.aggregateCounts.totalItems} ítems cerrados`}
       </p>
-      {request.persons?.length > 0 && (
+      {showCurrentRequestInformation && request.persons?.length > 0 && (
         <div className="related-persons">
           <strong>{request.persons.length} persona(s) vinculada(s)</strong>
           {request.persons.map((person) => (
@@ -1526,6 +2375,13 @@ function ItemCard({
   const selectedCandidate = item.assignment?.evaluated?.find(
     (candidate) => candidate.candidateId === item.assigneeId,
   );
+  const isVictimsExecutor =
+    area === "VICTIMAS" &&
+    profileHas(profile, CAPABILITIES.EXECUTE_VICTIMS, area);
+  const applicableData = item.applicableRequestData;
+  const applicableItem = applicableData?.items?.find(
+    (candidate) => candidate.id === item.id,
+  );
   return (
     <section className="item-card">
       <div className="item-top">
@@ -1541,12 +2397,62 @@ function ItemCard({
         </span>
       </div>
       <ProcessStepper area={area} status={item.status} />
+      <ActivityHistory item={item} />
+      <ProductFiles item={item} token={token} area={area} />
+      {isVictimsExecutor && applicableData && (
+        <div className="item-applicable-context">
+          <strong>Datos aprobados aplicables a este encargo</strong>
+          <span>
+            Versión {item.approvedSubmissionVersion} ·{" "}
+            {applicableData.externalId}
+          </span>
+          <small>
+            {applicableItem?.serviceLabel || item.serviceLabel} ·{" "}
+            {applicableItem?.regionLabel || item.regionLabel}
+          </small>
+          <small>
+            {applicableData.caseData?.processReference ||
+              "Proceso sin referencia"}
+          </small>
+        </div>
+      )}
       <div className="next-action">
         <span>Siguiente acción</span>
         <strong>{nextAction.action}</strong>
         <small>{nextAction.role}</small>
       </div>
       <div className="item-facts">
+        {item.originItemId && (
+          <span className="continuation-reference">
+            <small>
+              {item.followUpKind === "ACTUALIZACION_F171"
+                ? "Actualización del F171"
+                : "Encargo vinculado"}
+            </small>
+            <strong>{item.originItemId}</strong>
+            {item.continuationReason && (
+              <small>{item.continuationReason}</small>
+            )}
+          </span>
+        )}
+        {area === "INVESTIGACION" && (
+          <>
+            <span>
+              <small>Fecha de ingreso</small>
+              <strong>
+                {new Date(request.createdAt).toLocaleDateString("es-CO", {
+                  timeZone: "America/Bogota",
+                })}
+              </strong>
+            </span>
+            <span>
+              <small>Vencimiento</small>
+              <strong>
+                {item.dueDate || "Pendiente de política aprobada"}
+              </strong>
+            </span>
+          </>
+        )}
         <span>
           <small>Responsable</small>
           <strong>{item.assigneeName || "Pendiente de reparto"}</strong>
@@ -1587,6 +2493,39 @@ function ItemCard({
         </span>
       </div>
       <div className="demo-actions">
+        {area === "VICTIMAS" &&
+          (item.termSnapshot?.operationalEnabled ||
+            item.termExtensions?.length > 0) && (
+            <InvestigationOperations
+              item={item}
+              area="VICTIMAS"
+              profile={profile}
+              catalogs={catalogs}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
+          )}
+        {area === "VICTIMAS" &&
+          item.followUpAvailable &&
+          profileHas(profile, "SOLICITAR_AMPLIACION", area) && (
+            <VictimsFollowUp
+              item={item}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
+          )}
+        {area === "INVESTIGACION" && (
+          <InvestigationOperations
+            item={item}
+            profile={profile}
+            catalogs={catalogs}
+            token={token}
+            busy={isBusy}
+            run={run}
+          />
+        )}
         {area === "INVESTIGACION" &&
           profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&
           item.status === "INFORME_ENTREGADO" && (
@@ -1607,6 +2546,16 @@ function ItemCard({
             <ProblemReportAction
               item={item}
               area={area}
+              token={token}
+              busy={isBusy}
+              run={run}
+            />
+          )}
+        {area === "VICTIMAS" &&
+          profileHas(profile, CAPABILITIES.DECLARE_IMPROCEDENCE, area) &&
+          ["ASIGNADA", "EN_EJECUCION"].includes(item.status) && (
+            <ImprocedenceAction
+              item={item}
               token={token}
               busy={isBusy}
               run={run}
@@ -1655,7 +2604,7 @@ function ItemCard({
 
       {!actionAvailable && (
         <p className="action-guidance">
-          {item.status === "CERRADA"
+          {item.status === "CERRADA" && !item.followUpAvailable
             ? "El servicio está cerrado; solo se permite consultar su trazabilidad."
             : `Esta cuenta puede consultar. La acción corresponde a ${nextAction.role.toLowerCase()}.`}
         </p>
@@ -1663,6 +2612,23 @@ function ItemCard({
 
       {item.assignment && (
         <AssignmentExplanation assignment={item.assignment} />
+      )}
+      {area === "VICTIMAS" && item.status === "IMPROCEDENTE" && (
+        <div className="local-confirmation" role="status">
+          <strong>Improcedencia declarada por el perito</strong>
+          <p>
+            Constancia y soporte disponibles para el RJV en esta solicitud. El
+            envío por correo requiere configurar el servicio institucional.
+          </p>
+          {item.operations
+            ?.filter((operation) => operation.type === "IMPROCEDENCIA")
+            .map((operation) => (
+              <p key={operation.id}>
+                {operation.reason} · {operation.description} · Soporte:{" "}
+                {operation.supportReference}
+              </p>
+            ))}
+        </div>
       )}
       {(item.operations || []).some(
         (operation) => operation.type === "PROBLEMA",
@@ -1700,7 +2666,11 @@ function ItemCard({
                 <i />
                 <div>
                   <strong>{STATUS_LABELS[event.to] || event.to}</strong>
-                  <small>{new Date(event.at).toLocaleString("es-CO")}</small>
+                  <small>
+                    {new Date(event.at).toLocaleString("es-CO", {
+                      timeZone: "America/Bogota",
+                    })}
+                  </small>
                   <p>{event.message}</p>
                 </div>
               </li>
@@ -1767,6 +2737,7 @@ function VictimsCorrectionAction({
 }) {
   const original = item.submittedRequestData;
   const [open, setOpen] = useState(false);
+  const correctionSubmission = useRef(crypto.randomUUID());
   const [step, setStep] = useState(0);
   const [correctionSummary, setCorrectionSummary] = useState("");
   const [form, setForm] = useState(() => correctionFormFrom(original));
@@ -1791,11 +2762,24 @@ function VictimsCorrectionAction({
   const lastObservation = item.pagObservations?.at(-1);
   const steps = ["Solicitud", "Personas y soportes", "Confirmación"];
 
+  function attemptClose() {
+    if (
+      (changes.length || correctionSummary.trim()) &&
+      !window.confirm(
+        "Hay cambios sin guardar. ¿Desea cerrar el asistente y perderlos?",
+      )
+    ) {
+      return;
+    }
+    setOpen(false);
+  }
+
   function submit() {
     run(
       item.id,
       () =>
         apiVictimsAction(token, item.id, "corregir-reenviar", {
+          submissionId: correctionSubmission.current,
           ...payload,
           correctionSummary,
         }),
@@ -1809,13 +2793,19 @@ function VictimsCorrectionAction({
         Abrir asistente de corrección
       </button>
       {open && (
-        <div className="correction-overlay" onMouseDown={() => setOpen(false)}>
+        <div className="correction-overlay" onMouseDown={attemptClose}>
           <section
             className="correction-dialog"
+            onChangeCapture={() => {
+              correctionSubmission.current = crypto.randomUUID();
+            }}
             role="dialog"
             aria-modal="true"
             aria-labelledby={`correction-title-${item.id}`}
             onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") attemptClose();
+            }}
           >
             <header>
               <div>
@@ -1826,7 +2816,7 @@ function VictimsCorrectionAction({
                   Corregir solicitud de Víctimas
                 </h2>
               </div>
-              <button type="button" onClick={() => setOpen(false)}>
+              <button type="button" onClick={attemptClose}>
                 Cerrar
               </button>
             </header>
@@ -1839,7 +2829,9 @@ function VictimsCorrectionAction({
               {lastObservation && (
                 <small>
                   Versión {lastObservation.version} ·{" "}
-                  {new Date(lastObservation.at).toLocaleString("es-CO")}
+                  {new Date(lastObservation.at).toLocaleString("es-CO", {
+                    timeZone: "America/Bogota",
+                  })}
                 </small>
               )}
             </div>
@@ -1871,7 +2863,7 @@ function VictimsCorrectionAction({
                   </select>
                 </label>
                 <label>
-                  Proceso
+                  Referencia del proceso judicial
                   <input
                     aria-label="Proceso corregido"
                     value={form.processReference}
@@ -1905,6 +2897,7 @@ function VictimsCorrectionAction({
                     onChange={update("facts")}
                   />
                 </label>
+                <VictimsCaseFields form={form} update={update} />
               </div>
             )}
 
@@ -1945,7 +2938,7 @@ function VictimsCorrectionAction({
                     </select>
                   </label>
                 </div>
-                <DocumentsEditor
+                <VictimsDocumentsEditor
                   documents={documents}
                   setDocuments={setDocuments}
                   catalog={catalogs.victimDocumentTypes}
@@ -2047,6 +3040,7 @@ function VictimsCorrectionAction({
 
 function correctionFormFrom(original = {}) {
   return {
+    ...victimsCaseForm(original.caseData || {}),
     externalId: original.externalId || "",
     law: original.law || "",
     processReference: original.caseData?.processReference || "",
@@ -2060,6 +3054,7 @@ function correctionFormFrom(original = {}) {
 
 function correctionPersonsFrom(persons = []) {
   return persons.map((person) => ({
+    ...victimsPersonForm(person),
     alias: person.alias || "",
     type: person.type || "DIRECTA",
     relationship: person.relationship || "",
@@ -2067,6 +3062,9 @@ function correctionPersonsFrom(persons = []) {
     phone: person.contact?.phone || "",
     email: person.contact?.email || "",
     preferredChannel: person.contact?.preferredChannel || "Correo",
+    address: person.contact?.address || "",
+    municipality: person.contact?.municipality || "",
+    department: person.contact?.department || "",
   }));
 }
 
@@ -2075,6 +3073,7 @@ function correctionPayload(form, persons, documents) {
     externalId: correctionText(form.externalId),
     law: correctionText(form.law),
     caseData: {
+      ...victimsCaseForm(form),
       processReference: correctionText(form.processReference),
       hearingApplies: form.hearingApplies,
       hearingDate: form.hearingApplies
@@ -2083,6 +3082,7 @@ function correctionPayload(form, persons, documents) {
       facts: correctionText(form.facts),
     },
     persons: persons.map((person) => ({
+      ...victimsPersonForm(person),
       alias: correctionText(person.alias),
       type: correctionText(person.type).toUpperCase(),
       relationship: correctionText(person.relationship) || null,
@@ -2091,6 +3091,11 @@ function correctionPayload(form, persons, documents) {
         phone: correctionText(person.phone) || null,
         email: correctionText(person.email) || null,
         preferredChannel: correctionText(person.preferredChannel) || null,
+        ...Object.fromEntries(
+          ["address", "municipality", "department"]
+            .filter((field) => correctionText(person[field]))
+            .map((field) => [field, correctionText(person[field])]),
+        ),
       },
     })),
     service: correctionText(form.service),
@@ -2098,6 +3103,11 @@ function correctionPayload(form, persons, documents) {
     documents: documents.map((document) => ({
       type: correctionText(document.type).toUpperCase(),
       reference: correctionText(document.reference),
+      ...(document.file
+        ? { file: document.file }
+        : document.attachment
+          ? { attachment: document.attachment }
+          : {}),
     })),
   };
 }
@@ -2146,6 +3156,19 @@ function correctionChangesForPresentation(original, next, catalogs) {
       next.caseData.hearingDate || null,
     ],
     ["caseData.facts", "Hechos", original.caseData?.facts, next.caseData.facts],
+    ...[
+      ["offenses", "Delito(s)"],
+      ["judicialAuthority", "Autoridad judicial"],
+      ["defendantName", "Procesado o postulado"],
+      ["requestedMeasures", "Pretensiones"],
+      ["hearingPlace", "Lugar de audiencia"],
+      ["sentenceDate", "Fecha de sentencia"],
+    ].map(([field, label]) => [
+      `caseData.${field}`,
+      label,
+      original.caseData?.[field],
+      next.caseData?.[field],
+    ]),
     ["persons", "Personas vinculadas", original.persons, next.persons],
     [
       "service",
@@ -2194,11 +3217,37 @@ function displayCorrectionValue(value) {
 }
 
 function ReviewActions({ item, token, busy, run }) {
+  const [verificationReference, setVerificationReference] = useState("");
+  const [confirmReviewed, setConfirmReviewed] = useState(false);
   const [observation, setObservation] = useState(
     "Aclarar la conclusión técnica del informe",
   );
   return (
     <div className="review-actions">
+      <fieldset>
+        <legend>Verificación antes de aprobar</legend>
+        <p>
+          Registre la referencia del formulario de verificación firmado o su
+          constancia institucional. La homologación del checklist oficial sigue
+          pendiente.
+        </p>
+        <label>
+          Constancia del formulario de verificación
+          <input
+            value={verificationReference}
+            onChange={(event) => setVerificationReference(event.target.value)}
+          />
+        </label>
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={confirmReviewed}
+            onChange={(event) => setConfirmReviewed(event.target.checked)}
+          />
+          Confirmo que revisé el informe y registré su constancia de
+          verificación
+        </label>
+      </fieldset>
       <label>
         Observación para devolución
         <input
@@ -2224,16 +3273,20 @@ function ReviewActions({ item, token, busy, run }) {
         </button>
         <button
           className="primary-demo"
-          disabled={busy}
+          disabled={busy || !confirmReviewed || !verificationReference.trim()}
           onClick={() =>
             run(
               item.id,
-              () => apiInvestigationAction(token, item.id, "aprobar-entrega"),
-              "Entrega aprobada y misión cerrada",
+              () =>
+                apiInvestigationAction(token, item.id, "aprobar-entrega", {
+                  verificationReference,
+                  confirmReviewed,
+                }),
+              "Entrega aprobada; pendiente acreditar el envío al defensor",
             )
           }
         >
-          Aprobar y cerrar
+          Aprobar informe verificado
         </button>
       </div>
     </div>
@@ -2243,7 +3296,11 @@ function ReviewActions({ item, token, busy, run }) {
 function ProcessStepper({ area, status }) {
   const process = processFor(area, status);
   return (
-    <ol className="process-stepper" aria-label="Estado del proceso">
+    <ol
+      className="process-stepper"
+      aria-label="Estado del proceso"
+      style={{ "--process-steps": process.steps.length }}
+    >
       {process.steps.map((step, index) => {
         const state =
           process.complete || index < process.current
@@ -2266,23 +3323,51 @@ function ProcessStepper({ area, status }) {
   );
 }
 
-function CaseDetail({ request, item, onClose }) {
+function CaseDetail({ request, item, profile, catalogs, onClose, token }) {
+  const [detailTab, setDetailTab] = useState("resumen");
   const closeButtonRef = useRef(null);
-  const approvedItem = item.approvedRequestData?.items?.find(
+  const approvedData = item.applicableRequestData || item.approvedRequestData;
+  const approvedItem = approvedData?.items?.find(
     (candidate) => candidate.id === item.id,
   );
+  const isVictimsExecutor =
+    request.area === "VICTIMAS" &&
+    profileHas(profile, CAPABILITIES.EXECUTE_VICTIMS, request.area);
+  const showCurrentVictimsInformation = canViewCurrentVictimsInformation(
+    profile,
+    request.area,
+  );
+  const primaryExternalId =
+    isVictimsExecutor && approvedData
+      ? approvedData.externalId
+      : request.externalId;
+  const primaryServiceLabel =
+    isVictimsExecutor && approvedItem
+      ? approvedItem.serviceLabel
+      : item.serviceLabel;
+  const primarySpecialtyLabels =
+    isVictimsExecutor && approvedItem
+      ? approvedItem.specialtyLabels
+      : item.specialtyLabels;
   const assignmentSummary = item.assignment
     ? `${item.assignment.selectedName || "Sin candidato"}. ${item.assignment.selectedReason}`
     : "El reparto automático se ejecutará al cumplirse el hito aplicable.";
   useEffect(() => {
     closeButtonRef.current?.focus();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, []);
 
   function keepFocusInside(event) {
     if (event.key !== "Tab") return;
-    const focusable = event.currentTarget.querySelectorAll(
-      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary",
-    );
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary",
+      ),
+    ).filter((element) => element.getClientRects().length > 0);
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -2297,7 +3382,7 @@ function CaseDetail({ request, item, onClose }) {
 
   return (
     <div className="detail-overlay" onMouseDown={onClose}>
-      <aside
+      <section
         className="case-detail"
         role="dialog"
         aria-modal="true"
@@ -2308,7 +3393,12 @@ function CaseDetail({ request, item, onClose }) {
         <header>
           <div>
             <small>Detalle de caso</small>
-            <h2 id="case-detail-title">{request.id}</h2>
+            <h2 id="case-detail-title">
+              {request.displayNumber || request.id}
+            </h2>
+            {request.displayNumber && (
+              <small>Referencia interna: {request.id}</small>
+            )}
           </div>
           <button
             ref={closeButtonRef}
@@ -2320,349 +3410,645 @@ function CaseDetail({ request, item, onClose }) {
           </button>
         </header>
 
-        <dl className="detail-facts">
-          <div>
-            <dt>Identificador externo</dt>
-            <dd>{request.externalId}</dd>
-          </div>
-          <div>
-            <dt>Área y servicio</dt>
-            <dd>
-              {AREA_META[request.area].label} · {item.serviceLabel}
-            </dd>
-          </div>
-          <div>
-            <dt>Solicitante</dt>
-            <dd>{request.requesterName}</dd>
-          </div>
-          <div>
-            <dt>Responsable asignado</dt>
-            <dd>{item.assigneeName || "Pendiente de reparto"}</dd>
-          </div>
-          <div>
-            <dt>Estado del trámite</dt>
-            <dd>{STATUS_LABELS[item.status] || item.status}</dd>
-          </div>
-          {item.tracking?.configured && (
-            <>
-              <div>
-                <dt>Días restantes</dt>
-                <dd>{item.tracking.daysRemaining}</dd>
-              </div>
-              <div>
-                <dt>Semáforo</dt>
-                <dd>{item.tracking.semaphore}</dd>
-              </div>
-              <div>
-                <dt>Oportunidad</dt>
-                <dd>{item.tracking.opportunity}</dd>
-              </div>
-            </>
-          )}
-          <div>
-            <dt>Especialidad o disciplina elegible</dt>
-            <dd>{item.specialtyLabels?.join(", ") || "Sin dato"}</dd>
-          </div>
-          {request.area === "VICTIMAS" && item.submissionVersion && (
+        <nav className="detail-tabs" aria-label="Secciones del encargo">
+          <button
+            type="button"
+            aria-pressed={detailTab === "resumen"}
+            onClick={() => setDetailTab("resumen")}
+          >
+            Resumen
+          </button>
+          <button
+            type="button"
+            aria-pressed={detailTab === "documentos"}
+            onClick={() => setDetailTab("documentos")}
+          >
+            Documentos
+          </button>
+        </nav>
+        {detailTab === "documentos" && (
+          <WorkspaceDocuments
+            token={token}
+            area={request.area}
+            itemId={item.id}
+            intake={
+              (isVictimsExecutor
+                ? approvedData?.documents
+                : request.documents) || []
+            }
+            version={
+              isVictimsExecutor
+                ? item.approvedSubmissionVersion
+                : request.versions?.at(-1)?.version
+            }
+          >
+            <ProductFiles item={item} token={token} area={request.area} />
+          </WorkspaceDocuments>
+        )}
+        <div hidden={detailTab !== "resumen"}>
+          <dl className="detail-facts">
+            {request.area === "INVESTIGACION" && (
+              <>
+                <div>
+                  <dt>Fecha de ingreso</dt>
+                  <dd>
+                    {new Date(request.createdAt).toLocaleString("es-CO", {
+                      timeZone: "America/Bogota",
+                    })}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Vencimiento</dt>
+                  <dd>{item.dueDate || "Pendiente de política aprobada"}</dd>
+                </div>
+                <div>
+                  <dt>Constancia de verificación PAG</dt>
+                  <dd>{item.verification?.reference || "Sin registrar"}</dd>
+                </div>
+                <div>
+                  <dt>Envío al defensor</dt>
+                  <dd>
+                    {item.dispatch?.evidence || "Sin constancia de envío"}
+                  </dd>
+                </div>
+              </>
+            )}
             <div>
-              <dt>Versión sometida por este ítem</dt>
-              <dd>{item.submissionVersion}</dd>
+              <dt>Identificador externo</dt>
+              <dd>{primaryExternalId}</dd>
             </div>
-          )}
-          {request.area === "VICTIMAS" && item.approvedSubmissionVersion && (
             <div>
-              <dt>Versión aprobada y usada</dt>
-              <dd>{item.approvedSubmissionVersion}</dd>
+              <dt>Área y servicio</dt>
+              <dd>
+                {AREA_META[request.area].label} · {primaryServiceLabel}
+              </dd>
             </div>
-          )}
-        </dl>
-
-        {item.tracking?.configured && (
-          <p className="validation-pending">{item.tracking.label}</p>
-        )}
-
-        {request.area === "VICTIMAS" && (
-          <section className="detail-section">
-            <h3>Información vigente de la solicitud</h3>
-            <dl className="detail-facts compact-detail-facts">
+            <div>
+              <dt>Solicitante</dt>
+              <dd>{request.requesterName}</dd>
+            </div>
+            <div>
+              <dt>Responsable asignado</dt>
+              <dd>{item.assigneeName || "Pendiente de reparto"}</dd>
+            </div>
+            <div>
+              <dt>Estado del trámite</dt>
+              <dd>{STATUS_LABELS[item.status] || item.status}</dd>
+            </div>
+            {item.tracking?.configured && (
+              <>
+                <div>
+                  <dt>Días restantes</dt>
+                  <dd>{item.tracking.daysRemaining}</dd>
+                </div>
+                <div>
+                  <dt>Semáforo</dt>
+                  <dd>{item.tracking.semaphore}</dd>
+                </div>
+                <div>
+                  <dt>Oportunidad</dt>
+                  <dd>{item.tracking.opportunity}</dd>
+                </div>
+              </>
+            )}
+            <div>
+              <dt>Especialidad o disciplina elegible</dt>
+              <dd>{primarySpecialtyLabels?.join(", ") || "Sin dato"}</dd>
+            </div>
+            {request.area === "VICTIMAS" && item.submissionVersion && (
               <div>
-                <dt>Proceso</dt>
-                <dd>{request.caseData?.processReference || "Sin dato"}</dd>
+                <dt>Versión sometida por este ítem</dt>
+                <dd>{item.submissionVersion}</dd>
               </div>
+            )}
+            {request.area === "VICTIMAS" && item.approvedSubmissionVersion && (
               <div>
-                <dt>Audiencia</dt>
-                <dd>
-                  {request.caseData?.hearingApplies
-                    ? request.caseData.hearingDate || "Fecha pendiente"
-                    : "No aplica"}
-                </dd>
-              </div>
-              <div>
-                <dt>Hechos</dt>
-                <dd>{request.caseData?.facts || "Sin dato"}</dd>
-              </div>
-              <div>
-                <dt>Personas</dt>
-                <dd>{request.persons?.length || 0}</dd>
-              </div>
-            </dl>
-            <ul className="document-list">
-              {(request.persons || []).map((person, index) => (
-                <li key={`${person.alias}-${index}`}>
-                  <strong>{person.alias}</strong>
-                  <span>
-                    {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
-                    {person.relationship || "Sin parentesco"} ·{" "}
-                    {person.familyGroup}
-                  </span>
-                  <small>
-                    Contacto: {person.contact?.phone || person.contact?.email}
-                  </small>
-                </li>
-              ))}
-              {(request.documents || []).map((document, index) => (
-                <li key={`${document.type}-${document.reference}-${index}`}>
-                  <strong>{document.type}</strong>
-                  <span>{document.reference}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {request.area === "VICTIMAS" && item.pagObservations?.length > 0 && (
-          <section className="detail-section">
-            <h3>Observaciones del PAG</h3>
-            <ol className="detail-timeline">
-              {item.pagObservations
-                .slice()
-                .reverse()
-                .map((observation, index) => (
-                  <li key={`${observation.version}-${observation.at}-${index}`}>
-                    <strong>Versión {observation.version} devuelta</strong>
-                    <small>
-                      {new Date(observation.at).toLocaleString("es-CO")}
-                    </small>
-                    <p>{observation.observation}</p>
-                  </li>
-                ))}
-            </ol>
-          </section>
-        )}
-
-        {request.area === "VICTIMAS" && item.correctionHistory?.length > 0 && (
-          <section className="detail-section">
-            <h3>Historial de correcciones y diferencias</h3>
-            {item.correctionHistory
-              .slice()
-              .reverse()
-              .map((correction) => (
-                <article
-                  className="correction-history-entry"
-                  key={correction.version}
-                >
-                  <strong>
-                    Versión {correction.version} desde versión{" "}
-                    {correction.baseVersion}
-                  </strong>
-                  <small>
-                    {new Date(correction.submittedAt).toLocaleString("es-CO")}
-                  </small>
-                  <p>{correction.correctionSummary}</p>
-                  <div className="correction-differences">
-                    {correction.changes.map((change) => (
-                      <article key={change.field}>
-                        <strong>{change.label}</strong>
-                        <div>
-                          <span>
-                            <small>Valor anterior</small>
-                            {displayCorrectionValue(change.previous)}
-                          </span>
-                          <span>
-                            <small>Valor nuevo</small>
-                            {displayCorrectionValue(change.next)}
-                          </span>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </article>
-              ))}
-          </section>
-        )}
-
-        {request.area === "VICTIMAS" && item.approvedRequestData && (
-          <section className="detail-section approved-data">
-            <h3>Datos aprobados utilizados para el reparto</h3>
-            <dl className="detail-facts compact-detail-facts">
-              <div>
-                <dt>Versión aprobada</dt>
+                <dt>Versión aprobada y usada</dt>
                 <dd>{item.approvedSubmissionVersion}</dd>
               </div>
-              <div>
-                <dt>Identificador</dt>
-                <dd>{item.approvedRequestData.externalId}</dd>
-              </div>
-              <div>
-                <dt>Proceso</dt>
-                <dd>
-                  {item.approvedRequestData.caseData?.processReference ||
-                    "Sin dato"}
-                </dd>
-              </div>
-              <div>
-                <dt>Audiencia</dt>
-                <dd>
-                  {item.approvedRequestData.caseData?.hearingApplies
-                    ? item.approvedRequestData.caseData.hearingDate ||
-                      "Fecha pendiente"
-                    : "No aplica"}
-                </dd>
-              </div>
-              <div>
-                <dt>Hechos</dt>
-                <dd>
-                  {item.approvedRequestData.caseData?.facts || "Sin dato"}
-                </dd>
-              </div>
-              <div>
-                <dt>Personas</dt>
-                <dd>{item.approvedRequestData.persons?.length || 0}</dd>
-              </div>
-              <div>
-                <dt>Servicio</dt>
-                <dd>{approvedItem?.service || "Sin dato"}</dd>
-              </div>
-              <div>
-                <dt>Cobertura</dt>
-                <dd>{approvedItem?.region || "Sin dato"}</dd>
-              </div>
-              <div>
-                <dt>Ley o programa</dt>
-                <dd>{approvedItem?.law || "Sin dato"}</dd>
-              </div>
-              <div>
-                <dt>Documentos</dt>
-                <dd>{item.approvedRequestData.documents?.length || 0}</dd>
-              </div>
-            </dl>
-            <ul className="document-list">
-              {(item.approvedRequestData.persons || []).map((person, index) => (
-                <li key={`approved-person-${person.alias}-${index}`}>
-                  <strong>{person.alias}</strong>
-                  <span>
-                    {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
-                    {person.relationship || "Sin parentesco"} ·{" "}
-                    {person.familyGroup}
-                  </span>
-                  <small>
-                    Contacto: {person.contact?.phone || person.contact?.email}
-                  </small>
-                </li>
-              ))}
-              {(item.approvedRequestData.documents || []).map(
-                (document, index) => (
+            )}
+          </dl>
+
+          {item.tracking?.configured && (
+            <p className="validation-pending">{item.tracking.label}</p>
+          )}
+
+          {request.area === "VICTIMAS" && showCurrentVictimsInformation && (
+            <section className="detail-section">
+              <h3>Información vigente de la solicitud</h3>
+              <dl className="detail-facts compact-detail-facts">
+                <div>
+                  <dt>Proceso</dt>
+                  <dd>{request.caseData?.processReference || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Audiencia</dt>
+                  <dd>
+                    {request.caseData?.hearingApplies
+                      ? request.caseData.hearingDate || "Fecha pendiente"
+                      : "No aplica"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Hechos</dt>
+                  <dd>{request.caseData?.facts || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Personas</dt>
+                  <dd>{request.persons?.length || 0}</dd>
+                </div>
+              </dl>
+              <ul className="document-list">
+                {(request.persons || []).map((person, index) => (
+                  <li key={`${person.alias}-${index}`}>
+                    <strong>{person.alias}</strong>
+                    <span>
+                      {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
+                      {person.relationship || "Sin parentesco"} ·{" "}
+                      {person.familyGroup}
+                    </span>
+                    <small>
+                      Contacto: {person.contact?.phone || person.contact?.email}
+                    </small>
+                  </li>
+                ))}
+                {(request.documents || []).map((document, index) => (
+                  <li key={`${document.type}-${document.reference}-${index}`}>
+                    <strong>
+                      {catalogEntryLabel(
+                        catalogs.victimDocumentTypes,
+                        document.type,
+                      )}
+                    </strong>
+                    <span>{document.reference}</span>
+                    <IntakeDocumentLink
+                      document={document}
+                      token={token}
+                      area={request.area}
+                      itemId={item.id}
+                      index={index}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {request.area === "VICTIMAS" &&
+            showCurrentVictimsInformation &&
+            item.pagObservations?.length > 0 && (
+              <section className="detail-section">
+                <h3>Observaciones del PAG</h3>
+                <ol className="detail-timeline">
+                  {item.pagObservations
+                    .slice()
+                    .reverse()
+                    .map((observation, index) => (
+                      <li
+                        key={`${observation.version}-${observation.at}-${index}`}
+                      >
+                        <strong>Versión {observation.version} devuelta</strong>
+                        <small>
+                          {new Date(observation.at).toLocaleString("es-CO", {
+                            timeZone: "America/Bogota",
+                          })}
+                        </small>
+                        <p>{observation.observation}</p>
+                      </li>
+                    ))}
+                </ol>
+              </section>
+            )}
+
+          {request.area === "VICTIMAS" &&
+            showCurrentVictimsInformation &&
+            item.correctionHistory?.length > 0 && (
+              <section className="detail-section">
+                <h3>Historial de correcciones y diferencias</h3>
+                {item.correctionHistory
+                  .slice()
+                  .reverse()
+                  .map((correction) => (
+                    <article
+                      className="correction-history-entry"
+                      key={correction.version}
+                    >
+                      <strong>
+                        Versión {correction.version} desde versión{" "}
+                        {correction.baseVersion}
+                      </strong>
+                      <small>
+                        {new Date(correction.submittedAt).toLocaleString(
+                          "es-CO",
+                          { timeZone: "America/Bogota" },
+                        )}
+                      </small>
+                      <p>{correction.correctionSummary}</p>
+                      <div className="correction-differences">
+                        {correction.changes.map((change) => (
+                          <article key={change.field}>
+                            <strong>{change.label}</strong>
+                            <div>
+                              <span>
+                                <small>Valor anterior</small>
+                                {displayCorrectionValue(change.previous)}
+                              </span>
+                              <span>
+                                <small>Valor nuevo</small>
+                                {displayCorrectionValue(change.next)}
+                              </span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+              </section>
+            )}
+
+          {request.area === "VICTIMAS" && approvedData && (
+            <section className="detail-section approved-data">
+              <h3>Datos aprobados aplicables a este encargo</h3>
+              <dl className="detail-facts compact-detail-facts">
+                <div>
+                  <dt>Versión aprobada</dt>
+                  <dd>{item.approvedSubmissionVersion}</dd>
+                </div>
+                <div>
+                  <dt>Identificador</dt>
+                  <dd>{approvedData.externalId}</dd>
+                </div>
+                <div>
+                  <dt>Proceso</dt>
+                  <dd>
+                    {approvedData.caseData?.processReference || "Sin dato"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Audiencia</dt>
+                  <dd>
+                    {approvedData.caseData?.hearingApplies
+                      ? approvedData.caseData.hearingDate || "Fecha pendiente"
+                      : "No aplica"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Hechos</dt>
+                  <dd>{approvedData.caseData?.facts || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Personas</dt>
+                  <dd>{approvedData.persons?.length || 0}</dd>
+                </div>
+                <div>
+                  <dt>Servicio</dt>
+                  <dd>{approvedItem?.serviceLabel || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Especialidad o disciplina</dt>
+                  <dd>
+                    {approvedItem?.specialtyLabels?.join(", ") || "Sin dato"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Cobertura</dt>
+                  <dd>{approvedItem?.regionLabel || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Ley o programa</dt>
+                  <dd>{approvedItem?.lawLabel || "Sin dato"}</dd>
+                </div>
+                <div>
+                  <dt>Documentos</dt>
+                  <dd>{approvedData.documents?.length || 0}</dd>
+                </div>
+              </dl>
+              <ul className="document-list">
+                {(approvedData.persons || []).map((person, index) => (
+                  <li key={`approved-person-${person.alias}-${index}`}>
+                    <strong>{person.alias}</strong>
+                    <span>
+                      {person.type === "DIRECTA" ? "Directa" : "Indirecta"} ·{" "}
+                      {person.relationship || "Sin parentesco"} ·{" "}
+                      {person.familyGroup}
+                    </span>
+                    <small>
+                      Contacto: {person.contact?.phone || person.contact?.email}
+                    </small>
+                  </li>
+                ))}
+                {(approvedData.documents || []).map((document, index) => (
                   <li
                     key={`approved-document-${document.type}-${document.reference}-${index}`}
                   >
-                    <strong>{document.type}</strong>
+                    <strong>{document.typeLabel || document.type}</strong>
                     <span>{document.reference}</span>
+                    <IntakeDocumentLink
+                      document={document}
+                      token={token}
+                      area={request.area}
+                      itemId={item.id}
+                      index={index}
+                      version={item.approvedSubmissionVersion}
+                    />
                   </li>
-                ),
-              )}
-            </ul>
-          </section>
-        )}
-
-        <section className="detail-section">
-          <h3>Explicación resumida de asignación</h3>
-          <p>{assignmentSummary}</p>
-        </section>
-
-        <section className="detail-section">
-          <h3>Productos y versiones</h3>
-          {item.documents?.length ? (
-            <ul className="document-list">
-              {item.documents.map((document) => (
-                <li key={document.id}>
-                  <strong>{document.type}</strong>
-                  <span>
-                    {document.reference} · Versión {document.version} ·{" "}
-                    {document.status}
-                  </span>
-                  <small>
-                    Autor: {document.author || "No disponible"}
-                    {document.createdAt
-                      ? ` · ${new Date(document.createdAt).toLocaleString("es-CO")}`
-                      : ""}
-                  </small>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>Sin referencias documentales registradas en esta etapa.</p>
+                ))}
+              </ul>
+            </section>
           )}
-        </section>
 
-        {request.versions?.length > 0 && (
           <section className="detail-section">
-            <h3>Versiones de la solicitud</h3>
+            <h3>Explicación resumida de asignación</h3>
+            <p>{assignmentSummary}</p>
+          </section>
+
+          <section className="detail-section">
+            <h3>Productos y versiones</h3>
+            <ProductFiles item={item} token={token} area={request.area} />
+            {item.documents?.length ? (
+              <ul className="document-list">
+                {item.documents.map((document) => (
+                  <li key={document.id}>
+                    <strong>{document.type}</strong>
+                    <span>
+                      {document.reserved
+                        ? "Contenido reservado"
+                        : document.reference}{" "}
+                      · Versión {document.version} · {document.status}
+                    </span>
+                    <small>
+                      Autor: {document.author || "No disponible"}
+                      {document.createdAt
+                        ? ` · ${new Date(document.createdAt).toLocaleString("es-CO", { timeZone: "America/Bogota" })}`
+                        : ""}
+                    </small>
+                    {document.formatMetadata && (
+                      <small>
+                        SD-P06-F171 · Informe{" "}
+                        {document.formatMetadata.reportNumber} · Entrega{" "}
+                        {document.formatMetadata.deliveryDate}
+                        {document.formatMetadata.assessmentDate
+                          ? ` · Valoración ${document.formatMetadata.assessmentDate}`
+                          : ""}
+                      </small>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Sin referencias documentales registradas en esta etapa.</p>
+            )}
+          </section>
+
+          {request.area === "VICTIMAS" && (
+            <VictimsFormatSummary
+              data={isVictimsExecutor ? approvedData : request}
+            />
+          )}
+
+          {request.area === "INVESTIGACION" &&
+            (request.documents || []).length > 0 && (
+              <section className="detail-section">
+                <h3>Documentos de la solicitud</h3>
+                <ul className="detail-timeline">
+                  {request.documents.map((document, index) => (
+                    <li key={`${document.type}-${index}`}>
+                      <strong>{document.type}</strong>
+                      <span>{document.reference}</span>
+                      <IntakeDocumentLink
+                        document={document}
+                        token={token}
+                        area={request.area}
+                        itemId={item.id}
+                        index={index}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          {request.versions?.length > 0 &&
+            (request.area !== "VICTIMAS" || showCurrentVictimsInformation) && (
+              <section className="detail-section">
+                <h3>Versiones de la solicitud</h3>
+                <ol className="detail-timeline">
+                  {request.versions
+                    .slice()
+                    .reverse()
+                    .map((version) => (
+                      <li key={version.version}>
+                        <strong>Versión {version.version}</strong>
+                        <small>
+                          {new Date(version.submittedAt).toLocaleString(
+                            "es-CO",
+                            {
+                              timeZone: "America/Bogota",
+                            },
+                          )}
+                        </small>
+                        <p>
+                          {version.correctionSummary || "Radicación inicial"}
+                          {(version.reviews || [])
+                            .map(
+                              (review) =>
+                                ` · Ítem ${review.itemId}: ${review.decision}${review.observation ? ` (${review.observation})` : ""}`,
+                            )
+                            .join("")}
+                        </p>
+                      </li>
+                    ))}
+                </ol>
+              </section>
+            )}
+
+          <section className="detail-section">
+            <h3>Historial cronológico</h3>
             <ol className="detail-timeline">
-              {request.versions
+              {item.timeline
                 .slice()
                 .reverse()
-                .map((version) => (
-                  <li key={version.version}>
-                    <strong>Versión {version.version}</strong>
+                .map((event, index) => (
+                  <li key={`${event.at}-${index}`}>
+                    <strong>{STATUS_LABELS[event.to] || event.to}</strong>
                     <small>
-                      {new Date(version.submittedAt).toLocaleString("es-CO")}
+                      {new Date(event.at).toLocaleString("es-CO", {
+                        timeZone: "America/Bogota",
+                      })}
                     </small>
-                    <p>
-                      {version.correctionSummary || "Radicación inicial"}
-                      {(version.reviews || [])
-                        .map(
-                          (review) =>
-                            ` · Ítem ${review.itemId}: ${review.decision}${review.observation ? ` (${review.observation})` : ""}`,
-                        )
-                        .join("")}
-                    </p>
+                    <p>{event.message}</p>
                   </li>
                 ))}
             </ol>
           </section>
-        )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
-        <section className="detail-section">
-          <h3>Historial cronológico</h3>
-          <ol className="detail-timeline">
-            {item.timeline
-              .slice()
-              .reverse()
-              .map((event, index) => (
-                <li key={`${event.at}-${index}`}>
-                  <strong>{STATUS_LABELS[event.to] || event.to}</strong>
-                  <small>{new Date(event.at).toLocaleString("es-CO")}</small>
-                  <p>{event.message}</p>
-                </li>
-              ))}
-          </ol>
-        </section>
-      </aside>
+function ActivityHistory({ item }) {
+  if (!item.activities?.length) return null;
+  return (
+    <details className="activity-history" open>
+      <summary>Actuaciones registradas · {item.activities.length}</summary>
+      <ol>
+        {item.activities
+          .slice()
+          .reverse()
+          .map((activity, index) => (
+            <li key={activity.at + "-" + index}>
+              <small>
+                {new Date(activity.at).toLocaleString("es-CO", {
+                  timeZone: "America/Bogota",
+                })}
+              </small>
+              <p>{activity.observation}</p>
+            </li>
+          ))}
+      </ol>
+    </details>
+  );
+}
+
+function ProductFiles({ item, token, area }) {
+  const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const files = (item.products || []).filter((product) => product.attachment);
+  if (area === "VICTIMAS" && item.products?.some((product) => product.reserved))
+    return (
+      <p>
+        F171 reservado. Puede consultar su estado, fecha, autor y versión. El
+        archivo está disponible para el RJV titular y el perito asignado.
+      </p>
+    );
+  if (!files.length) return null;
+  async function download(product) {
+    setError("");
+    setDownloading(true);
+    try {
+      const blob = await apiDownloadProduct(token, area, item.id, product.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = product.attachment.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+  return (
+    <div className="product-files">
+      {files
+        .slice()
+        .reverse()
+        .map((product) => (
+          <div key={product.id}>
+            <strong>
+              Versión {product.version} · {product.status}
+            </strong>
+            {product.attachment.kind === "IRIS" ? (
+              <p>
+                Radicado IRIS: {product.attachment.reference} · Referencia sin
+                verificar; integración pendiente de TICs.
+              </p>
+            ) : product.attachment.kind === "SHAREPOINT" ? (
+              <a
+                href={product.attachment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Abrir informe en SharePoint
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled={downloading}
+                onClick={() => download(product)}
+              >
+                Descargar PDF · {product.attachment.name}
+              </button>
+            )}
+          </div>
+        ))}
+      {error && <p role="alert">{error}</p>}
     </div>
   );
 }
 
 function ExecutorActions({ item, token, busy, run, area }) {
-  const [observation, setObservation] = useState(
-    "Actuación técnica registrada",
+  const filePolicy = useFilePolicy();
+  const [f171, setF171] = useState({
+    reportNumber: `F171-${item.id}`,
+    assessmentDate: "",
+  });
+  const [observation, setObservation] = useState("");
+  const [reference, setReference] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState("REFERENCE");
+  const [sharepointUrl, setSharepointUrl] = useState("");
+  const [file, setFile] = useState(null);
+  const [fileError, setFileError] = useState("");
+  const [reading, setReading] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [activitySubmission, setActivitySubmission] = useState(() =>
+    crypto.randomUUID(),
   );
-  const [reference, setReference] = useState(
-    area === "VICTIMAS" ? "F171-2026-0004" : "INF-2026-0004",
+  const [deliverySubmission, setDeliverySubmission] = useState(() =>
+    crypto.randomUUID(),
   );
   const action =
     area === "VICTIMAS" ? apiVictimsAction : apiInvestigationAction;
+  const complete =
+    deliveryMode === "PDF"
+      ? !!file
+      : deliveryMode === "SHAREPOINT"
+        ? !!sharepointUrl.trim()
+        : !!reference.trim();
+  async function chooseFile(selected) {
+    setFile(null);
+    setFileError("");
+    setDeliverySubmission(crypto.randomUUID());
+    if (!selected) return;
+    if (
+      !/\.pdf$/i.test(selected.name) ||
+      selected.size > filePolicy.maxFileBytes ||
+      !selected.size
+    ) {
+      setFileError(
+        `Seleccione un PDF con contenido de hasta ${megabytes(filePolicy.maxFileBytes)}`,
+      );
+      return;
+    }
+    setReading(true);
+    try {
+      const contentBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = () => reject(new Error("No fue posible leer el PDF"));
+        reader.readAsDataURL(selected);
+      });
+      setFile({
+        name: selected.name,
+        mimeType: "application/pdf",
+        contentBase64,
+      });
+    } catch (failure) {
+      setFileError(failure.message);
+    } finally {
+      setReading(false);
+    }
+  }
   return (
     <div className="executor-actions">
+      {feedback && (
+        <p className="local-confirmation" role="status">
+          {feedback}
+        </p>
+      )}
       {item.status === "ASIGNADA" && (
         <button
           disabled={busy}
@@ -2671,6 +4057,10 @@ function ExecutorActions({ item, token, busy, run, area }) {
               item.id,
               () => action(token, item.id, "iniciar"),
               "Encargo iniciado",
+              () =>
+                setFeedback(
+                  "Encargo iniciado. Registre las actuaciones y el producto de su trabajo.",
+                ),
             )
           }
         >
@@ -2679,41 +4069,178 @@ function ExecutorActions({ item, token, busy, run, area }) {
       )}
       {item.status === "EN_EJECUCION" && (
         <>
-          <div className="inline-action">
-            <input
-              aria-label="Descripción de la actuación"
-              value={observation}
-              onChange={(event) => setObservation(event.target.value)}
-            />
+          <div className="execution-panel">
+            <label>
+              Descripción de la actuación
+              <textarea
+                aria-label="Descripción de la actuación"
+                rows={5}
+                maxLength={10000}
+                placeholder="Describa la actividad realizada, sus hallazgos y las tareas pendientes."
+                value={observation}
+                onChange={(event) => {
+                  setObservation(event.target.value);
+                  setActivitySubmission(crypto.randomUUID());
+                }}
+              />
+            </label>
+            <small>
+              {observation.length.toLocaleString("es-CO")} / 10.000 caracteres
+            </small>
             <button
-              disabled={busy}
+              disabled={busy || !observation.trim()}
               onClick={() =>
                 run(
                   item.id,
                   () =>
                     action(token, item.id, "avance", {
                       observation,
+                      submissionId: activitySubmission,
                     }),
                   "Actuación registrada correctamente",
+                  () => {
+                    setObservation("");
+                    setActivitySubmission(crypto.randomUUID());
+                    setFeedback(
+                      "Actuación registrada. Puede verla en el historial de esta misión.",
+                    );
+                  },
                 )
               }
             >
               Registrar actuación
             </button>
           </div>
-          <div className="inline-action">
-            <input
-              aria-label={
-                area === "VICTIMAS"
+          <div className="execution-panel">
+            {area === "VICTIMAS" && (
+              <div className="wizard-navigation">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveryMode("PDF");
+                    setDeliverySubmission(crypto.randomUUID());
+                  }}
+                >
+                  Cargar archivo F171
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveryMode("SHAREPOINT");
+                    setDeliverySubmission(crypto.randomUUID());
+                  }}
+                >
+                  Ingresar URL de SharePoint
+                </button>
+              </div>
+            )}
+            <label>
+              Forma de entrega
+              <select
+                aria-label="Forma de entrega"
+                value={deliveryMode}
+                onChange={(event) => {
+                  setDeliveryMode(event.target.value);
+                  setDeliverySubmission(crypto.randomUUID());
+                }}
+              >
+                <option value="REFERENCE">Referencia del documento</option>
+                {area === "INVESTIGACION" && (
+                  <option value="IRIS">
+                    Radicado o expediente IRIS · referencia
+                  </option>
+                )}
+                <option value="SHAREPOINT">Enlace de SharePoint</option>
+                <option value="PDF">Cargar PDF</option>
+              </select>
+            </label>
+            {area === "VICTIMAS" && (
+              <F171Guidance
+                item={item}
+                metadata={f171}
+                setMetadata={(updater) => {
+                  setF171(updater);
+                  setDeliverySubmission(crypto.randomUUID());
+                }}
+              />
+            )}
+            {deliveryMode === "IRIS" && (
+              <label>
+                Radicado o expediente IRIS
+                <input
+                  aria-label="Radicado o expediente IRIS"
+                  value={reference}
+                  onChange={(event) => {
+                    setReference(event.target.value);
+                    setDeliverySubmission(crypto.randomUUID());
+                  }}
+                />
+                <small>
+                  Se conserva una referencia sin conexión ni validación ante
+                  IRIS. No reemplaza el expediente institucional.
+                </small>
+              </label>
+            )}
+            {deliveryMode === "REFERENCE" && (
+              <label>
+                {area === "VICTIMAS"
                   ? "Referencia del F-171"
-                  : "Referencia del informe"
-              }
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-            />
+                  : "Referencia del informe"}
+                <input
+                  aria-label={
+                    area === "VICTIMAS"
+                      ? "Referencia del F-171"
+                      : "Referencia del informe"
+                  }
+                  value={reference}
+                  placeholder={
+                    area === "VICTIMAS" ? "F171-2026-0106" : "INF-2026-0106"
+                  }
+                  onChange={(event) => {
+                    setReference(event.target.value);
+                    setDeliverySubmission(crypto.randomUUID());
+                  }}
+                />
+              </label>
+            )}
+            {deliveryMode === "SHAREPOINT" && (
+              <label>
+                URL de SharePoint
+                <input
+                  type="url"
+                  aria-label="URL de SharePoint"
+                  value={sharepointUrl}
+                  placeholder="https://su-organizacion.sharepoint.com/..."
+                  onChange={(event) => {
+                    setSharepointUrl(event.target.value);
+                    setDeliverySubmission(crypto.randomUUID());
+                  }}
+                />
+                <small>
+                  Se guarda el enlace. El acceso al archivo depende de sus
+                  permisos en SharePoint.
+                </small>
+              </label>
+            )}
+            {deliveryMode === "PDF" && (
+              <>
+                <label>
+                  Documento PDF · máximo {megabytes(filePolicy.maxFileBytes)}
+                  <input
+                    aria-label="Documento PDF"
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    disabled={busy || reading}
+                    onChange={(event) => chooseFile(event.target.files?.[0])}
+                  />
+                </label>
+                {file && <small>Listo para entregar: {file.name}</small>}
+                {fileError && <p role="alert">{fileError}</p>}
+              </>
+            )}
             <button
               className="primary-demo"
-              disabled={busy}
+              disabled={busy || reading || !complete}
               onClick={() =>
                 run(
                   item.id,
@@ -2722,13 +4249,25 @@ function ExecutorActions({ item, token, busy, run, area }) {
                       token,
                       item.id,
                       area === "VICTIMAS" ? "finalizar" : "entregar",
-                      area === "VICTIMAS"
-                        ? { f171Reference: reference }
-                        : { reference },
+                      {
+                        ...(area === "VICTIMAS" ? { f171 } : {}),
+                        deliveryMode,
+                        reference,
+                        f171Reference: reference,
+                        sharepointUrl,
+                        file,
+                        submissionId: deliverySubmission,
+                      },
                     ),
                   area === "VICTIMAS"
                     ? "F-171 registrado; servicio pericial cerrado"
                     : "Informe entregado; pendiente aprobación PAG",
+                  () =>
+                    setFeedback(
+                      area === "VICTIMAS"
+                        ? "F-171 registrado. El servicio quedó cerrado."
+                        : "Informe entregado. Está pendiente de revisión del PAG.",
+                    ),
                 )
               }
             >
@@ -2738,6 +4277,75 @@ function ExecutorActions({ item, token, busy, run, area }) {
         </>
       )}
     </div>
+  );
+}
+
+function ImprocedenceAction({ item, token, busy, run }) {
+  const [form, setForm] = useState({
+    reason: "",
+    description: "",
+    supportReference: "",
+    submissionId: crypto.randomUUID(),
+  });
+  const update = (field) => (event) =>
+    setForm((current) => ({
+      ...current,
+      [field]: event.target.value,
+      submissionId: crypto.randomUUID(),
+    }));
+  return (
+    <details className="problem-report">
+      <summary>Declarar improcedencia</summary>
+      <div className="review-actions">
+        <p>
+          El perito deja una constancia motivada. El ítem finaliza como
+          improcedente y el RJV puede consultar el soporte en su bandeja.
+        </p>
+        <label>
+          Causal de improcedencia
+          <input value={form.reason} onChange={update("reason")} />
+        </label>
+        <label>
+          Constancia motivada
+          <textarea
+            maxLength={10000}
+            value={form.description}
+            onChange={update("description")}
+          />
+        </label>
+        <label>
+          Referencia del soporte de improcedencia
+          <input
+            value={form.supportReference}
+            onChange={update("supportReference")}
+          />
+        </label>
+        <button
+          disabled={
+            busy ||
+            !form.reason.trim() ||
+            !form.description.trim() ||
+            !form.supportReference.trim()
+          }
+          onClick={() =>
+            run(
+              item.id,
+              () =>
+                apiRegisterOperation(
+                  token,
+                  "VICTIMAS",
+                  item.id,
+                  "IMPROCEDENCIA",
+                  form,
+                ),
+              "Improcedencia registrada y disponible para el RJV",
+            )
+          }
+        >
+          Registrar improcedencia
+        </button>
+      </div>
+    </details>
   );
 }
 
@@ -2835,13 +4443,26 @@ function AssignmentExplanation({ assignment }) {
 }
 
 function trayForStatus(status) {
+  if (status === "APROBADO_PENDIENTE_ENVIO") return "EN_EJECUCION";
   if (status === "EN_EJECUCION") return "EN_EJECUCION";
   if (status === "INFORME_ENTREGADO") return "POR_REVISAR";
   if (status === "CERRADA") return "CERRADOS";
+  if (status === "IMPROCEDENTE") return "CERRADOS";
   return "PENDIENTES";
 }
 
 function processFor(area, status) {
+  if (area === "VICTIMAS" && status === "IMPROCEDENTE")
+    return {
+      steps: [
+        "Solicitud",
+        "Aprobación previa",
+        "Reparto",
+        "Constancia de improcedencia",
+      ],
+      current: 4,
+      complete: true,
+    };
   const steps =
     area === "INVESTIGACION"
       ? [
@@ -2850,6 +4471,7 @@ function processFor(area, status) {
           "Ejecución",
           "Entrega",
           "Revisión PAG",
+          "Envío al defensor",
           "Cierre",
         ]
       : [
@@ -2872,6 +4494,8 @@ function processFor(area, status) {
           ASIGNADA: 2,
           EN_EJECUCION: 2,
           INFORME_ENTREGADO: 4,
+          APROBADO_PENDIENTE_ENVIO: 5,
+          PENDIENTE_ENRUTAMIENTO: 1,
         }
       : {
           DEVUELTA: 0,
@@ -2886,6 +4510,11 @@ function processFor(area, status) {
 }
 
 function nextActionFor(area, status) {
+  if (area === "VICTIMAS" && status === "IMPROCEDENTE")
+    return {
+      action: "Consultar constancia de improcedencia",
+      role: "RJV y perito asignado",
+    };
   if (status === "CERRADA") {
     return { action: "Proceso finalizado", role: "Consulta según permisos" };
   }
@@ -2908,8 +4537,16 @@ function nextActionFor(area, status) {
         role: "Investigador/a asignado/a",
       },
       INFORME_ENTREGADO: {
-        action: "Aprobar, devolver o cerrar",
+        action: "Verificar y aprobar o devolver el informe",
         role: "PAG Investigación",
+      },
+      APROBADO_PENDIENTE_ENVIO: {
+        action: "Acreditar envío del informe al defensor",
+        role: "Investigador/a asignado/a",
+      },
+      PENDIENTE_ENRUTAMIENTO: {
+        action: "Enrutar la actividad derivada",
+        role: "Gestor central con política vigente",
       },
     };
     return (
@@ -2955,7 +4592,9 @@ function canActOnItem(area, profile, status) {
   if (area === "INVESTIGACION") {
     return (
       (profileHas(profile, CAPABILITIES.EXECUTE_INVESTIGATION, area) &&
-        ["ASIGNADA", "EN_EJECUCION"].includes(status)) ||
+        ["ASIGNADA", "EN_EJECUCION", "APROBADO_PENDIENTE_ENVIO"].includes(
+          status,
+        )) ||
       (profileHas(profile, CAPABILITIES.APPROVE_INVESTIGATION, area) &&
         status === "INFORME_ENTREGADO")
     );
@@ -2979,4 +4618,15 @@ function profileHas(profile, capability, area) {
       (!grant.validTo || now < grant.validTo) &&
       (grant.scopeType === "SYSTEM" || !grant.area || grant.area === area),
   );
+}
+
+function canViewCurrentVictimsInformation(profile, area) {
+  return (
+    profileHas(profile, CAPABILITIES.CREATE_VICTIMS, area) ||
+    profileHas(profile, CAPABILITIES.APPROVE_VICTIMS, area)
+  );
+}
+
+function catalogEntryLabel(catalog = [], value) {
+  return catalog.find((entry) => entry.id === value)?.label || value;
 }

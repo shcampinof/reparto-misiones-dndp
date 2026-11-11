@@ -82,9 +82,29 @@ $investigationProblem = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items
 } | ConvertTo-Json)
 Assert-Value $investigationProblem.request.items[0].status "EN_EJECUCION" "Estado tras reporte de Investigación"
 Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/avance" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ observation = "Actuación registrada" } | ConvertTo-Json) | Out-Null
-Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/entregar" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ reference = "INF-2026-SMOKE-001" } | ConvertTo-Json) | Out-Null
+$pdfBase64 = & node --input-type=module -e "import { exampleReportPdf } from './frontend/src/demo-pdf.js'; process.stdout.write(Buffer.from(exampleReportPdf('MT-SMOKE')).toString('base64'));"
+if ($LASTEXITCODE -ne 0) { throw "No fue posible preparar el PDF de prueba" }
+$deliveryBody = @{
+  deliveryMode = "PDF"
+  submissionId = "smoke-pdf-001"
+  file = @{ name = "Informe-smoke.pdf"; mimeType = "application/pdf"; contentBase64 = $pdfBase64 }
+} | ConvertTo-Json -Depth 5
+$delivered = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/entregar" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body $deliveryBody
+$repeated = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/entregar" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body $deliveryBody
+Assert-Value $repeated.request.items[0].products.Count 1 "Entrega PDF idempotente"
+$productId = $delivered.request.items[0].products[0].id
+$downloadUrl = "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/productos/$productId/documento"
+$pdfDownload = Invoke-WebRequest $downloadUrl -Headers (Auth-Headers $investigator)
+if ($pdfDownload.Headers.'Content-Type' -notmatch 'application/pdf') { throw "La descarga no devuelve un PDF" }
+$unassignedInvestigator = Login-Demo "demo-investigador-mateo"
+Assert-Forbidden { Invoke-WebRequest $downloadUrl -Headers (Auth-Headers $unassignedInvestigator) | Out-Null } "PDF de otro investigador"
 $pagInvestigation = Login-Demo "demo-pag-investigacion"
-$investigationClosed = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/aprobar-entrega" -Method Post -Headers (Auth-Headers $pagInvestigation)
+$investigationApproved = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/aprobar-entrega" -Method Post -Headers (Auth-Headers $pagInvestigation) -ContentType "application/json" -Body (@{ verificationReference = "VERIFICACION-FIRMADA-SMOKE"; confirmReviewed = $true } | ConvertTo-Json)
+Assert-Value $investigationApproved.request.items[0].status "APROBADO_PENDIENTE_ENVIO" "Aprobación con constancia"
+$investigationClosed = Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/registrar-envio" -Method Post -Headers (Auth-Headers $investigator) -ContentType "application/json" -Body (@{ submissionId = "smoke-envio-001"; evidence = "CORREO-DEFENSOR-SMOKE" } | ConvertTo-Json)
+Assert-Value $investigationClosed.request.items[0].status "CERRADA" "Cierre tras envío al defensor"
+$reportDownload = Invoke-WebRequest "$BaseUrl/api/demo/reportes/investigacion.xlsx?region=BOGOTA" -Headers (Auth-Headers $defender)
+if ($reportDownload.Headers.'Content-Type' -notmatch 'spreadsheetml.sheet') { throw "La exportación no devuelve XLSX" }
 
 $rjv = Login-Demo "demo-rjv"
 $victims = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
@@ -158,6 +178,46 @@ $victimsNoCandidate = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes"
 $victimsNoCandidateResult = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsNoCandidate.request.items[0].id)/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims)
 Assert-Value $victimsNoCandidateResult.request.items[0].status "PENDIENTE_EXCEPCION" "Excepción inicial de Víctimas"
 
+$permissionsRequest = Invoke-RestMethod "$BaseUrl/api/demo/victimas/solicitudes" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
+  externalId = "SMOKE-VIC-PERMISOS-ITEM"
+  law = "LEY_1448"
+  region = "BOGOTA"
+  caseData = $victims.request.caseData
+  persons = $victims.request.persons
+  documents = $victims.request.documents
+  items = @(
+    @{ service = "SVC_VIC_EVALUACION_PSICOLOGICA"; region = "BOGOTA"; law = "LEY_1448" },
+    @{ service = "SVC_VIC_LIQUIDACION_PERJUICIOS"; region = "BOGOTA"; law = "LEY_1448" }
+  )
+} | ConvertTo-Json -Depth 12)
+$approvedItemId = $permissionsRequest.request.items[0].id
+$correctedItemId = $permissionsRequest.request.items[1].id
+Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$approvedItemId/aprobar-y-repartir" -Method Post -Headers (Auth-Headers $pagVictims) | Out-Null
+Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$correctedItemId/devolver-solicitud" -Method Post -Headers (Auth-Headers $pagVictims) -ContentType "application/json" -Body (@{
+  observation = "Precisar hechos del segundo ítem"
+} | ConvertTo-Json) | Out-Null
+Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$correctedItemId/corregir-reenviar" -Method Post -Headers (Auth-Headers $rjv) -ContentType "application/json" -Body (@{
+  correctionSummary = "Se precisan hechos para el segundo ítem"
+  caseData = @{ processReference = "Prueba de permisos"; hearingApplies = $false; facts = "MARCADOR_CORRECCION_NO_APROBADA" }
+} | ConvertTo-Json -Depth 8) | Out-Null
+$expertView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $expert)
+$projectedRequest = $expertView.requests | Where-Object { $_.id -eq $permissionsRequest.request.id }
+$projectedJson = $projectedRequest | ConvertTo-Json -Depth 40 -Compress
+if ($projectedJson.Contains("MARCADOR_CORRECCION_NO_APROBADA") -or $projectedJson.Contains($correctedItemId)) {
+  throw "La consulta al perito expone contenido no autorizado de otro ítem."
+}
+Assert-Value $projectedRequest.items.Count 1 "Ítems visibles al perito"
+Assert-Value $projectedRequest.versions.Count 1 "Versiones autorizadas al perito"
+Assert-Value $projectedRequest.items[0].applicableRequestData.items.Count 1 "Ítems dentro del snapshot aprobado"
+Assert-Forbidden {
+  Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$correctedItemId/iniciar" -Method Post -Headers (Auth-Headers $expert)
+}
+$expertAction = Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$approvedItemId/iniciar" -Method Post -Headers (Auth-Headers $expert)
+$actionJson = $expertAction | ConvertTo-Json -Depth 40 -Compress
+if ($actionJson.Contains("MARCADOR_CORRECCION_NO_APROBADA") -or $actionJson.Contains($correctedItemId)) {
+  throw "La respuesta de una acción expone contenido no autorizado de otro ítem."
+}
+
 $admin = Login-Demo "demo-admin"
 $regionalManager = Login-Demo "demo-gestor-regional-investigacion"
 $centralManager = Login-Demo "demo-gestor-central-excepciones"
@@ -165,13 +225,23 @@ $regionalDefender = Login-Demo "demo-defensor-regional"
 $regionalManagerView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $regionalManager)
 $centralManagerView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $centralManager)
 $regionalDefenderView = Invoke-RestMethod "$BaseUrl/api/demo/bootstrap" -Headers (Auth-Headers $regionalDefender)
+$supervision = Invoke-RestMethod "$BaseUrl/api/demo/supervision/investigacion" -Headers (Auth-Headers $pagInvestigation)
+Assert-Value $supervision.supervision.personnel.Count 20 "Personal ficticio de Investigación"
+Assert-Value $regionalDefenderView.supervision.regions.Count 1 "Tablero territorial"
+Assert-Value $regionalDefenderView.supervision.regions[0].id "BOGOTA" "Territorio autorizado"
+Assert-Forbidden {
+  Invoke-RestMethod "$BaseUrl/api/demo/supervision/investigacion" -Headers (Auth-Headers $defender)
+}
 Assert-Forbidden {
   Invoke-RestMethod "$BaseUrl/api/demo/investigacion/items/$($investigationItem.id)/aprobar-entrega" -Method Post -Headers (Auth-Headers $admin)
 }
 Assert-Forbidden {
   Invoke-RestMethod "$BaseUrl/api/demo/victimas/items/$($victimsItem.id)/devolver-solicitud" -Method Post -Headers (Auth-Headers $admin) -ContentType "application/json" -Body (@{ observation = "Operación no autorizada" } | ConvertTo-Json)
 }
-$reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth-Headers $admin)
+$reset = $null
+if ($regionalManagerView.storage.resettable -ne $false) {
+  $reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth-Headers $admin)
+}
 
 [pscustomobject]@{
   Health = $health.ok
@@ -182,6 +252,9 @@ $reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth
   DefenderRetryDenied = $true
   InvestigationFinal = $investigationClosed.request.items[0].status
   InvestigationProblemState = $investigationProblem.request.items[0].status
+  PdfDownloadVerified = $true
+  PdfRetryVerified = $true
+  PdfUnauthorizedDownloadDenied = $true
   InvestigationProductVersions = $investigationClosed.request.items[0].products.Count
   VictimsReturned = $victimsReturned.request.items[0].status
   VictimsResent = $victimsResent.request.items[0].status
@@ -190,9 +263,12 @@ $reset = Invoke-RestMethod "$BaseUrl/api/demo/reset" -Method Post -Headers (Auth
   VictimsProblemState = $victimsProblem.request.items[0].status
   VictimsProductVersions = $victimsClosed.request.items[0].products.Count
   VictimsNoCandidate = $victimsNoCandidateResult.request.items[0].status
+  PermissionsByItemVerified = $true
+  SupervisionScopeVerified = $true
+  InvestigationPersonnel = $supervision.supervision.personnel.Count
   AdminOperationalDenied = $true
   RegionalManagerRequests = $regionalManagerView.requests.Count
   CentralExceptionRequests = $centralManagerView.requests.Count
   RegionalDefenderRequests = $regionalDefenderView.requests.Count
-  ResetSeedRequests = $reset.requests.Count
+  ResetSeedRequests = if ($reset) { $reset.requests.Count } else { "No aplica: persistencia protegida" }
 } | ConvertTo-Json

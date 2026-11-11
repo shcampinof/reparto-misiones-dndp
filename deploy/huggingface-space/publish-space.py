@@ -34,17 +34,20 @@ def main() -> int:
         path_in_repo=".",
         delete_patterns="*",
         commit_message="Deploy SIGIP-DP institutional presentation",
+        parent_commit=info.sha,
     )
     print(f"Commit remoto: {commit.oid}")
 
     deadline = time.monotonic() + args.timeout
     last_stage = None
     while time.monotonic() < deadline:
-        stage = str(api.get_space_runtime(args.space_id).stage)
+        runtime = api.get_space_runtime(args.space_id)
+        stage = str(runtime.stage)
         if stage != last_stage:
             print(f"Estado: {stage}", flush=True)
             last_stage = stage
-        if stage == "RUNNING":
+        if stage == "RUNNING" and runtime.raw.get("sha") == commit.oid:
+            print(f"Versión activa verificada: {commit.oid}", flush=True)
             return 0
         if stage in {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR"}:
             return 1

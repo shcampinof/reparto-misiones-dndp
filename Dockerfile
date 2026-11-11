@@ -1,4 +1,4 @@
-FROM node:20.19.5-bookworm-slim AS frontend-build
+FROM node:24.11.0-bookworm-slim AS frontend-build
 
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -8,22 +8,31 @@ COPY frontend/src ./src
 ENV VITE_API_URL=/api
 RUN npm run build
 
-FROM node:20.19.5-bookworm-slim AS backend-dependencies
+FROM node:24.11.0-bookworm-slim AS backend-dependencies
 
 WORKDIR /build/backend
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:20.19.5-bookworm-slim AS runtime
+FROM node:24.11.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=7860 \
     HOST=0.0.0.0 \
     DEMO_MODE=true \
-    DEMO_RESET_ON_START=true \
+    DEMO_RESET_ON_START=false \
+    STORAGE_DRIVER=sqlite \
+    SQLITE_PATH=/app/data/sigip.sqlite \
+    FILE_MAX_MB=10 \
+    INTAKE_MAX_MB=30 \
+    ITEM_FILES_MAX_MB=50 \
+    JSON_MAX_MB=48 \
+    BACKUP_DIRECTORY=/app/data/backups \
+    ENABLE_PROVISIONAL_RULES=true \
     STATIC_DIR=/app/public
 
 WORKDIR /app
+RUN mkdir -p /app/data && chown 1000:1000 /app/data
 COPY --chown=1000:1000 backend/package.json ./backend/package.json
 COPY --chown=1000:1000 backend/src ./backend/src
 COPY --chown=1000:1000 --from=backend-dependencies /build/backend/node_modules ./backend/node_modules

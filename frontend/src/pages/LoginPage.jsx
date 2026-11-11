@@ -129,7 +129,7 @@ export default function LoginPage() {
               {!visible.length && <option value="">Cargando roles...</option>}
               {visible.map((account) => (
                 <option key={account.userId} value={account.userId}>
-                  {account.roleLabel} — {account.fullName}
+                  {account.roleLabel} ({account.fullName})
                 </option>
               ))}
             </select>
@@ -154,11 +154,7 @@ export default function LoginPage() {
           </form>
 
           <aside className="demo-access-note">
-            <strong>Acceso al sistema</strong>
-            <p>
-              El perfil autenticado determina los módulos, bandejas y acciones
-              disponibles.
-            </p>
+            <p>Las opciones disponibles corresponden al perfil seleccionado.</p>
           </aside>
         </section>
       </main>

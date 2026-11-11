@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../shared/errors.js";
+import { assertCapability, CAPABILITIES } from "../core/auth/capabilities.js";
 
 export function createDemoRouter({
   authMiddleware,
@@ -12,7 +13,91 @@ export function createDemoRouter({
   router.get("/bootstrap", (_req, res) =>
     res.json(demoService.bootstrap(_req.auth)),
   );
+  router.get("/reportes/investigacion.xlsx", (req, res) => {
+    const bytes = demoService.exportInvestigation(req.auth, req.query);
+    res.set(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.set("Cache-Control", "no-store");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.attachment("Control-misiones-Investigacion.xlsx");
+    res.send(Buffer.from(bytes));
+  });
+  for (const [path, method] of Object.entries({
+    "solicitar-prorroga": "requestExtension",
+    "decidir-prorroga": "decideExtension",
+    "remitir-actividad": "referActivity",
+    "enrutar-actividad": "routeActivity",
+    "registrar-envio": "recordDispatch",
+  })) {
+    router.post(`/investigacion/items/:id/${path}`, (req, res) =>
+      res.json({
+        request: demoService[method](req.auth, req.params.id, req.body || {}),
+      }),
+    );
+  }
+  router.get("/:area/items/:id/productos/:productId/documento", (req, res) => {
+    const document = demoService.productDocument(
+      req.auth,
+      req.params.area,
+      req.params.id,
+      req.params.productId,
+    );
+    res.set("Content-Type", "application/pdf");
+    res.set("Cache-Control", "no-store");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.attachment(document.name);
+    res.send(Buffer.from(document.contentBase64, "base64"));
+  });
+  router.get("/:area/items/:id/documentos/:index", (req, res) => {
+    const document = demoService.intakeDocument(
+      req.auth,
+      req.params.area,
+      req.params.id,
+      req.params.index,
+      req.query.version,
+    );
+    res.type("application/pdf");
+    res.attachment(document.name);
+    res.send(Buffer.from(document.contentBase64, "base64"));
+  });
   router.post("/reset", (req, res) => res.json(demoService.reset(req.auth)));
+  router.post("/victimas/items/:id/continuacion", (req, res) =>
+    res.status(201).json({
+      request: demoService.requestVictimsFollowUp(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
+  router.post("/victimas/items/:id/solicitar-prorroga", (req, res) =>
+    res.json({
+      request: demoService.requestVictimsExtension(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
+  router.post("/victimas/items/:id/decidir-prorroga", (req, res) =>
+    res.json({
+      request: demoService.decideVictimsExtension(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
+  router.get("/supervision/investigacion", (req, res) => {
+    assertCapability(
+      req.auth,
+      CAPABILITIES.CONSULTAR_INDICADORES_INVESTIGACION,
+      { area: "INVESTIGACION", region: req.auth.region },
+    );
+    res.json({ supervision: demoService.bootstrap(req.auth).supervision });
+  });
 
   router.get("/catalogo/servicios", (req, res) =>
     res.json({
@@ -96,6 +181,7 @@ export function createDemoRouter({
       request: demoService.approveInvestigationDelivery(
         req.auth,
         req.params.id,
+        req.body || {},
       ),
     }),
   );

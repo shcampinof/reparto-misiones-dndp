@@ -1,3 +1,6 @@
+import { INVESTIGATION_PORTFOLIO } from "./investigation-portfolio.js";
+import { INVESTIGATION_TERRITORIES } from "./investigation-territories.js";
+
 const INVESTIGATION_SPECIALTIES = [
   ["ESP_INV_ANALISIS_INFO", "Análisis de información forense"],
   ["ESP_INV_FINANCIERA", "Financiera forense"],
@@ -28,10 +31,25 @@ const REFERENCE_CATALOG_SEEDS = Object.freeze({
     ["BOGOTA", "Bogotá", "AMBAS"],
     ["CUNDINAMARCA", "Cundinamarca", "AMBAS"],
     ["ANTIOQUIA", "Antioquia", "AMBAS"],
+    ...INVESTIGATION_TERRITORIES.map(([id, label]) => [
+      id,
+      label,
+      "INVESTIGACION",
+    ]),
   ],
   laws: [
     ["LEY_1448", "Ley 1448", "VICTIMAS"],
     ["LEY_975", "Ley 975", "VICTIMAS"],
+    ["LEY_1098", "Ley 1098 · Infancia y adolescencia", "VICTIMAS"],
+    ["LEY_1257", "Ley 1257 · Violencia contra la mujer", "VICTIMAS"],
+    [
+      "LEY_1719",
+      "Ley 1719 · Violencia sexual en el conflicto armado",
+      "VICTIMAS",
+    ],
+    ["LEY_1761", "Ley 1761 · Feminicidio", "VICTIMAS"],
+    ["LEY_1773", "Ley 1773 · Agentes químicos", "VICTIMAS"],
+    ["LEY_985", "Ley 985 · Trata de personas", "VICTIMAS"],
   ],
   proceduralStages: [
     ["INDAGACION", "Indagación", "INVESTIGACION"],
@@ -45,11 +63,38 @@ const REFERENCE_CATALOG_SEEDS = Object.freeze({
     ["UTILIDAD_PUBLICA", "Utilidad pública", "INVESTIGACION"],
   ],
   documentTypes: [
+    [
+      "RADICADO_IRIS",
+      "Referencia de radicado IRIS · sin conexión",
+      "INVESTIGACION",
+    ],
     ["SOLICITUD_DEFENSA", "Solicitud de la defensa", "INVESTIGACION"],
     ["SOPORTE_PROCESAL", "Soporte procesal", "AMBAS"],
     ["SOPORTE_PRIORIDAD", "Soporte de prioridad", "INVESTIGACION"],
     ["FORMATO_SOLICITUD", "Formato de solicitud", "VICTIMAS"],
     ["SOPORTE_RELACION", "Soporte de relación o parentesco", "VICTIMAS"],
+    ["F163", "F163 · Solicitud de actividades periciales", "VICTIMAS"],
+    [
+      "SENTENCIA_EJECUTORIADA",
+      "Sentencia condenatoria ejecutoriada",
+      "VICTIMAS",
+    ],
+    ["HISTORIA_CLINICA", "Historia clínica o epicrisis disponible", "VICTIMAS"],
+    ["ENTREVISTA_COLATERAL", "Entrevista colateral", "VICTIMAS"],
+    [
+      "CERTIFICADO_TERAPEUTICO",
+      "Certificado de asistencia terapéutica",
+      "VICTIMAS",
+    ],
+    [
+      "SOPORTE_FINANCIERO",
+      "Facturas, gastos o certificado de ingresos",
+      "VICTIMAS",
+    ],
+    ["F168", "F168 · Desplazamiento, hurto y secuestro (Ley 975)", "VICTIMAS"],
+    ["F169", "F169 · Homicidio y desaparición forzada (Ley 975)", "VICTIMAS"],
+    ["F167", "F167 · Constancia de entrevista", "VICTIMAS"],
+    ["F172", "F172 · Consentimiento informado psicológico", "VICTIMAS"],
   ],
 });
 
@@ -144,6 +189,22 @@ const SERVICE_SEEDS = [
       "ESP_INV_TOPOGRAFIA",
     ],
   }),
+  ...INVESTIGATION_SPECIALTIES.filter(
+    ([id]) =>
+      !["ESP_INV_CAMPO", "ESP_INV_BALISTICA", "ESP_INV_ANALISIS_INFO"].includes(
+        id,
+      ),
+  ).map(([specialtyId, name]) =>
+    serviceSeed({
+      id: `SVC_${specialtyId.slice(4)}`,
+      area: "INVESTIGACION",
+      name,
+      description: `Apoyo especializado a la defensa en ${name.toLowerCase()}.`,
+      ...INVESTIGATION_PORTFOLIO[specialtyId],
+      product: `Informe de ${name.toLowerCase()}`,
+      specialtyIds: [specialtyId],
+    }),
+  ),
   serviceSeed({
     id: "SVC_VIC_EVALUACION_PSICOLOGICA",
     area: "VICTIMAS",
@@ -236,6 +297,16 @@ export function createCatalogSeed() {
   ];
   const services = SERVICE_SEEDS.map((entry) => {
     const serviceData = structuredClone(entry);
+    if (
+      entry.area === "INVESTIGACION" &&
+      entry.specialtyIds.length === 1 &&
+      entry.id !== "SVC_INV_RECOLECCION_EMP"
+    ) {
+      Object.assign(
+        serviceData,
+        INVESTIGATION_PORTFOLIO[entry.specialtyIds[0]],
+      );
+    }
     delete serviceData.specialtyIds;
     return service(serviceData, publishedAt);
   });

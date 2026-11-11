@@ -1,3 +1,4 @@
+import { exampleReportPdf } from "../../../frontend/src/demo-pdf.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import jwt from "jsonwebtoken";
@@ -8,6 +9,27 @@ import { createSilentLogger } from "../../src/shared/logger.js";
 import { createCatalogSeed } from "../../src/infrastructure/demo/catalog-seeds.js";
 
 const TEST_SECRET = "test-secret-with-at-least-thirty-two-characters";
+
+test("F171 inicial se descarga como PDF y conserva reserva por rol", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const expert = await login(app, "demo-perito-financiero");
+  const pag = await login(app, "demo-pag-victimas");
+  const path =
+    "/api/demo/victimas/items/VIC-ITEM-DEMO-0001/productos/PROD-VIC-ITEM-DEMO-0001-F171-1/documento";
+  for (const token of [rjv, expert]) {
+    const response = await request(app).get(path).set(auth(token)).expect(200);
+    assert.match(response.headers["content-type"], /application\/pdf/);
+    assert.ok(response.body.subarray(0, 5).equals(Buffer.from("%PDF-")));
+    assert.match(
+      response.body.toString("ascii"),
+      /Informe de Actividades Periciales/,
+    );
+    assert.doesNotMatch(response.body.toString("ascii"), /ficticio/i);
+  }
+  await request(app).get(path).set(auth(pag)).expect(403);
+  await request(app).get(path).expect(401);
+});
 
 function testApp(overrides = {}) {
   const config = createConfig({
@@ -117,6 +139,394 @@ function victimsPayload(overrides = {}) {
     ...overrides,
   };
 }
+
+test("F163 y Formato de solicitud satisfacen el mismo requisito sin aceptar anexos diferentes", async () => {
+  for (const requiredType of ["FORMATO_SOLICITUD", "F163"]) {
+    const app = testApp();
+    app.locals.demoRepository.transaction((state) => {
+      state.catalogs.services.find(
+        (service) => service.id === "SVC_VIC_EVALUACION_PSICOLOGICA",
+      ).requiredDocumentTypes = [requiredType];
+    });
+    const rjv = await login(app, "demo-rjv");
+    const beforeInvestigation = app.locals.demoRepository
+      .snapshot()
+      .requests.filter((entry) => entry.area === "INVESTIGACION");
+    for (const suppliedType of ["F163", "FORMATO_SOLICITUD"]) {
+      const created = await request(app)
+        .post("/api/demo/victimas/solicitudes")
+        .set(auth(rjv))
+        .send(
+          victimsPayload({
+            externalId: `RAD-${requiredType}-${suppliedType}`,
+            documents: [
+              { type: suppliedType, reference: "Solicitud-F163.pdf" },
+            ],
+          }),
+        )
+        .expect(201);
+      assert.equal(itemFrom(created).status, "PENDIENTE_APROBACION_PAG");
+      assert.equal(created.body.request.documents[0].type, suppliedType);
+    }
+    const denied = await request(app)
+      .post("/api/demo/victimas/solicitudes")
+      .set(auth(rjv))
+      .send(
+        victimsPayload({
+          externalId: `RAD-SIN-F163-${requiredType}`,
+          documents: [
+            { type: "SENTENCIA_EJECUTORIADA", reference: "Solicitud-F163.pdf" },
+          ],
+        }),
+      )
+      .expect(400);
+    assert.match(denied.body.error.message, /Formato de solicitud F163/);
+    await request(app)
+      .post("/api/demo/victimas/solicitudes")
+      .send(victimsPayload())
+      .expect(401);
+    assert.deepEqual(
+      app.locals.demoRepository
+        .snapshot()
+        .requests.filter((entry) => entry.area === "INVESTIGACION"),
+      beforeInvestigation,
+    );
+  }
+});
+
+test("F163 conserva fechas, ubicación y bases financieras sin volverlas obligatorias para psicología", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const persons = structuredClone(victimsPayload().persons);
+  Object.assign(persons[0], {
+    identityDocument: "DOC-FICTICIO-1",
+    birthDate: "1980-01-01",
+    factDate: "2005-04-01",
+    factNumber: "H-1",
+    factPlace: "Municipio ficticio",
+    monthlyIncome: 0,
+    emergingDamage: 1200.5,
+    displacementDays: 12,
+    incomeSupportReference: "CERT-FICTICIO-1",
+  });
+  Object.assign(persons[0].contact, {
+    address: "Dirección ficticia",
+    municipality: "Municipio ficticio",
+    department: "Bogotá",
+  });
+  const payload = victimsPayload({
+    persons,
+    caseData: {
+      ...victimsPayload().caseData,
+      judicialAuthority: "Juzgado de ejemplo",
+      offenses: "Homicidio; desaparición forzada",
+      defendantName: "Postulado ficticio",
+      requestedMeasures: "Valoración de daños",
+      sentenceDate: "2025-02-01",
+    },
+  });
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(payload)
+    .expect(201);
+  assert.equal(created.body.request.persons[0].monthlyIncome, 0);
+  assert.equal(
+    created.body.request.caseData.offenses,
+    "Homicidio; desaparición forzada",
+  );
+  assert.equal(
+    created.body.request.persons[0].contact.address,
+    "Dirección ficticia",
+  );
+  const id = itemFrom(created).id;
+  await request(app)
+    .post(`/api/demo/victimas/items/${id}/devolver-solicitud`)
+    .set(auth(pag))
+    .send({ observation: "Actualizar autoridad" })
+    .expect(200);
+  const corrected = await request(app)
+    .post(`/api/demo/victimas/items/${id}/corregir-reenviar`)
+    .set(auth(rjv))
+    .send({
+      caseData: { ...payload.caseData, judicialAuthority: "Juzgado corregido" },
+      correctionSummary: "Se corrige la autoridad",
+    })
+    .expect(200);
+  assert.equal(
+    corrected.body.request.versions[0].data.caseData.judicialAuthority,
+    "Juzgado de ejemplo",
+  );
+  assert.equal(corrected.body.request.persons[0].emergingDamage, 1200.5);
+  assert.ok(
+    itemFrom(corrected).correctionHistory[0].changes.some(
+      (entry) => entry.field === "caseData.judicialAuthority",
+    ),
+  );
+  for (const bad of [
+    { birthDate: "2005-02-30" },
+    { monthlyIncome: -1 },
+    { displacementDays: 1.5 },
+    { birthDate: "2006-01-01", factDate: "2005-01-01" },
+  ]) {
+    await request(app)
+      .post("/api/demo/victimas/solicitudes")
+      .set(auth(rjv))
+      .send(
+        victimsPayload({
+          externalId: "RAD-BAD",
+          persons: [{ ...persons[0], ...bad }],
+        }),
+      )
+      .expect(400);
+  }
+  const family = structuredClone(victimsPayload().persons);
+  family[0].contact = {};
+  family[0].contactUnavailableReason = "Víctima directa fallecida";
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload({ externalId: "RAD-FAMILIA", persons: family }))
+    .expect(201);
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({ externalId: "RAD-SIN-CONTACTO", persons: [family[0]] }),
+    )
+    .expect(400);
+});
+
+test("F171 reserva referencias y archivos al RJV titular y al perito; PAG y administración consultan metadatos", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const expert = await login(app, "demo-perito-psicologia");
+  const admin = await login(app, "demo-admin");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload())
+    .expect(201);
+  const base = `/api/demo/victimas/items/${itemFrom(created).id}`;
+  await request(app)
+    .post(base + "/aprobar-y-repartir")
+    .set(auth(pag))
+    .expect(200);
+  await request(app)
+    .post(base + "/iniciar")
+    .set(auth(expert))
+    .expect(200);
+  await request(app)
+    .post(base + "/finalizar")
+    .set(auth(expert))
+    .send({
+      ...pdfDelivery("bad-f171"),
+      f171: { reportNumber: "PRIVADO-F171", assessmentDate: "2026-02-30" },
+    })
+    .expect(400);
+  const delivered = await request(app)
+    .post(base + "/finalizar")
+    .set(auth(expert))
+    .send({
+      ...pdfDelivery("private-f171"),
+      f171: { reportNumber: "PRIVADO-F171", assessmentDate: "2026-10-01" },
+    })
+    .expect(200);
+  const product = itemFrom(delivered).products[0];
+  assert.equal(product.formatMetadata.reportNumber, "PRIVADO-F171");
+  const documentUrl = `${base}/productos/${product.id}/documento`;
+  await request(app).get(documentUrl).set(auth(rjv)).expect(200);
+  await request(app).get(documentUrl).set(auth(expert)).expect(200);
+  for (const token of [pag, admin]) {
+    await request(app).get(documentUrl).set(auth(token)).expect(403);
+    const view = await request(app)
+      .get("/api/demo/bootstrap")
+      .set(auth(token))
+      .expect(200);
+    const item = view.body.requests.find(
+      (entry) => entry.id === created.body.request.id,
+    ).items[0];
+    assert.equal(item.products[0].reserved, true);
+    for (const field of ["reference", "attachment", "formatMetadata"])
+      assert.equal(item.products[0][field], undefined);
+    assert.equal(item.reportReference, "F171 reservado");
+    assert.equal(item.products[0].status, "REGISTRADO");
+  }
+});
+
+test("improcedencia es exclusiva del perito asignado, exige constancia y es idempotente sin alterar otros ítems ni Investigación", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const expert = await login(app, "demo-perito-psicologia");
+  const otherExpert = await login(app, "demo-perito-financiero");
+  const admin = await login(app, "demo-admin");
+  const investigationBefore = app.locals.demoRepository
+    .snapshot()
+    .requests.filter((entry) => entry.area === "INVESTIGACION");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({
+        items: [
+          { service: "SVC_VIC_EVALUACION_PSICOLOGICA", region: "BOGOTA" },
+          { service: "SVC_VIC_LIQUIDACION_PERJUICIOS", region: "BOGOTA" },
+        ],
+      }),
+    )
+    .expect(201);
+  const [first, second] = created.body.request.items;
+  const url = `/api/demo/victimas/items/${first.id}/operaciones/improcedencia`;
+  const payload = {
+    reason: "Causal técnica de ejemplo",
+    description: "Constancia ficticia motivada",
+    supportReference: "CONSTANCIA-FICTICIA",
+    submissionId: "imp-1",
+  };
+  for (const token of [rjv, pag, admin, otherExpert])
+    await request(app).post(url).set(auth(token)).send(payload).expect(403);
+  await request(app).post(url).set(auth(expert)).send(payload).expect(403);
+  await request(app)
+    .post(`/api/demo/victimas/items/${first.id}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  for (const field of ["reason", "description", "supportReference"])
+    await request(app)
+      .post(url)
+      .set(auth(expert))
+      .send({ ...payload, [field]: "" })
+      .expect(400);
+  const expired = tokenFor({
+    sub: "demo-perito-psicologia",
+    executorId: "per-demo-psi-01",
+    grants: [
+      {
+        ...activeGrant(
+          "DECLARAR_IMPROCEDENCIA_VICTIMAS",
+          "VICTIMAS",
+          "OWN_ASSIGNMENTS",
+        ),
+        validTo: "2026-10-01",
+      },
+    ],
+  });
+  await request(app).post(url).set(auth(expired)).send(payload).expect(403);
+  const result = await request(app)
+    .post(url)
+    .set(auth(expert))
+    .send(payload)
+    .expect(201);
+  assert.equal(itemFrom(result).status, "IMPROCEDENTE");
+  const repeat = await request(app)
+    .post(url)
+    .set(auth(expert))
+    .send(payload)
+    .expect(201);
+  assert.equal(itemFrom(repeat).operations.length, 1);
+  await request(app)
+    .post(url)
+    .set(auth(expert))
+    .send({ ...payload, reason: "Otra causa" })
+    .expect(409);
+  await request(app)
+    .post(`/api/demo/victimas/items/${first.id}/iniciar`)
+    .set(auth(expert))
+    .expect(409);
+  await request(app)
+    .post(url)
+    .set(auth(expert))
+    .send({ ...payload, submissionId: "imp-2" })
+    .expect(409);
+  const view = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  const visible = view.body.requests.find(
+    (entry) => entry.id === created.body.request.id,
+  );
+  assert.equal(
+    visible.items.find((item) => item.id === second.id).status,
+    "PENDIENTE_APROBACION_PAG",
+  );
+  assert.equal(
+    visible.items[0].operations[0].routing.recipientUserId,
+    "demo-rjv",
+  );
+  assert.equal(
+    visible.items[0].operations[0].routing.emailStatus,
+    "PENDIENTE_CONFIGURACION",
+  );
+  assert.deepEqual(
+    app.locals.demoRepository
+      .snapshot()
+      .requests.filter((entry) => entry.area === "INVESTIGACION"),
+    investigationBefore,
+  );
+  await request(app)
+    .post(
+      "/api/demo/investigacion/items/MT-2026-0001/operaciones/improcedencia",
+    )
+    .set(auth(expert))
+    .send(payload)
+    .expect(404);
+});
+
+test("leyes y anexos de Víctimas respetan elegibilidad y vigencia sin alterar los catálogos de Investigación", async () => {
+  const app = testApp();
+  const rjv = await login(app, "demo-rjv");
+  const pag = await login(app, "demo-pag-victimas");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload({ law: "LEY_1719" }))
+    .expect(201);
+  const assigned = await request(app)
+    .post(`/api/demo/victimas/items/${itemFrom(created).id}/aprobar-y-repartir`)
+    .set(auth(pag))
+    .expect(200);
+  assert.equal(itemFrom(assigned).assigneeId, "per-demo-psi-01");
+  assert.ok(
+    itemFrom(assigned).assignment.evaluated.find(
+      (entry) => entry.candidateId === "per-demo-psi-02",
+    ).exclusions.length,
+  );
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({
+        externalId: "RAD-ANEXO",
+        documents: [{ type: "F169", reference: "ANEXO" }],
+      }),
+    )
+    .expect(400);
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(
+      victimsPayload({
+        externalId: "RAD-ANEXO",
+        law: "LEY_975",
+        documents: [
+          { type: "F163", reference: "SOLICITUD" },
+          { type: "F169", reference: "ANEXO" },
+        ],
+      }),
+    )
+    .expect(201);
+  app.locals.demoRepository.transaction((state) => {
+    state.catalogs.laws.find((entry) => entry.id === "LEY_985").validTo =
+      "2026-01-01";
+  });
+  await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload({ externalId: "RAD-VIGENCIA", law: "LEY_985" }))
+    .expect(400);
+});
 
 test("los catálogos de referencia son versionados, vigentes y ampliables", () => {
   const catalogs = createCatalogSeed();
@@ -300,12 +710,22 @@ test("recorrido completo de Investigación exige aprobación final PAG", async (
   const approved = await request(app)
     .post(`/api/demo/investigacion/items/${item.id}/aprobar-entrega`)
     .set(auth(pag))
+    .send({
+      verificationReference: "CONSTANCIA-VERIFICACION-1",
+      confirmReviewed: true,
+    })
     .expect(200);
-  assert.equal(itemFrom(approved).status, "CERRADA");
+  assert.equal(itemFrom(approved).status, "APROBADO_PENDIENTE_ENVIO");
   assert.equal(
     itemFrom(approved).timeline.at(-1).actor,
     "demo-pag-investigacion",
   );
+  const closed = await request(app)
+    .post(`/api/demo/investigacion/items/${item.id}/registrar-envio`)
+    .set(auth(investigator))
+    .send({ submissionId: "envio-flujo-1", evidence: "Correo al defensor 1" })
+    .expect(200);
+  assert.equal(itemFrom(closed).status, "CERRADA");
 });
 
 test("recorrido completo de Víctimas tiene aprobación previa y cierre directo F-171", async () => {
@@ -395,13 +815,20 @@ test("recorrido completo de Víctimas tiene aprobación previa y cierre directo 
     },
   );
   assert.ok(item.products[0].createdAt);
+  const ownerAfterExecution = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  const sourceAfterExecution = ownerAfterExecution.body.requests.find(
+    (entry) => entry.id === finished.body.request.id,
+  );
   assert.deepEqual(
     {
-      externalId: finished.body.request.externalId,
-      ownerUserId: finished.body.request.ownerUserId,
-      persons: finished.body.request.persons,
-      caseData: finished.body.request.caseData,
-      documents: finished.body.request.documents,
+      externalId: sourceAfterExecution.externalId,
+      ownerUserId: sourceAfterExecution.ownerUserId,
+      persons: sourceAfterExecution.persons,
+      caseData: sourceAfterExecution.caseData,
+      documents: sourceAfterExecution.documents,
     },
     sourceBeforeExecution,
   );
@@ -736,11 +1163,16 @@ test("restablecer demo recupera semillas reproducibles", async () => {
     .post("/api/demo/reset")
     .set(auth(admin))
     .expect(200);
-  assert.equal(reset.body.requests.length, 6);
+  assert.equal(reset.body.requests.length, 11);
   assert.deepEqual(reset.body.requests.map((entry) => entry.id).sort(), [
     "INV-2026-0001",
     "INV-2026-0002",
     "INV-2026-0003",
+    "INV-2026-0101",
+    "INV-2026-0102",
+    "INV-2026-0103",
+    "INV-2026-0104",
+    "INV-2026-0105",
     "SVP-2026-0001",
     "SVP-2026-0002",
     "SVP-2026-0003",
@@ -748,7 +1180,7 @@ test("restablecer demo recupera semillas reproducibles", async () => {
   assert.equal(
     reset.body.requests.filter((entry) => entry.area === "INVESTIGACION")
       .length,
-    3,
+    8,
   );
   assert.equal(
     reset.body.requests.filter((entry) => entry.area === "VICTIMAS").length,
@@ -789,7 +1221,7 @@ test("autorización separa roles, áreas y casos visibles", async () => {
     .get("/api/demo/bootstrap")
     .set(auth(defender))
     .expect(200);
-  assert.equal(defenderView.body.requests.length, 3);
+  assert.equal(defenderView.body.requests.length, 8);
   assert.ok(
     defenderView.body.requests.every(
       (entry) =>
@@ -929,7 +1361,28 @@ test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos 
         profile.enabled === false && profile.status === "PENDIENTE_RACI",
     ),
   );
-  assert.equal(response.body.serviceCatalog.services.length, 5);
+  assert.equal(
+    response.body.serviceCatalog.services.length,
+    createCatalogSeed().services.filter(
+      (service) => service.area === "INVESTIGACION",
+    ).length,
+  );
+  const coveredSpecialties = new Set(
+    response.body.serviceCatalog.serviceSpecialtyRelations.map(
+      (relation) => relation.specialtyId,
+    ),
+  );
+  assert.ok(
+    response.body.serviceCatalog.specialties.every((specialty) =>
+      coveredSpecialties.has(specialty.id),
+    ),
+  );
+  const identity = await request(app)
+    .get("/api/auth/me")
+    .set(auth(defender))
+    .expect(200);
+  assert.equal(identity.body.profile.fullName, "Laura Méndez");
+  assert.equal(identity.body.profile.email, "laura.mendez@sigip.example");
   assert.equal(response.body.serviceCatalog.specialties.length, 17);
   assert.ok(
     response.body.serviceCatalog.specialties.every(
@@ -957,7 +1410,10 @@ test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos 
   const specialtyIds = new Set(
     persistedModel.catalogs.specialties.map((specialty) => specialty.id),
   );
-  assert.equal(persistedModel.catalogs.services.length, 10);
+  assert.equal(
+    persistedModel.catalogs.services.length,
+    createCatalogSeed().services.length,
+  );
   assert.equal(persistedModel.catalogs.specialties.length, 19);
   assert.ok(
     persistedModel.catalogs.services.every(
@@ -996,13 +1452,13 @@ test("el contrato pre-Oracle publica capacidades, perfiles propuestos inactivos 
     ),
   );
   assert.deepEqual(response.body.dashboards.INVESTIGACION, {
-    requestCount: 3,
-    personCount: 0,
-    itemCount: 4,
-    assignmentCount: 3,
+    requestCount: 8,
+    personCount: 5,
+    itemCount: 9,
+    assignmentCount: 8,
     pendingItemCount: 1,
-    activeItemCount: 2,
-    closedItemCount: 1,
+    activeItemCount: 6,
+    closedItemCount: 2,
   });
 });
 
@@ -1047,15 +1503,31 @@ test("una solicitud multiítem mantiene estados y repartos independientes", asyn
     .set(auth(investigator))
     .send({ reference: "INF-2026-MULTI-001" })
     .expect(200);
-  const partiallyClosed = await request(app)
+  const approvedPartial = await request(app)
     .post(`/api/demo/investigacion/items/${firstItemId}/aprobar-entrega`)
     .set(auth(pag))
+    .send({
+      verificationReference: "CONSTANCIA-VERIFICACION-MULTI",
+      confirmReviewed: true,
+    })
+    .expect(200);
+  assert.equal(
+    approvedPartial.body.request.items[0].status,
+    "APROBADO_PENDIENTE_ENVIO",
+  );
+  const partiallyClosed = await request(app)
+    .post(`/api/demo/investigacion/items/${firstItemId}/registrar-envio`)
+    .set(auth(investigator))
+    .send({
+      submissionId: "envio-multi-1",
+      evidence: "Correo al defensor MULTI",
+    })
     .expect(200);
   assert.equal(partiallyClosed.body.request.items[0].status, "CERRADA");
-  assert.equal(
-    partiallyClosed.body.request.items[1].status,
-    "PENDIENTE_EXCEPCION",
-  );
+  const wholeRequest = (
+    await request(app).get("/api/demo/bootstrap").set(auth(pag)).expect(200)
+  ).body.requests.find((entry) => entry.id === created.body.request.id);
+  assert.equal(wholeRequest.items[1].status, "PENDIENTE_EXCEPCION");
   assert.equal(
     partiallyClosed.body.request.aggregateStatus,
     "PARCIALMENTE_CERRADA",
@@ -1070,9 +1542,9 @@ test("una solicitud multiítem mantiene estados y repartos independientes", asyn
 test("el catálogo es consultable por solicitantes, ejecutores y supervisores según su área", async () => {
   const app = testApp();
   const profiles = [
-    ["demo-defensor", "INVESTIGACION", 5, 17],
-    ["demo-investigador", "INVESTIGACION", 5, 17],
-    ["demo-pag-investigacion", "INVESTIGACION", 5, 17],
+    ["demo-defensor", "INVESTIGACION", 19, 17],
+    ["demo-investigador", "INVESTIGACION", 19, 17],
+    ["demo-pag-investigacion", "INVESTIGACION", 19, 17],
     ["demo-rjv", "VICTIMAS", 5, 2],
     ["demo-perito-psicologia", "VICTIMAS", 5, 2],
     ["demo-pag-victimas", "VICTIMAS", 5, 2],
@@ -1100,6 +1572,104 @@ test("el catálogo es consultable por solicitantes, ejecutores y supervisores se
       ),
     );
   }
+});
+
+test("supervisión central y territorial limita personal, eventos y métricas en servidor", async () => {
+  const app = testApp();
+  const pag = await login(app, "demo-pag-investigacion");
+  const central = await request(app)
+    .get("/api/demo/supervision/investigacion")
+    .set(auth(pag))
+    .expect(200);
+  assert.equal(central.body.supervision.overview.requests, 8);
+  assert.equal(central.body.supervision.personnel.length, 20);
+  assert.ok(
+    central.body.supervision.regions.some((entry) => entry.id === "META"),
+  );
+  const regional = await login(app, "demo-defensor-regional");
+  const scoped = await request(app)
+    .get("/api/demo/supervision/investigacion")
+    .set(auth(regional))
+    .expect(200);
+  assert.ok(
+    scoped.body.supervision.regions.every((entry) => entry.id === "BOGOTA"),
+  );
+  assert.ok(
+    scoped.body.supervision.personnel.every((person) =>
+      person.coverages.some((entry) => entry.id === "BOGOTA"),
+    ),
+  );
+  assert.equal(JSON.stringify(scoped.body).includes("MT-2026-0105"), false);
+  for (const user of [
+    "demo-defensor",
+    "demo-investigador",
+    "demo-admin",
+    "demo-pag-victimas",
+    "demo-gestor-central-excepciones",
+  ]) {
+    const token = await login(app, user);
+    await request(app)
+      .get("/api/demo/supervision/investigacion")
+      .set(auth(token))
+      .expect(403);
+    const bootstrap = await request(app)
+      .get("/api/demo/bootstrap")
+      .set(auth(token))
+      .expect(200);
+    assert.equal(bootstrap.body.supervision, null);
+  }
+  const expired = tokenFor({
+    sub: "demo-pag-investigacion",
+    area: "INVESTIGACION",
+    grants: [
+      {
+        ...activeGrant("CONSULTAR_INDICADORES_INVESTIGACION", "INVESTIGACION"),
+        validTo: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+  await request(app)
+    .get("/api/demo/supervision/investigacion")
+    .set(auth(expired))
+    .expect(403);
+});
+
+test("territorios ampliados no conceden automáticamente cobertura ni se trasladan a Víctimas", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const inv = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(defender))
+    .expect(200);
+  assert.equal(inv.body.catalogs.regions.length, 33);
+  const supported = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send(investigationPayload({ region: "VALLE_CAUCA" }))
+    .expect(201);
+  assert.equal(itemFrom(supported).status, "ASIGNADA");
+  assert.equal(itemFrom(supported).assigneeName, "Felipe Osorio");
+  const missing = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send(investigationPayload({ region: "AMAZONAS" }))
+    .expect(201);
+  assert.equal(itemFrom(missing).status, "PENDIENTE_EXCEPCION");
+  assert.ok(
+    itemFrom(missing).assignment.evaluated.every(
+      (candidate) => candidate.eligible === false,
+    ),
+  );
+  const rjv = await login(app, "demo-rjv");
+  const vic = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(rjv))
+    .expect(200);
+  assert.equal(vic.body.catalogs.regions.length, 3);
+  assert.equal(
+    vic.body.catalogs.regions.some((entry) => entry.id === "VALLE_CAUCA"),
+    false,
+  );
 });
 
 test("una solicitud de Víctimas cierra solo cuando todos sus ítems independientes cierran", async () => {
@@ -1346,6 +1916,8 @@ test("la corrección parcial de Víctimas conserva el snapshot del ítem ya apro
   const app = testApp();
   const rjv = await login(app, "demo-rjv");
   const pag = await login(app, "demo-pag-victimas");
+  const psychologyExpert = await login(app, "demo-perito-psicologia");
+  const financialExpert = await login(app, "demo-perito-financiero");
   const created = await request(app)
     .post("/api/demo/victimas/solicitudes")
     .set(auth(rjv))
@@ -1445,6 +2017,108 @@ test("la corrección parcial de Víctimas conserva el snapshot del ítem ya apro
   );
   assert.equal(corrected.body.request.versions[0].reviews.length, 2);
   assert.equal(corrected.body.request.versions[1].reviews.length, 0);
+  assert.equal(
+    firstAfter.applicableRequestData.externalId,
+    "CASO-VIC-MULTIITEM",
+  );
+  assert.equal(
+    firstAfter.applicableRequestData.items.find((item) => item.id === firstId)
+      .serviceLabel,
+    "Evaluación psicológica pericial",
+  );
+  assert.ok(
+    firstAfter.applicableRequestData.items
+      .find((item) => item.id === firstId)
+      .specialtyLabels.includes("Psicología pericial"),
+  );
+  assert.equal(
+    firstAfter.applicableRequestData.items.find((item) => item.id === firstId)
+      .lawLabel,
+    "Ley 1448",
+  );
+  assert.equal(
+    firstAfter.applicableRequestData.items.find((item) => item.id === firstId)
+      .regionLabel,
+    "Bogotá",
+  );
+
+  const firstExpertView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(psychologyExpert))
+    .expect(200);
+  const firstExpertItem = firstExpertView.body.requests
+    .flatMap((entry) => entry.items)
+    .find((item) => item.id === firstId);
+  const firstExpertRequest = firstExpertView.body.requests.find((entry) =>
+    entry.items.some((item) => item.id === firstId),
+  );
+  assert.equal(firstExpertRequest.externalId, undefined);
+  assert.equal(firstExpertRequest.caseData, undefined);
+  assert.equal(firstExpertRequest.persons, undefined);
+  assert.equal(firstExpertRequest.documents, undefined);
+  assert.deepEqual(
+    firstExpertRequest.versions.map((entry) => entry.version),
+    [1],
+  );
+  assert.equal(firstExpertRequest.aggregateCounts.totalItems, 2);
+  assert.equal(firstExpertItem.submittedRequestData, undefined);
+  assert.equal(firstExpertItem.correctionHistory, undefined);
+  assert.equal(firstExpertItem.nextSubmissionVersion, undefined);
+  assert.deepEqual(
+    firstExpertItem.approvedRequestData.items.map((item) => item.id),
+    [firstId],
+  );
+  assert.deepEqual(
+    firstExpertRequest.versions[0].data.items.map((item) => item.id),
+    [firstId],
+  );
+  assert.ok(
+    !JSON.stringify(firstExpertRequest).includes("REF-MULTIITEM-CORREGIDO"),
+  );
+  assert.ok(
+    !JSON.stringify(firstExpertRequest).includes("Persona vinculada C"),
+  );
+  assert.ok(!JSON.stringify(firstExpertRequest).includes(secondId));
+  const startedForExpert = await request(app)
+    .post(`/api/demo/victimas/items/${firstId}/iniciar`)
+    .set(auth(psychologyExpert))
+    .expect(200);
+  assert.equal(startedForExpert.body.request.items[0].status, "EN_EJECUCION");
+  assert.ok(!JSON.stringify(startedForExpert.body).includes(secondId));
+  assert.ok(
+    !JSON.stringify(startedForExpert.body).includes("Persona vinculada C"),
+  );
+  await request(app)
+    .post(`/api/demo/victimas/items/${secondId}/iniciar`)
+    .set(auth(psychologyExpert))
+    .expect(403);
+  assert.equal(firstExpertItem.approvedSubmissionVersion, 1);
+  assert.equal(
+    firstExpertItem.applicableRequestData.externalId,
+    "CASO-VIC-MULTIITEM",
+  );
+  assert.equal(firstExpertItem.applicableRequestData.persons.length, 2);
+  assert.equal(
+    firstExpertItem.applicableRequestData.documents[0].reference,
+    "REF-FORM-VIC-001",
+  );
+
+  for (const actor of [rjv, pag]) {
+    const currentView = await request(app)
+      .get("/api/demo/bootstrap")
+      .set(auth(actor))
+      .expect(200);
+    const currentRequest = currentView.body.requests.find((entry) =>
+      entry.items.some((item) => item.id === secondId),
+    );
+    assert.equal(currentRequest.externalId, "CASO-VIC-MULTIITEM-CORREGIDO");
+    assert.equal(currentRequest.persons.length, 3);
+    assert.equal(
+      currentRequest.items.find((item) => item.id === secondId)
+        .correctionHistory[0].version,
+      2,
+    );
+  }
 
   const secondApproved = await request(app)
     .post(`/api/demo/victimas/items/${secondId}/aprobar-y-repartir`)
@@ -1458,6 +2132,95 @@ test("la corrección parcial de Víctimas conserva el snapshot del ítem ya apro
     approvedSecond.approvedRequestData.externalId,
     "CASO-VIC-MULTIITEM-CORREGIDO",
   );
+  const secondExpertView = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(financialExpert))
+    .expect(200);
+  const secondExpertItem = secondExpertView.body.requests
+    .flatMap((entry) => entry.items)
+    .find((item) => item.id === secondId);
+  assert.equal(secondExpertItem.approvedSubmissionVersion, 2);
+  assert.deepEqual(
+    secondExpertItem.applicableRequestData.items.map((item) => item.id),
+    [secondId],
+  );
+  const secondExpertRequest = secondExpertView.body.requests.find((entry) =>
+    entry.items.some((item) => item.id === secondId),
+  );
+  assert.deepEqual(
+    secondExpertRequest.versions.map((entry) => entry.version),
+    [2],
+  );
+  assert.ok(!JSON.stringify(secondExpertRequest).includes(firstId));
+  assert.equal(
+    secondExpertItem.applicableRequestData.externalId,
+    "CASO-VIC-MULTIITEM-CORREGIDO",
+  );
+  assert.equal(secondExpertItem.applicableRequestData.persons.length, 3);
+  assert.equal(
+    secondExpertItem.applicableRequestData.documents[0].reference,
+    "REF-MULTIITEM-CORREGIDO",
+  );
+});
+
+test("el alcance regional filtra también ítems dentro de versiones de Investigación", async () => {
+  const app = testApp();
+  const defender = await login(app, "demo-defensor");
+  const regional = await login(app, "demo-gestor-regional-investigacion");
+  const created = await request(app)
+    .post("/api/demo/investigacion/solicitudes")
+    .set(auth(defender))
+    .send(
+      investigationPayload({
+        items: [
+          { service: "SVC_INV_VERIFICACION_TERRENO", region: "BOGOTA" },
+          { service: "SVC_INV_VERIFICACION_TERRENO", region: "ANTIOQUIA" },
+        ],
+      }),
+    )
+    .expect(201);
+  const [visibleItem, hiddenItem] = created.body.request.items;
+  const view = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(regional))
+    .expect(200);
+  const projected = view.body.requests.find(
+    (entry) => entry.id === created.body.request.id,
+  );
+  assert.deepEqual(
+    projected.items.map((item) => item.id),
+    [visibleItem.id],
+  );
+  assert.deepEqual(
+    projected.versions[0].data.items.map((item) => item.id),
+    [visibleItem.id],
+  );
+  assert.ok(!JSON.stringify(projected).includes(hiddenItem.id));
+  const beforeDeniedAction = app.locals.demoRepository.snapshot();
+  await request(app)
+    .post(`/api/demo/investigacion/items/${hiddenItem.id}/iniciar`)
+    .set(auth(regional))
+    .expect(403);
+  assert.deepEqual(app.locals.demoRepository.snapshot(), beforeDeniedAction);
+});
+
+test("una concesión de consulta vencida no devuelve solicitudes ni snapshots", async () => {
+  const app = testApp();
+  const expired = tokenFor({
+    sub: "lector-expirado",
+    grants: [
+      {
+        ...activeGrant("CONSULTAR_SOLICITUDES", "VICTIMAS"),
+        validTo: "2026-09-01T00:00:00.000Z",
+      },
+    ],
+  });
+  const view = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(expired))
+    .expect(200);
+  assert.deepEqual(view.body.requests, []);
+  assert.deepEqual(view.body.allowedAreas, []);
 });
 
 test("el catálogo valida requisitos por ítem y el identificador de Víctimas es configurable y único", async () => {
@@ -1520,6 +2283,10 @@ test("los informes de Investigación conservan devolución y nueva versión", as
   const approved = await request(app)
     .post("/api/demo/investigacion/items/MT-2026-0002/aprobar-entrega")
     .set(auth(pag))
+    .send({
+      verificationReference: "CONSTANCIA-VERIFICACION-V2",
+      confirmReviewed: true,
+    })
     .expect(200);
   assert.deepEqual(
     itemFrom(approved).products.map(({ version, status }) => ({
@@ -1542,28 +2309,50 @@ test("cada operación especial pendiente permanece deshabilitada con su decisió
     ["transferencia", "TRANSFERIR_SOLICITUD", "DEC-RACI-TRANSFERENCIA"],
     ["prorroga", "SOLICITAR_PRORROGA", "DEC-PLZ-001"],
     ["ampliacion", "SOLICITAR_AMPLIACION", "DEC-AMP-001"],
-    ["actualizacion_f171", "SOLICITAR_ACTUALIZACION_F171", "DEC-VIC-F171"],
+    [
+      "actualizacion_f171",
+      "SOLICITAR_ACTUALIZACION_F171",
+      "DEC-VIC-F171",
+      "VICTIMAS",
+    ],
   ];
   const operator = tokenFor({
     sub: "operador-contratos-prueba",
     role: "perfil-propuesto-no-activo",
     area: "INVESTIGACION",
-    grants: pendingOperations.map(([, capability]) =>
-      activeGrant(capability, "INVESTIGACION"),
+    grants: pendingOperations.map(([, capability, , area = "INVESTIGACION"]) =>
+      activeGrant(capability, area),
     ),
   });
 
-  for (const [operation, , decisionCode] of pendingOperations) {
+  const before = app.locals.demoRepository.snapshot();
+  for (const [
+    operation,
+    ,
+    decisionCode,
+    area = "INVESTIGACION",
+  ] of pendingOperations) {
+    const itemPath =
+      area === "VICTIMAS"
+        ? "victimas/items/VIC-ITEM-DEMO-0001"
+        : "investigacion/items/MT-2026-0001";
     const response = await request(app)
-      .post(
-        `/api/demo/investigacion/items/MT-2026-0001/operaciones/${operation}`,
-      )
+      .post(`/api/demo/${itemPath}/operaciones/${operation}`)
       .set(auth(operator))
       .send({})
       .expect(409);
     assert.equal(response.body.error.code, "PENDING_FUNCTIONAL_DECISION");
     assert.equal(response.body.error.details.decisionCode, decisionCode);
   }
+  for (const operation of ["actualizacion_f171", "improcedencia"]) {
+    await request(app)
+      .post(
+        `/api/demo/investigacion/items/MT-2026-0001/operaciones/${operation}`,
+      )
+      .set(auth(operator))
+      .expect(404);
+  }
+  assert.deepEqual(app.locals.demoRepository.snapshot(), before);
 });
 
 test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revisión-publicación", async () => {
@@ -1688,4 +2477,254 @@ test("el catálogo exige capacidades separadas y respeta el ciclo borrador-revis
     onValidity.body.services.some((service) => service.id === "SVC_INV_PRUEBA"),
     true,
   );
+});
+
+function pdfDelivery(id = "upload-1") {
+  return {
+    deliveryMode: "PDF",
+    submissionId: id,
+    file: {
+      name: "Informe de campo.pdf",
+      mimeType: "application/pdf",
+      contentBase64: Buffer.from(exampleReportPdf("MT-2026-0002")).toString(
+        "base64",
+      ),
+    },
+  };
+}
+
+test("PDF autorizado conserva bytes, historial y versiones; reintentos no duplican la entrega", async () => {
+  const app = testApp();
+  const investigator = await login(app, "demo-investigador");
+  const pag = await login(app, "demo-pag-investigacion");
+  const admin = await login(app, "demo-admin");
+  const other = await login(app, "demo-investigador-mateo");
+  const endpoint = "/api/demo/investigacion/items/MT-2026-0002";
+  await request(app)
+    .post(endpoint + "/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Añadir soporte" })
+    .expect(200);
+  await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(other))
+    .send(pdfDelivery())
+    .expect(403);
+  for (const file of [
+    {
+      ...pdfDelivery().file,
+      contentBase64: Buffer.from("texto").toString("base64"),
+    },
+    { ...pdfDelivery().file, mimeType: "text/plain" },
+    { ...pdfDelivery().file, name: "../informe.pdf" },
+    { ...pdfDelivery().file, contentBase64: "no es base64" },
+    {
+      ...pdfDelivery().file,
+      contentBase64: Buffer.from("%PDF-1.4 /JavaScript %%EOF").toString(
+        "base64",
+      ),
+    },
+    {
+      ...pdfDelivery().file,
+      contentBase64: Buffer.alloc(2 * 1024 * 1024 + 1, 65).toString("base64"),
+    },
+  ]) {
+    await request(app)
+      .post(endpoint + "/entregar")
+      .set(auth(investigator))
+      .send({ ...pdfDelivery(), file })
+      .expect(400);
+  }
+  const delivered = await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send(pdfDelivery())
+    .expect(200);
+  const product = itemFrom(delivered).products[1];
+  assert.equal(product.version, 2);
+  assert.equal(
+    product.attachment.size,
+    Buffer.from(exampleReportPdf("MT-2026-0002")).length,
+  );
+  assert.equal(product.attachment.sha256.length, 64);
+  assert.equal(product.attachment.contentBase64, undefined);
+  const repeated = await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send(pdfDelivery())
+    .expect(200);
+  assert.equal(itemFrom(repeated).products.length, 2);
+  await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send({
+      ...pdfDelivery(),
+      file: { ...pdfDelivery().file, name: "Otro.pdf" },
+    })
+    .expect(409);
+  await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send(pdfDelivery("another-id"))
+    .expect(409);
+  const download = endpoint + "/productos/" + product.id + "/documento";
+  await request(app).get(download).expect(401);
+  await request(app).get(download).set(auth(admin)).expect(200);
+  const victimUser = await login(app, "demo-rjv");
+  await request(app).get(download).set(auth(victimUser)).expect(403);
+  await request(app).get(download).set(auth(other)).expect(403);
+  await request(app)
+    .get(download.replace("investigacion", "victimas"))
+    .set(auth(pag))
+    .expect(404);
+  const bytes = await request(app)
+    .get(download)
+    .set(auth(pag))
+    .expect(200)
+    .expect("Content-Type", /application\/pdf/);
+  assert.deepEqual(bytes.body, Buffer.from(exampleReportPdf("MT-2026-0002")));
+  await request(app)
+    .post(endpoint + "/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Aclarar hallazgos" })
+    .expect(200);
+  const newVersion = await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send(pdfDelivery("upload-2"))
+    .expect(200);
+  assert.equal(itemFrom(newVersion).products[2].version, 3);
+  assert.equal(itemFrom(newVersion).products[1].status, "DEVUELTO");
+  await request(app).get(download).set(auth(pag)).expect(200);
+  const view = await request(app)
+    .get("/api/demo/bootstrap")
+    .set(auth(investigator))
+    .expect(200);
+  assert.equal(JSON.stringify(view.body).includes("contentBase64"), false);
+  assert.equal(
+    JSON.stringify(view.body).includes("confirmedSubmissions"),
+    false,
+  );
+  assert.match(JSON.stringify(view.body), /Consulta del PDF/);
+});
+
+test("SharePoint se valida en servidor y Víctimas conserva cierre directo e idempotente con PDF", async () => {
+  const app = testApp();
+  const investigator = await login(app, "demo-investigador");
+  const pag = await login(app, "demo-pag-investigacion");
+  const endpoint = "/api/demo/investigacion/items/MT-2026-0002";
+  await request(app)
+    .post(endpoint + "/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Vincular informe" })
+    .expect(200);
+  for (const url of [
+    "http://sigip.sharepoint.com/a.pdf",
+    "https://sharepoint.com.evil.test/a",
+    "https://user:password@sigip.sharepoint.com/a",
+    "javascript:alert(1)",
+  ]) {
+    await request(app)
+      .post(endpoint + "/entregar")
+      .set(auth(investigator))
+      .send({ deliveryMode: "SHAREPOINT", sharepointUrl: url })
+      .expect(400);
+  }
+  const delivered = await request(app)
+    .post(endpoint + "/entregar")
+    .set(auth(investigator))
+    .send({
+      deliveryMode: "SHAREPOINT",
+      sharepointUrl: "https://sigip.sharepoint.com/sites/informes/Informe.pdf",
+    })
+    .expect(200);
+  assert.equal(itemFrom(delivered).status, "INFORME_ENTREGADO");
+  assert.equal(itemFrom(delivered).products[1].attachment.kind, "SHAREPOINT");
+  const rjv = await login(app, "demo-rjv");
+  const pagVictims = await login(app, "demo-pag-victimas");
+  const expert = await login(app, "demo-perito-psicologia");
+  const created = await request(app)
+    .post("/api/demo/victimas/solicitudes")
+    .set(auth(rjv))
+    .send(victimsPayload())
+    .expect(201);
+  const vic = "/api/demo/victimas/items/" + itemFrom(created).id;
+  await request(app)
+    .post(vic + "/aprobar-y-repartir")
+    .set(auth(pagVictims))
+    .expect(200);
+  await request(app)
+    .post(vic + "/iniciar")
+    .set(auth(expert))
+    .expect(200);
+  const finished = await request(app)
+    .post(vic + "/finalizar")
+    .set(auth(expert))
+    .send(pdfDelivery("f171-upload"))
+    .expect(200);
+  assert.equal(itemFrom(finished).status, "CERRADA");
+  assert.equal(itemFrom(finished).products[0].type, "F171");
+  assert.equal(itemFrom(finished).products[0].status, "REGISTRADO");
+  const repeated = await request(app)
+    .post(vic + "/finalizar")
+    .set(auth(expert))
+    .send(pdfDelivery("f171-upload"))
+    .expect(200);
+  assert.equal(itemFrom(repeated).products.length, 1);
+});
+
+test("actuaciones exigen texto y estado válido, autorización y reintento idempotente", async () => {
+  const app = testApp();
+  const investigator = await login(app, "demo-investigador");
+  const pag = await login(app, "demo-pag-investigacion");
+  const endpoint = "/api/demo/investigacion/items/MT-2026-0002";
+  await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(investigator))
+    .send({ observation: "Actuación" })
+    .expect(409);
+  await request(app)
+    .post(endpoint + "/devolver-entrega")
+    .set(auth(pag))
+    .send({ observation: "Completar" })
+    .expect(200);
+  await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(pag))
+    .send({ observation: "Actuación" })
+    .expect(403);
+  await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(investigator))
+    .send({ observation: " " })
+    .expect(400);
+  await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(investigator))
+    .send({ observation: "A".repeat(10001) })
+    .expect(400);
+  const payload = {
+    observation:
+      "Se entrevistaron dos fuentes.\nPendiente contraste documental.",
+    submissionId: "act-1",
+  };
+  const first = await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(investigator))
+    .send(payload)
+    .expect(200);
+  const repeated = await request(app)
+    .post(endpoint + "/avance")
+    .set(auth(investigator))
+    .send(payload)
+    .expect(200);
+  assert.equal(
+    itemFrom(first).activities.length,
+    itemFrom(repeated).activities.length,
+  );
+  assert.equal(
+    itemFrom(repeated).activities.at(-1).observation,
+    payload.observation,
+  );
+  assert.equal(itemFrom(repeated).status, "EN_EJECUCION");
 });

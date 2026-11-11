@@ -1,5 +1,9 @@
 # Matriz de trazabilidad de las 32 historias de usuario
 
+Incremento posterior autorizado por el usuario el 16-oct-2026: [informe 30](30_INCREMENTO_FUNCIONAL_PERSISTENTE_2026_10_16.md). HU-08/16/24/29: P06/I14 como referencia provisional, continuaciones de Víctimas con personas/datos financieros, mismo perito revalidado y F171 anterior conservado. HU-22/27/30: prórrogas y remisión regional operativas con políticas provisionales, persistencia SQLite y concurrencia verificada. Esto sustituye la limitación a políticas `TEST-ONLY` del incremento anterior, sin llenar aprobaciones de HU ni declarar ratificación institucional.
+
+Actualización de implementación del 16-oct-2026: [informe 27](27_AJUSTES_INVESTIGACION_2026_10_16.md). HU-11/12/27: SPOA textual, cinco dígitos, cobertura por servicio y control consultable. HU-25/29: constancia de verificación y envío al defensor antes del cierre de Investigación. HU-30/31/32: calendario versionado, control y XLSX autorizado con corte/filtros. Prórroga y derivadas se prueban con políticas `TEST-ONLY`; sus cifras y RACI no se aprueban. HU-13 sigue distinta de la prórroga. No cambia clasificación ni aprobación de las 32 HU.
+
 **Fuente:** `Reparto misiones de trabajo investigadores(5).zip`  
 **Fecha interna declarada en las HU:** 13 de julio de 2026  
 **Última modificación OOXML:** 14 de julio de 2026, entre 19:37 y 21:07 COT aproximadamente  
@@ -134,3 +138,13 @@ Las 32 HU son una buena base de alcance y confirman varias decisiones estructura
 Este incremento no cambia la clasificación ni completa la aprobación de ninguna HU. “Implementado” describe el contrato ejecutable pre-Oracle; “parametrizable” exige catálogo o política vigente; “pendiente” no habilita una acción.
 
 Este impacto no cambia la clasificación documental de las HU ni llena sus aprobaciones vacías. Describe comportamiento verificable del incremento, no aceptación institucional.
+
+## 9. Corrección de autorización por ítem del 7-oct-2026
+
+HU-05, HU-15, HU-19, HU-24 y HU-27: se filtran las versiones, revisiones y snapshots dentro del servidor, además del listado de ítems. Un perito sólo recibe el contexto aprobado del encargo asignado; no recibe una corrección posterior de otro ítem, aunque cambie datos comunes de la solicitud. Bootstrap y respuestas de acciones comparten la proyección. Las pruebas comprueban ausencia de contenidos ajenos, alcance regional, concesiones vencidas y rechazo de acciones sobre otro ítem sin mutación.
+
+HU-16, HU-20, HU-21, HU-26 y las capacidades complementarias de improcedencia/F-171: los contratos pendientes permanecen bloqueados y vinculados al registro central de decisiones. No se agregan actores, cifras o aprobaciones institucionales por defecto. Se conservan datos ficticios y recorridos existentes para presentación.
+
+## 10. Incremento autónomo del 19-oct-2026
+
+HU-11/14: borradores privados antes de radicar. HU-18/19: conservación de PDF al corregir y reenviar con idempotencia. HU-12/15/27: filtros combinados y documentos versionados por encargo. HU-29: soportes y productos continúan separados; no se agrega aprobación final en Víctimas. HU-32 y E06/E07: constancias, consultas auditadas, copias consistentes y estado técnico. Implementación D autorizada para pruebas; no modifica clasificación ni aprobaciones institucionales. Véase [Informe 33](33_MEJORAS_AUTONOMAS_HUGGING_FACE.md).

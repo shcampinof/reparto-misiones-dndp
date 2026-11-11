@@ -23,12 +23,16 @@ export function createHealthRouter({ config }) {
 }
 
 export function readinessPayload(req) {
+  req.app.locals.demoRepository?.check?.();
   return {
     ok: true,
     status: "ready",
     checks: {
       configuration: "ok",
-      persistence: "demo-memory-resettable",
+      persistence:
+        req.app.locals.config.storage.driver === "sqlite"
+          ? "sqlite-transactional"
+          : "demo-memory-resettable",
     },
     requestId: req.requestId,
   };

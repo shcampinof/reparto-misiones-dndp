@@ -1,5 +1,19 @@
 # Paquete de definición funcional — SIGIP-DP
 
+Presentación de cambios: [34 — Guion con perfiles, pasos y mensajes](34_GUION_PRESENTACION_CAMBIOS.md). Incluye los ocho ajustes originales y las mejoras autónomas publicadas.
+
+Incremento autónomo del 19-oct-2026: [33 — Documentos, borradores y recuperación sin acceso institucional](33_MEJORAS_AUTONOMAS_HUGGING_FACE.md).
+
+Incremento funcional del 16-oct-2026, posterior a las aclaraciones del usuario: [30 — Persistencia, reglas provisionales y flujos](30_INCREMENTO_FUNCIONAL_PERSISTENTE_2026_10_16.md), [31 — Solicitud de ratificación al área funcional](31_SOLICITUD_RATIFICACION_AREA_FUNCIONAL.md) y [32 — Entorno de pruebas y transición Oracle](32_GUIA_ENTORNO_PRUEBAS_Y_TRANSICION_ORACLE.md). Sustituye los bloqueos de implementación de términos y remisión descritos antes: son decisiones D provisionales explícitas, sin convertirlos en aprobación institucional.
+
+Revisión de nuevas fuentes (16-oct-2026): [28 — Reuniones de Investigación del 7-oct y Víctimas del 8-oct](28_REVISION_REUNIONES_OCTUBRE_Y_CIERRE_DE_INQUIETUDES.md). Aclara la remisión regional directa, distingue propuestas de decisiones y contrasta las prórrogas con SD-P03. [29 — Dos consultas pendientes, separadas por área](29_PREGUNTAS_FUNCIONALES_TRAS_REVISION_DE_REUNIONES.md), limitadas a procedimiento vigente y régimen de términos/prórrogas.
+
+Actualización del 16-oct-2026: [27 — Ajustes de Investigación y respuesta a doce observaciones](27_AJUSTES_INVESTIGACION_2026_10_16.md). Incluye trazabilidad de los ocho ajustes, límites de activación, contratos y configuración pendiente.
+
+Actualización integrada de la demo: [20 — Catálogo, cobertura, radicación y supervisión](20_DEMO_INTEGRADA_CATALOGO_COBERTURA_Y_SUPERVISION.md).
+
+Validación documental de Víctimas (8-oct-2026): [23 — Procedimiento, formatos y requisitos integrados](23_VALIDACION_DOCUMENTAL_VICTIMAS_2026_10_08.md). Incluye respuestas escritas, F171, conflictos de plazo/cobertura y cambios exclusivos de Víctimas.
+
 Fecha de corte: 1 de septiembre de 2026  
 Estado: propuesta para validación funcional; no constituye aprobación del área.
 
@@ -53,11 +67,15 @@ Por tanto, **ninguna fuente aislada debe declararse “la última versión funci
 
 ## Pendiente documental
 
-Las 32 HU ya fueron revisadas. La única fuente que continúa sin estar disponible es:
+Las 32 HU ya fueron revisadas. Al corte original, faltaba:
 
 1. `Socialización avance herramienta tecnológica para reparto de misiones de trabajo-20260714_090338-Grabación de la reunión(3).mp4`.
 
 La transcripción parcial de esa reunión sí fue revisada. Las HU parecen haber sido modificadas después de la socialización, pero sus aprobaciones están vacías; el video completo todavía puede aportar el contexto de los cambios.
+
+Actualización del 7-oct-2026: el video del 14 de julio, los demás videos, el ZIP y las 32 HU originales están disponibles en `Documentos Fuente`. Su inventario no constituye revisión integral ni aprobación de nuevas reglas. La revisión focalizada del video y la obtención de fuentes controladas siguen pendientes. El estado técnico actual y sus verificaciones se describen en `18_ANALISIS_DOCUMENTAL_Y_ESTADO_ACTUAL_2026_10_07.md`.
+
+Actualización del 8-oct-2026: se procesó el audio completo de la reunión de reparto de peritos del 23-jul mediante transcripción automática local y se revisaron capturas de la pantalla compartida. El [análisis 22](22_ANALISIS_VIDEO_REPARTO_PERITOS_2026_10_08.md) distingue el HTML histórico de la aplicación actual, aporta referencias temporales aproximadas y registra incertidumbres adicionales sin aprobar reglas. Esta revisión no constituye visionado continuo ni revisión de los otros videos; la socialización de Investigación del 14-jul conserva su pendiente específico.
 
 ## Decisiones que no deben programarse todavía como constantes
 
@@ -71,3 +89,7 @@ La transcripción parcial de esa reunión sí fue revisada. Las HU parecen haber
 - Participación definitiva de PAG central, administrador regional y defensor regional en Víctimas.
 
 Estas decisiones deben modelarse como parámetros o permanecer bloqueadas mediante una decisión funcional pendiente.
+
+- [Actuaciones y entrega documental](21_ACTUACIONES_Y_ENTREGA_DOCUMENTAL_2026_10_07.md): PDF, SharePoint, versiones y comprobación de flujos.
+- [Ajuste de interfaz institucional](35_AJUSTE_INTERFAZ_INSTITUCIONAL.md): textos, tipografía, superficies y detalle centrado, sin cambios de reglas operativas.
+- [Análisis de la reunión de reparto de peritos del 23-jul](22_ANALISIS_VIDEO_REPARTO_PERITOS_2026_10_08.md): aclaraciones sobre el HTML histórico, contraste con la demo actual y decisiones pendientes, con referencias temporales aproximadas.

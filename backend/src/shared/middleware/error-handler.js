@@ -13,14 +13,23 @@ export function notFoundHandler(req, _res, next) {
 export function errorHandler(logger) {
   return (error, req, res, _next) => {
     const invalidJson = error?.type === "entity.parse.failed";
+    const tooLarge = error?.type === "entity.too.large";
     const status =
-      error instanceof AppError ? error.status : invalidJson ? 400 : 500;
+      error instanceof AppError
+        ? error.status
+        : invalidJson
+          ? 400
+          : tooLarge
+            ? 413
+            : 500;
     const code =
       error instanceof AppError
         ? error.code
         : invalidJson
           ? "INVALID_JSON"
-          : "INTERNAL_ERROR";
+          : tooLarge
+            ? "PAYLOAD_TOO_LARGE"
+            : "INTERNAL_ERROR";
 
     logger.error(
       {
@@ -28,7 +37,6 @@ export function errorHandler(logger) {
         code,
         status,
         errorName: error.name,
-        errorMessage: error.message,
       },
       "request_failed",
     );
@@ -41,7 +49,9 @@ export function errorHandler(logger) {
             ? "Error interno del servidor"
             : invalidJson
               ? "El cuerpo JSON no es valido"
-              : error.message,
+              : tooLarge
+                ? "La carga supera el tamaño permitido"
+                : error.message,
         requestId: req.requestId,
       },
     };

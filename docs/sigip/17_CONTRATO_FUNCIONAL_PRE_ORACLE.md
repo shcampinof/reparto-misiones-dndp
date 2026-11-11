@@ -1,5 +1,9 @@
 # Contrato funcional pre-Oracle — SIGIP-DP
 
+Actualización del 16-oct-2026: [contratos de ajustes de Investigación](27_AJUSTES_INVESTIGACION_2026_10_16.md). La aprobación de informe requiere constancia; produce `APROBADO_PENDIENTE_ENVIO`, y el investigador acredita envío para cerrar. Nuevas rutas de prórroga, remisión, Excel y avisos documentadas allí. Cifras/RACI de prórrogas y remisiones exigen política vigente y no se precargan como aprobadas. Esta actualización prevalece sobre recorridos históricos de cierre inmediato.
+
+Actualización de presentación del 7-oct-2026: [catálogo, cobertura, radicación y supervisión](20_DEMO_INTEGRADA_CATALOGO_COBERTURA_Y_SUPERVISION.md). `bootstrap.supervision` es nulo sin capacidad vigente; `GET /api/demo/supervision/investigacion` exige consulta de indicadores con alcance. No agrega facultades operativas ni da por aprobados territorios, plazos o RACI.
+
 Fecha de corte: 10 de septiembre de 2026  
 Estado: incremento ejecutable para validación; no constituye aprobación institucional.  
 Alcance técnico: aplicación demostrativa en memoria. No autoriza Oracle, migraciones ni integraciones externas.
@@ -136,6 +140,7 @@ Mientras `DEC-PLZ-001` no esté aprobada, plazo, calendario y umbrales permanece
 | Prórroga | Bloqueada por `DEC-PLZ-001` | faltan aprobador, causal, duración y calendario |
 | Ampliación | Bloqueada por `DEC-AMP-001` | faltan punto de corte, plazo y continuidad definitiva |
 | Actualización posterior del F-171 | Bloqueada por `DEC-VIC-F171` | existe contrato técnico inactivo; no se inventa autorizador ni aprobación final PAG |
+| Improcedencia en Víctimas | Habilitada para el perito asignado (respuesta escrita C.4) | exige causal, constancia y soporte; pasa de ASIGNADA/EN_EJECUCION a IMPROCEDENTE; constancia en bandeja RJV, correo pendiente de integración |
 
 Las operaciones bloqueadas no se presentan como acciones en la interfaz. Sus contratos internos no simulan éxito ni modifican datos.
 
@@ -143,7 +148,13 @@ Las operaciones bloqueadas no se presentan como acciones en la interfaz. Sus con
 
 Cada versión de producto conserva `itemId`, tipo, referencia, número de versión, autor, fecha y estado. En Investigación, PAG puede devolver una versión entregada con observación; esa versión queda `DEVUELTO` y la siguiente entrega crea una nueva versión antes de una eventual aprobación. En Víctimas, registrar el F-171 crea una versión `REGISTRADO` y ejecuta el cierre ordinario, sin aprobación final PAG.
 
-El contrato para una actualización posterior del F-171 está definido pero deshabilitado. Improcedencia, causal de actualización y autoridad competente continúan pendientes.
+El contrato para una actualización posterior del F-171 está definido pero deshabilitado. Improcedencia se habilita conforme a la respuesta C.4; causal de actualización y autoridad competente para actualizar continúan pendientes.
+
+## 9.1 Proyección de consulta y respuestas por ítem
+
+Actualización 7-oct-2026: la API aplica la misma proyección al consultar bootstrap y al responder acciones. Las versiones sólo incluyen ítems visibles y sus revisiones. Cada `approvedRequestData` y `applicableRequestData` contiene el ítem correspondiente. Para el ejecutor de Víctimas se omiten datos comunes actuales, versiones no aprobadas e historial de correcciones; el contexto se consulta dentro de la versión aprobada de cada encargo. Un cambio del ítem vecino no amplía el acceso. El RJV titular y el PAG autorizado conservan datos actuales e historial; el estado y conteo agregados continúan describiendo toda la solicitud sin revelar el contenido de encargos ajenos.
+
+La actualización F171 y la improcedencia son contratos exclusivos de Víctimas. La primera permanece bloqueada por `DEC-VIC-F171`; la segunda se habilita conforme a C.4 del documento con respuestas. No constituyen acciones disponibles en Investigación. La descarga del F171 y su referencia/enlace se reservan al RJV titular y al perito asignado, conforme a C.6; el PAG consulta metadatos.
 
 ## 10. Evidencia ejecutable
 

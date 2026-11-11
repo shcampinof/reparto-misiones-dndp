@@ -43,14 +43,29 @@ export const OPERATION_CONTRACTS = Object.freeze({
     CAPABILITIES.SOLICITAR_ACTUALIZACION_F171,
     "DEC-VIC-F171",
     "Faltan causal, autorizador y efecto de una actualización posterior del F-171",
+    ["VICTIMAS"],
   ),
+  IMPROCEDENCIA: {
+    capability: CAPABILITIES.DECLARAR_IMPROCEDENCIA_VICTIMAS,
+    enabled: true,
+    areas: ["VICTIMAS"],
+    allowedStates: ["ASIGNADA", "EN_EJECUCION"],
+    requiredFields: ["reason", "description", "supportReference"],
+    preservesPrimaryState: false,
+    evidence: "DEFENSORIA DEL PUEBLO.docx, C.4",
+  },
 });
 
-function pending(capability, decisionCode, reason) {
+function pending(
+  capability,
+  decisionCode,
+  reason,
+  areas = ["INVESTIGACION", "VICTIMAS"],
+) {
   return {
     capability,
     enabled: false,
-    areas: ["INVESTIGACION", "VICTIMAS"],
+    areas,
     allowedStates: [],
     requiredFields: [],
     decisionCode,

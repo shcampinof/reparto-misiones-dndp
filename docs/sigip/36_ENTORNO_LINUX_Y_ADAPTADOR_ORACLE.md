@@ -106,3 +106,11 @@ Esa prueba deja una marca técnica con UUID en el esquema de pruebas; no borra r
 Pendientes: conectividad/listener; credenciales y versión; aprobación/mapeo del esquema; pruebas reales de migración, bloqueo, integridad, carga y recuperación; SSO y aprovisionamiento institucional; correo/SharePoint/IRIS; antimalware y almacenamiento documental. Las rutas de negocio actuales siguen siendo las de la demostración y requieren el modo de desarrollo explícito; agregar una contraseña Oracle no habilita identidad institucional.
 
 Se actualizaron dependencias transitivas del backend y se fijó `qs` 6.16.2 mediante override compatible para cerrar alertas verificadas por `npm audit`. La publicación web continúa sirviendo archivos compilados, no el servidor Vite expuesto.
+
+### Evidencia del despliegue de desarrollo
+
+El commit de código `9d009da` se instaló en Linux desde la rama `codex/oracle-linux-development`. En Windows y Linux pasaron 104 pruebas backend; se omitió expresamente una prueba Oracle real. En Windows pasaron las 23 pruebas generales y las 11 pruebas persistentes de navegador. Lint, formato y build completados; `npm audit` backend sin vulnerabilidades.
+
+El servicio quedó `active` y `enabled`, con `.env` y `.env.oracle` en modo 600. Una prueba sobre la instancia Linux verificó reinicio del servicio, conservación del JWT, recuperación de borrador y PDF sin alterar su hash, reserva del F171, CORS y backup SQLite confirmado. El borrador de verificación se archivó mediante API, conservando su auditoría. Evidencia privada en `~/sigip-verificacion.json` y `~/sigip-backend-verification.log` del usuario del servidor.
+
+El chequeo `oracle:check` se detuvo correctamente por usuario/contraseña pendientes, sin intentar autenticarse ni aplicar DDL. El diagnóstico TCP siguió rechazado para las tres direcciones del hostname proporcionado. La preparación del adaptador no se presenta como conexión Oracle validada.

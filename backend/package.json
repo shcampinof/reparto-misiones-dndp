@@ -15,12 +15,20 @@
     "test": "node --test",
     "test:unit": "node --test test/unit/config.test.js test/unit/logger.test.js",
     "test:api": "node --test test/api/app.test.js",
-    "check": "npm run lint && npm run format:check && npm test"
+    "check": "npm run lint && npm run format:check && npm test",
+    "oracle:check": "node src/infrastructure/persistence/oracle/cli.js check",
+    "oracle:migrate": "node src/infrastructure/persistence/oracle/cli.js migrate",
+    "oracle:init": "node src/infrastructure/persistence/oracle/cli.js init",
+    "test:oracle": "node --test test/oracle/*.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "oracledb": "^7.0.1"
+  },
+  "overrides": {
+    "qs": "6.16.2"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

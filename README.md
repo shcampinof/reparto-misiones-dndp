@@ -1,5 +1,7 @@
 # SIGIP-DP
 
+Preparación de Oracle Linux y adaptador Oracle de desarrollo: [guía 36](docs/sigip/36_ENTORNO_LINUX_Y_ADAPTADOR_ORACLE.md). Incluye instalación, servicio systemd de usuario, `.env.oracle.example`, migraciones, transacciones asíncronas y activación sin perder la configuración anterior. La conexión real sigue pendiente de listener/credenciales y pruebas contra el esquema institucional.
+
 Demostración funcional del **Sistema de Información para la Gestión Investigativa y Pericial de la Defensoría del Pueblo**. Conserva estrategias y estados separados para Investigación y Víctimas sobre un monolito modular React + Express.
 
 - Repositorio canónico: `https://github.com/shcampinof/reparto-misiones-dndp`

@@ -1,5 +1,7 @@
 # Entorno funcional de pruebas y transición a Oracle
 
+Actualización del 11-nov-2026: la [guía 36](36_ENTORNO_LINUX_Y_ADAPTADOR_ORACLE.md) incorpora un primer adaptador Oracle con entidades separadas y contrato asíncrono, migración y scripts Linux. Las afirmaciones siguientes de «adaptador no implementado» describen la fase anterior. La verificación contra Oracle real, el esquema institucional y las integraciones permanecen pendientes.
+
 Actualización del 19-oct-2026: [Informe 33](33_MEJORAS_AUTONOMAS_HUGGING_FACE.md) amplía límites configurables, borradores, soportes y recuperación. Las cifras 2/4/8 MB de este informe describen la entrega anterior; Docker ahora configura 10/30/48 MB.
 
 ## Ejecución local

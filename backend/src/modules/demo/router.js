@@ -8,13 +8,15 @@ export function createDemoRouter({
   catalogService,
 }) {
   const router = Router();
+  const route = (method, path, handler) =>
+    router[method](path, asyncHandler(handler));
   router.use(authMiddleware);
 
-  router.get("/bootstrap", (_req, res) =>
-    res.json(demoService.bootstrap(_req.auth)),
+  route("get", "/bootstrap", async (_req, res) =>
+    res.json(await demoService.bootstrap(_req.auth)),
   );
-  router.get("/reportes/investigacion.xlsx", (req, res) => {
-    const bytes = demoService.exportInvestigation(req.auth, req.query);
+  route("get", "/reportes/investigacion.xlsx", async (req, res) => {
+    const bytes = await demoService.exportInvestigation(req.auth, req.query);
     res.set(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -31,27 +33,35 @@ export function createDemoRouter({
     "enrutar-actividad": "routeActivity",
     "registrar-envio": "recordDispatch",
   })) {
-    router.post(`/investigacion/items/:id/${path}`, (req, res) =>
+    route("post", `/investigacion/items/:id/${path}`, async (req, res) =>
       res.json({
-        request: demoService[method](req.auth, req.params.id, req.body || {}),
+        request: await demoService[method](
+          req.auth,
+          req.params.id,
+          req.body || {},
+        ),
       }),
     );
   }
-  router.get("/:area/items/:id/productos/:productId/documento", (req, res) => {
-    const document = demoService.productDocument(
-      req.auth,
-      req.params.area,
-      req.params.id,
-      req.params.productId,
-    );
-    res.set("Content-Type", "application/pdf");
-    res.set("Cache-Control", "no-store");
-    res.set("X-Content-Type-Options", "nosniff");
-    res.attachment(document.name);
-    res.send(Buffer.from(document.contentBase64, "base64"));
-  });
-  router.get("/:area/items/:id/documentos/:index", (req, res) => {
-    const document = demoService.intakeDocument(
+  route(
+    "get",
+    "/:area/items/:id/productos/:productId/documento",
+    async (req, res) => {
+      const document = await demoService.productDocument(
+        req.auth,
+        req.params.area,
+        req.params.id,
+        req.params.productId,
+      );
+      res.set("Content-Type", "application/pdf");
+      res.set("Cache-Control", "no-store");
+      res.set("X-Content-Type-Options", "nosniff");
+      res.attachment(document.name);
+      res.send(Buffer.from(document.contentBase64, "base64"));
+    },
+  );
+  route("get", "/:area/items/:id/documentos/:index", async (req, res) => {
+    const document = await demoService.intakeDocument(
       req.auth,
       req.params.area,
       req.params.id,
@@ -62,75 +72,91 @@ export function createDemoRouter({
     res.attachment(document.name);
     res.send(Buffer.from(document.contentBase64, "base64"));
   });
-  router.post("/reset", (req, res) => res.json(demoService.reset(req.auth)));
-  router.post("/victimas/items/:id/continuacion", (req, res) =>
+  route("post", "/reset", async (req, res) =>
+    res.json(await demoService.reset(req.auth)),
+  );
+  route("post", "/victimas/items/:id/continuacion", async (req, res) =>
     res.status(201).json({
-      request: demoService.requestVictimsFollowUp(
+      request: await demoService.requestVictimsFollowUp(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/victimas/items/:id/solicitar-prorroga", (req, res) =>
+  route("post", "/victimas/items/:id/solicitar-prorroga", async (req, res) =>
     res.json({
-      request: demoService.requestVictimsExtension(
+      request: await demoService.requestVictimsExtension(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/victimas/items/:id/decidir-prorroga", (req, res) =>
+  route("post", "/victimas/items/:id/decidir-prorroga", async (req, res) =>
     res.json({
-      request: demoService.decideVictimsExtension(
+      request: await demoService.decideVictimsExtension(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.get("/supervision/investigacion", (req, res) => {
+  route("get", "/supervision/investigacion", async (req, res) => {
     assertCapability(
       req.auth,
       CAPABILITIES.CONSULTAR_INDICADORES_INVESTIGACION,
       { area: "INVESTIGACION", region: req.auth.region },
     );
-    res.json({ supervision: demoService.bootstrap(req.auth).supervision });
+    res.json({
+      supervision: (await demoService.bootstrap(req.auth)).supervision,
+    });
   });
 
-  router.get("/catalogo/servicios", (req, res) =>
+  route("get", "/catalogo/servicios", async (req, res) =>
     res.json({
-      services: catalogService.listPublished(req.auth, {
+      services: await catalogService.listPublished(req.auth, {
         area: req.query.area,
         at: req.query.at,
       }),
     }),
   );
-  router.post("/catalogo/servicios", (req, res) =>
-    res
-      .status(201)
-      .json({ service: catalogService.createDraft(req.auth, req.body || {}) }),
-  );
-  router.post("/catalogo/servicios/:id/enviar-revision", (req, res) =>
-    res.json({
-      service: catalogService.submit(req.auth, req.params.id, req.body || {}),
+  route("post", "/catalogo/servicios", async (req, res) =>
+    res.status(201).json({
+      service: await catalogService.createDraft(req.auth, req.body || {}),
     }),
   );
-  router.post("/catalogo/servicios/:id/publicar", (req, res) =>
+  route("post", "/catalogo/servicios/:id/enviar-revision", async (req, res) =>
     res.json({
-      service: catalogService.publish(req.auth, req.params.id, req.body || {}),
+      service: await catalogService.submit(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
     }),
   );
-  router.post("/catalogo/servicios/:id/retirar", (req, res) =>
+  route("post", "/catalogo/servicios/:id/publicar", async (req, res) =>
     res.json({
-      service: catalogService.retire(req.auth, req.params.id, req.body || {}),
+      service: await catalogService.publish(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
+    }),
+  );
+  route("post", "/catalogo/servicios/:id/retirar", async (req, res) =>
+    res.json({
+      service: await catalogService.retire(
+        req.auth,
+        req.params.id,
+        req.body || {},
+      ),
     }),
   );
 
-  router.post("/:area/items/:id/operaciones/:type", (req, res) =>
+  route("post", "/:area/items/:id/operaciones/:type", async (req, res) =>
     res.status(201).json({
-      request: demoService.registerOperation(
+      request: await demoService.registerOperation(
         req.auth,
         req.params.area,
         req.params.id,
@@ -140,54 +166,61 @@ export function createDemoRouter({
     }),
   );
 
-  router.post(
+  route(
+    "post",
     "/investigacion/solicitudes",
     asyncHandler(async (req, res) => {
       res.status(201).json({
-        request: demoService.createInvestigation(req.auth, req.body || {}),
+        request: await demoService.createInvestigation(
+          req.auth,
+          req.body || {},
+        ),
       });
     }),
   );
-  router.post("/investigacion/items/:id/repartir", (req, res) =>
+  route("post", "/investigacion/items/:id/repartir", async (req, res) =>
     res.json({
-      request: demoService.assignInvestigationItem(req.auth, req.params.id),
+      request: await demoService.assignInvestigationItem(
+        req.auth,
+        req.params.id,
+      ),
     }),
   );
-  router.post("/investigacion/items/:id/iniciar", (req, res) =>
+  route("post", "/investigacion/items/:id/iniciar", async (req, res) =>
     res.json({
-      request: demoService.startInvestigation(req.auth, req.params.id),
+      request: await demoService.startInvestigation(req.auth, req.params.id),
     }),
   );
-  router.post("/investigacion/items/:id/avance", (req, res) =>
+  route("post", "/investigacion/items/:id/avance", async (req, res) =>
     res.json({
-      request: demoService.progressInvestigation(
+      request: await demoService.progressInvestigation(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/investigacion/items/:id/entregar", (req, res) =>
+  route("post", "/investigacion/items/:id/entregar", async (req, res) =>
     res.json({
-      request: demoService.deliverInvestigation(
+      request: await demoService.deliverInvestigation(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/investigacion/items/:id/aprobar-entrega", (req, res) =>
+  route("post", "/investigacion/items/:id/aprobar-entrega", async (req, res) =>
     res.json({
-      request: demoService.approveInvestigationDelivery(
+      request: await demoService.approveInvestigationDelivery(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/investigacion/items/:id/devolver-entrega", (req, res) =>
+  route("post", "/investigacion/items/:id/devolver-entrega", async (req, res) =>
     res.json({
-      request: demoService.returnInvestigationDelivery(
+      request: await demoService.returnInvestigationDelivery(
         req.auth,
         req.params.id,
         req.body || {},
@@ -195,52 +228,58 @@ export function createDemoRouter({
     }),
   );
 
-  router.post(
+  route(
+    "post",
     "/victimas/solicitudes",
     asyncHandler(async (req, res) => {
-      res
-        .status(201)
-        .json({ request: demoService.createVictims(req.auth, req.body || {}) });
+      res.status(201).json({
+        request: await demoService.createVictims(req.auth, req.body || {}),
+      });
     }),
   );
-  router.post("/victimas/items/:id/aprobar-y-repartir", (req, res) =>
+  route("post", "/victimas/items/:id/aprobar-y-repartir", async (req, res) =>
     res.json({
-      request: demoService.approveVictimsAndAssign(req.auth, req.params.id),
+      request: await demoService.approveVictimsAndAssign(
+        req.auth,
+        req.params.id,
+      ),
     }),
   );
-  router.post("/victimas/items/:id/devolver-solicitud", (req, res) =>
+  route("post", "/victimas/items/:id/devolver-solicitud", async (req, res) =>
     res.json({
-      request: demoService.returnVictimsRequest(
+      request: await demoService.returnVictimsRequest(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/victimas/items/:id/corregir-reenviar", (req, res) =>
+  route("post", "/victimas/items/:id/corregir-reenviar", async (req, res) =>
     res.json({
-      request: demoService.correctAndResubmitVictims(
+      request: await demoService.correctAndResubmitVictims(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/victimas/items/:id/iniciar", (req, res) =>
-    res.json({ request: demoService.startVictims(req.auth, req.params.id) }),
-  );
-  router.post("/victimas/items/:id/avance", (req, res) =>
+  route("post", "/victimas/items/:id/iniciar", async (req, res) =>
     res.json({
-      request: demoService.progressVictims(
+      request: await demoService.startVictims(req.auth, req.params.id),
+    }),
+  );
+  route("post", "/victimas/items/:id/avance", async (req, res) =>
+    res.json({
+      request: await demoService.progressVictims(
         req.auth,
         req.params.id,
         req.body || {},
       ),
     }),
   );
-  router.post("/victimas/items/:id/finalizar", (req, res) =>
+  route("post", "/victimas/items/:id/finalizar", async (req, res) =>
     res.json({
-      request: demoService.finishVictims(
+      request: await demoService.finishVictims(
         req.auth,
         req.params.id,
         req.body || {},

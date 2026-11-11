@@ -34,41 +34,22 @@ import {
 import { requestContext } from "../shared/middleware/request-context.js";
 import { requestLogger } from "../shared/middleware/request-logger.js";
 
-export function createApp({ config, logger, clock }) {
+export function createApp({ config, logger, clock, repository }) {
   const app = express();
   const users = buildDemoUsers(config);
   const authService = createAuthService({ config, users });
   const authMiddleware = createAuthMiddleware(config);
-  const seedFactory = () => {
-    const seed = createDemoSeed();
-    seed.filePolicy = config.files;
-    return config.provisionalRules ? applyProvisionalRules(seed) : seed;
-  };
+  const seedFactory = createSeedFactory(config);
+  if (config.storage.driver === "oracle" && !repository)
+    throw new Error("Inicialice el repositorio Oracle antes de crear la API");
   const demoRepository =
-    config.storage.driver === "sqlite"
+    repository ||
+    (config.storage.driver === "sqlite"
       ? new SqliteRepository(config.storage.filename, seedFactory)
-      : new InMemoryDemoRepository(seedFactory);
-  const storedRules = demoRepository.snapshot().provisionalRules;
-  if (
-    storedRules &&
-    (storedRules.operationalEnabled !== false) !== config.provisionalRules
-  ) {
-    demoRepository.transaction((state) => {
-      state.provisionalRules.operationalEnabled = config.provisionalRules;
-      for (const policy of [
-        ...state.investigationPolicies,
-        ...(state.victimsPolicies || []),
-        ...state.catalogs.services.map((service) => service.termPolicy),
-      ]) {
-        if (policy.status === "PROVISIONAL")
-          policy.operationalEnabled = config.provisionalRules;
-      }
-    });
-  }
+      : new InMemoryDemoRepository(seedFactory));
+  if (config.storage.driver !== "oracle")
+    demoRepository.transaction((state) => configureRuntimeState(state, config));
   const catalogService = createCatalogService({ repository: demoRepository });
-  demoRepository.transaction((state) => {
-    state.filePolicy = config.files;
-  });
   const demoService = createDemoService({
     repository: demoRepository,
     catalogService,
@@ -83,6 +64,8 @@ export function createApp({ config, logger, clock }) {
   app.locals.backups = createBackupSchedule({
     filename: config.storage.filename,
     ...config.backups,
+    directory:
+      config.storage.driver === "sqlite" ? config.backups.directory : "",
   });
 
   app.disable("x-powered-by");
@@ -126,7 +109,10 @@ export function createApp({ config, logger, clock }) {
   });
 
   app.use("/api/health", createHealthRouter({ config }));
-  app.get("/api/ready", (req, res) => res.json(readinessPayload(req)));
+  app.get(
+    "/api/ready",
+    asyncHandler(async (req, res) => res.json(await readinessPayload(req))),
+  );
   app.use("/api/auth", createAuthRouter({ authService, authMiddleware }));
   if (config.auth.demoEnabled) {
     app.use(
@@ -163,4 +149,40 @@ export function createApp({ config, logger, clock }) {
   app.use(notFoundHandler);
   app.use(errorHandler(logger));
   return app;
+}
+
+export function configureRuntimeState(state, config) {
+  const rules = state.provisionalRules;
+  if (rules) {
+    rules.operationalEnabled = config.provisionalRules;
+    for (const policy of [
+      ...(state.investigationPolicies || []),
+      ...(state.victimsPolicies || []),
+      ...(state.catalogs.services || []).map((service) => service.termPolicy),
+    ]) {
+      if (policy?.status === "PROVISIONAL")
+        policy.operationalEnabled = config.provisionalRules;
+    }
+  }
+  state.filePolicy = config.files;
+}
+
+export function createSeedFactory(config) {
+  return () => {
+    const seed = createDemoSeed();
+    if (config.storage.driver === "oracle" && !config.oracle.seedDemo) {
+      seed.counters = { investigation: 1, victims: 1 };
+      for (const key of [
+        "requests",
+        "users",
+        "professionals",
+        "operations",
+        "audit",
+        "outbox",
+      ])
+        seed[key] = [];
+    }
+    seed.filePolicy = config.files;
+    return config.provisionalRules ? applyProvisionalRules(seed) : seed;
+  };
 }

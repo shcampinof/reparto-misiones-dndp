@@ -1,5 +1,7 @@
 # Paquete de definición funcional — SIGIP-DP
 
+Actualización del 11-nov-2026: [36 — Linux y preparación Oracle](36_ENTORNO_LINUX_Y_ADAPTADOR_ORACLE.md). Adaptador, migraciones y configuración preparados para desarrollo; acceso Oracle real y validación institucional pendientes. No altera el estado de las decisiones funcionales P.
+
 Presentación de cambios: [34 — Guion con perfiles, pasos y mensajes](34_GUION_PRESENTACION_CAMBIOS.md). Incluye los ocho ajustes originales y las mejoras autónomas publicadas.
 
 Incremento autónomo del 19-oct-2026: [33 — Documentos, borradores y recuperación sin acceso institucional](33_MEJORAS_AUTONOMAS_HUGGING_FACE.md).

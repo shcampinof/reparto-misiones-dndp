@@ -74,10 +74,10 @@ export function createWorkspaceService({
       maxItemBytes: policy.maxItemBytes,
       antivirus: Boolean(policy.antimalwareCommand),
     }),
-    drafts(auth, area) {
+    async drafts(auth, area) {
       area = areaName(area);
       draftPermission(auth, area);
-      return (repository.snapshot().drafts || [])
+      return ((await repository.snapshot()).drafts || [])
         .filter(
           (d) => d.ownerUserId === auth.sub && d.area === area && !d.deletedAt,
         )
@@ -88,18 +88,16 @@ export function createWorkspaceService({
           title: d.title,
         }));
     },
-    draft(auth, area, id) {
+    async draft(auth, area, id) {
       area = areaName(area);
       draftPermission(auth, area);
-      const d = repository
-        .snapshot()
-        .drafts?.find(
-          (d) =>
-            d.id === id &&
-            d.area === area &&
-            d.ownerUserId === auth.sub &&
-            !d.deletedAt,
-        );
+      const d = (await repository.snapshot()).drafts?.find(
+        (d) =>
+          d.id === id &&
+          d.area === area &&
+          d.ownerUserId === auth.sub &&
+          !d.deletedAt,
+      );
       if (!d) fail(404, "DRAFT_NOT_FOUND", "Borrador no encontrado");
       return d;
     },
@@ -179,8 +177,8 @@ export function createWorkspaceService({
         return draft;
       });
     },
-    deleteDraft(auth, area, id, revision) {
-      this.draft(auth, area, id);
+    async deleteDraft(auth, area, id, revision) {
+      await this.draft(auth, area, id);
       return repository.transaction((state) => {
         const d = state.drafts.find(
           (d) => d.id === id && d.ownerUserId === auth.sub && !d.deletedAt,
@@ -193,8 +191,8 @@ export function createWorkspaceService({
         return { archived: true };
       });
     },
-    documents(auth, area, itemId) {
-      const state = repository.snapshot(),
+    async documents(auth, area, itemId) {
+      const state = await repository.snapshot(),
         found = locate(state, auth, area, itemId);
       const canRead = contentAllowed(auth, found);
       return {
@@ -231,8 +229,8 @@ export function createWorkspaceService({
           ),
       };
     },
-    upload(auth, area, itemId, payload) {
-      const permissions = this.documents(auth, area, itemId);
+    async upload(auth, area, itemId, payload) {
+      const permissions = await this.documents(auth, area, itemId);
       if (!permissions.canRead)
         fail(
           403,

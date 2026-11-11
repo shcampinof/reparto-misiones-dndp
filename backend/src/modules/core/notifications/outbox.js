@@ -51,7 +51,7 @@ export async function dispatchOutbox({
   leaseMilliseconds = 60000,
 }) {
   if (!sender) return;
-  repository.transaction((state) => {
+  await repository.transaction((state) => {
     const now = clock();
     for (const entry of state.outbox || [])
       if (
@@ -62,13 +62,13 @@ export async function dispatchOutbox({
         entry.failureCode = "WORKER_LEASE_EXPIRED";
       }
   });
-  const entries = repository.snapshot().outbox || [];
+  const entries = (await repository.snapshot()).outbox || [];
   for (const candidate of entries.filter(
     (entry) =>
       ["PENDIENTE", "FALLIDA"].includes(entry.status) &&
       (!entry.nextAttemptAt || entry.nextAttemptAt <= clock()),
   )) {
-    const claimed = repository.transaction((state) => {
+    const claimed = await repository.transaction((state) => {
       const entry = state.outbox.find((row) => row.key === candidate.key);
       if (!["PENDIENTE", "FALLIDA"].includes(entry.status)) return false;
       entry.status = "EN_PROCESO";
@@ -87,7 +87,7 @@ export async function dispatchOutbox({
         itemId: candidate.itemId,
         idempotencyKey: candidate.key,
       });
-      repository.transaction((state) => {
+      await repository.transaction((state) => {
         Object.assign(
           state.outbox.find((entry) => entry.key === candidate.key),
           {
@@ -99,7 +99,7 @@ export async function dispatchOutbox({
         );
       });
     } catch {
-      repository.transaction((state) => {
+      await repository.transaction((state) => {
         Object.assign(
           state.outbox.find((entry) => entry.key === candidate.key),
           {

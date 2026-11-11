@@ -43,12 +43,11 @@ const ACTIVE_STATES = new Set([
 
 export function createDemoService({
   repository,
-  catalogService,
   clock = () => new Date().toISOString(),
   filePolicy = {},
 }) {
-  function bootstrap(auth) {
-    const state = repository.snapshot();
+  async function bootstrap(auth) {
+    const state = await repository.snapshot();
     const requests = state.requests
       .map((request) => presentRequestForAuth(state, request, auth))
       .filter((request) => request.items.length > 0);
@@ -57,7 +56,7 @@ export function createDemoService({
       hasCapability(auth, CAPABILITIES.CONSULTAR_CATALOGO_SERVICIOS, { area }),
     );
     const catalogServices = catalogAreas.flatMap((area) =>
-      catalogService.listPublished(auth, { area, at: catalogAt }),
+      publishedServices(state, area, catalogAt),
     );
     const visibleServiceIds = new Set(
       catalogServices.map((service) => service.id),
@@ -81,7 +80,7 @@ export function createDemoService({
         antivirus: Boolean(filePolicy.antimalwareCommand),
       },
       storage: {
-        driver: repository.close ? "sqlite" : "memory",
+        driver: repository.driver || (repository.close ? "sqlite" : "memory"),
         resettable: !repository.close,
       },
       provisionalRules:
@@ -995,11 +994,11 @@ export function createDemoService({
     });
   }
 
-  function reset(auth) {
+  async function reset(auth) {
     assertCapability(auth, CAPABILITIES.RESTABLECER_PRESENTACION, {
       area: "AMBAS",
     });
-    repository.reset();
+    await repository.reset();
     return bootstrap(auth);
   }
 

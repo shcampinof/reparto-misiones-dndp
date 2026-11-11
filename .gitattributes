@@ -5,3 +5,5 @@
 *.md text eol=lf whitespace=-trailing-space
 *.yml text eol=lf
 *.yaml text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf

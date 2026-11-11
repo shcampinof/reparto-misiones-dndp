@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncHandler } from "../../../shared/errors.js";
 
 export function createHealthRouter({ config }) {
   const router = Router();
@@ -15,24 +16,29 @@ export function createHealthRouter({ config }) {
     });
   });
 
-  router.get("/ready", (req, res) => {
-    res.json(readinessPayload(req));
-  });
+  router.get(
+    "/ready",
+    asyncHandler(async (req, res) => {
+      res.json(await readinessPayload(req));
+    }),
+  );
 
   return router;
 }
 
-export function readinessPayload(req) {
-  req.app.locals.demoRepository?.check?.();
+export async function readinessPayload(req) {
+  await req.app.locals.demoRepository?.check?.();
   return {
     ok: true,
     status: "ready",
     checks: {
       configuration: "ok",
       persistence:
-        req.app.locals.config.storage.driver === "sqlite"
-          ? "sqlite-transactional"
-          : "demo-memory-resettable",
+        req.app.locals.config.storage.driver === "oracle"
+          ? "oracle-transactional"
+          : req.app.locals.config.storage.driver === "sqlite"
+            ? "sqlite-transactional"
+            : "demo-memory-resettable",
     },
     requestId: req.requestId,
   };

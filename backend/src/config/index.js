@@ -100,6 +100,23 @@ export function createConfig(env = process.env) {
         env.STORAGE_DRIVER || (environment === "test" ? "memory" : "sqlite"),
       filename: env.SQLITE_PATH || "./data/sigip.sqlite",
     },
+    oracle: {
+      user: String(env.ORACLE_USER || "").trim(),
+      password: String(env.ORACLE_PASSWORD || ""),
+      connectString: String(env.ORACLE_CONNECT_STRING || "").trim(),
+      poolMin: Number(env.ORACLE_POOL_MIN || 0),
+      poolMax: Number(env.ORACLE_POOL_MAX || 4),
+      queueTimeout: Number(env.ORACLE_QUEUE_TIMEOUT_MS || 15000),
+      callTimeout: Number(env.ORACLE_CALL_TIMEOUT_MS || 30000),
+      configDir: String(env.ORACLE_CONFIG_DIR || "").trim(),
+      walletLocation: String(env.ORACLE_WALLET_LOCATION || "").trim(),
+      walletPassword: String(env.ORACLE_WALLET_PASSWORD || ""),
+      seedDemo: booleanValue(env.ORACLE_SEED_DEMO, false),
+      allowExistingSchema: booleanValue(
+        env.ORACLE_ALLOW_EXISTING_SCHEMA,
+        false,
+      ),
+    },
     files: {
       version: env.FILE_POLICY_VERSION || "TECHNICAL-2026-10-19-v1",
       maxFileBytes: Number(env.FILE_MAX_MB || 2) * 1024 * 1024,
@@ -132,8 +149,43 @@ export function createConfig(env = process.env) {
     },
   };
 
-  if (!["sqlite", "memory"].includes(config.storage.driver))
-    issues.push("STORAGE_DRIVER debe ser sqlite o memory");
+  if (!["sqlite", "memory", "oracle"].includes(config.storage.driver))
+    issues.push("STORAGE_DRIVER debe ser sqlite, memory u oracle");
+  if (config.storage.driver === "oracle") {
+    if (["SYS", "SYSTEM"].includes(config.oracle.user.toUpperCase()))
+      issues.push(
+        "Use un usuario de aplicación; SYS y SYSTEM no están permitidos",
+      );
+    for (const [key, value] of Object.entries({
+      ORACLE_USER: config.oracle.user,
+      ORACLE_PASSWORD: config.oracle.password,
+      ORACLE_CONNECT_STRING: config.oracle.connectString,
+    })) {
+      if (!value) issues.push(`${key} es obligatorio para Oracle`);
+    }
+    if (
+      !Number.isInteger(config.oracle.poolMin) ||
+      !Number.isInteger(config.oracle.poolMax) ||
+      config.oracle.poolMin < 0 ||
+      config.oracle.poolMax < 1 ||
+      config.oracle.poolMax > 32 ||
+      config.oracle.poolMin > config.oracle.poolMax
+    )
+      issues.push("Pool Oracle no válido");
+    for (const value of [
+      config.oracle.queueTimeout,
+      config.oracle.callTimeout,
+    ]) {
+      if (!Number.isInteger(value) || value < 1000 || value > 120000)
+        issues.push("Timeout Oracle no válido");
+    }
+    if (config.oracle.seedDemo && environment === "production")
+      issues.push("ORACLE_SEED_DEMO sólo se permite en desarrollo/pruebas");
+    if (config.oracle.seedDemo !== config.auth.demoEnabled)
+      issues.push(
+        "Oracle de desarrollo requiere habilitar juntos ORACLE_SEED_DEMO y ENABLE_DEMO_ACCOUNTS",
+      );
+  }
   if (
     !Number.isInteger(config.backups.intervalMinutes) ||
     config.backups.intervalMinutes < 1 ||

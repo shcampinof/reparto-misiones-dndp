@@ -12,9 +12,9 @@ export function createCatalogService({
   repository,
   clock = () => new Date().toISOString(),
 }) {
-  function listPublished(auth, { area, at = clock().slice(0, 10) } = {}) {
+  async function listPublished(auth, { area, at = clock().slice(0, 10) } = {}) {
     assertCapability(auth, CAPABILITIES.CONSULTAR_CATALOGO_SERVICIOS, { area });
-    const state = repository.snapshot();
+    const state = await repository.snapshot();
     return publishedServices(state, area, at);
   }
 
